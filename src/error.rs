@@ -8,6 +8,8 @@ pub enum Error {
     Unsupported(String),
     /// A primary event has no probability available.
     MissingEvent(String),
+    /// File could not be read.
+    Io(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -17,6 +19,7 @@ impl fmt::Display for Error {
         match self {
             Error::Parse(m) => write!(f, "parse error: {m}"),
             Error::Unsupported(m) => write!(f, "unsupported: {m}"),
+            Error::Io(m) => write!(f, "i/o error: {m}"),
             Error::MissingEvent(id) => write!(f, "no probability for primary event `{id}`"),
         }
     }

@@ -2,12 +2,16 @@
 //!
 //! * [`model`]   – tree and event types
 //! * [`parse`]   – readers for OpenFTA `.fta` (tree) and `.ped` (primary event database) files
-//! * [`analysis`] – minimal cut sets and top-event probability
+//! * [`project`]  – load a tree with its database and transfer-in trees
+//! * [`analysis`] – minimal cut sets, exact top-event probability, importance
+//! * [`montecarlo`] – Monte Carlo simulation
 
 pub mod analysis;
 pub mod error;
 pub mod model;
+pub mod montecarlo;
 pub mod parse;
+pub mod project;
 
 pub use error::{Error, Result};
 pub use model::{EventType, Node, PrimaryEvent, PrimaryEventDb, Tree};

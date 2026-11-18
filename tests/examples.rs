@@ -50,3 +50,51 @@ fn transfer_trees_report_unsupported() {
     let t = parse_fta(&std::fs::read(d).unwrap()).unwrap();
     assert!(minimal_cut_sets(&t).is_err());
 }
+
+use ftar_core::analysis::{probability_report, ProbabilityOptions};
+use ftar_core::montecarlo::{simulate, MonteCarloOptions};
+use ftar_core::project::Project;
+
+fn data(name: &str) -> String {
+    format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
+#[test]
+fn transfer_in_trees_are_inlined() {
+    let p = Project::load(data("top.fta")).unwrap();
+    let cs = minimal_cut_sets(&p.tree).unwrap();
+    let names: Vec<_> = cs.iter().map(|s| s.iter().cloned().collect::<Vec<_>>()).collect();
+    assert_eq!(names, vec![vec!["a".to_string()], vec!["b".to_string()]]);
+    let r = probability_report(&p.tree, &p.db, &ProbabilityOptions::default()).unwrap();
+    // P(a or b) = 0.1 + 0.2 - 0.1*0.2
+    assert!((r.top - 0.28).abs() < 1e-12, "{}", r.top);
+    assert!(r.exact);
+}
+
+#[test]
+fn theatre_exact_probability_uses_unit_time_for_rates() {
+    let p = Project::load(data("theatre.fta")).unwrap();
+    let r = probability_report(&p.tree, &p.db, &ProbabilityOptions::default()).unwrap();
+    // GEN_FAIL is a failure rate: 1 - e^-0.02
+    let gen = 1.0 - (-0.02f64).exp();
+    let (m, rl) = (0.03, 0.05);
+    let exact = gen * m + m * rl - gen * m * rl;
+    assert!((r.top - exact).abs() < 1e-12);
+    assert_eq!(r.terms.len(), 2);
+}
+
+#[test]
+fn order_limit_drops_larger_cut_sets() {
+    let p = Project::load(data("theatre.fta")).unwrap();
+    assert!(ftar_core::analysis::minimal_cut_sets_limited(&p.tree, 1).unwrap().is_empty());
+}
+
+#[test]
+fn monte_carlo_agrees_with_exact() {
+    let p = Project::load(data("theatre.fta")).unwrap();
+    let exact = probability_report(&p.tree, &p.db, &ProbabilityOptions::default()).unwrap().top;
+    let mc = simulate(&p.tree, &p.db, &MonteCarloOptions { trials: 1_000_000, ..Default::default() }).unwrap();
+    assert!((mc.probability - exact).abs() < 5.0 * mc.std_error, "{} vs {exact}", mc.probability);
+    let again = simulate(&p.tree, &p.db, &MonteCarloOptions { trials: 1_000_000, ..Default::default() }).unwrap();
+    assert_eq!(mc.system_failures, again.system_failures); // reproducible
+}
