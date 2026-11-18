@@ -380,6 +380,44 @@ const NODE_W: f32 = 96.0;
 const NODE_H: f32 = 56.0;
 const GAP_X: f32 = 104.0;
 const GAP_Y: f32 = 96.0;
+/// Room under a node for its caption, in tree units.
+const CAPTION: f32 = 24.0;
+/// Empty border around the fitted tree, in screen pixels.
+const MARGIN: f32 = 12.0;
+
+/// Size of the whole drawing (nodes and captions) in tree units.
+fn content_size(max_x: f32, max_y: f32) -> Vec2 {
+    Vec2::new(
+        (max_x * GAP_X + NODE_W).max(1.0),
+        (max_y * GAP_Y + NODE_H + CAPTION).max(1.0),
+    )
+}
+
+/// Zoom and pan that centre the whole tree in a canvas of `size`, with a margin.
+pub(crate) fn fit(size: Vec2, max_x: f32, max_y: f32) -> (f32, Vec2) {
+    let c = content_size(max_x, max_y);
+    let avail = (size - Vec2::splat(2.0 * MARGIN)).max(Vec2::splat(1.0));
+    let z = (avail.x / c.x).min(avail.y / c.y).clamp(0.02, 1.5);
+    (
+        z,
+        Vec2::new(
+            (size.x - c.x * z) / 2.0,
+            ((size.y - c.y * z) / 2.0).max(0.0),
+        ),
+    )
+}
+
+impl App {
+    /// Where the whole drawing (nodes and captions) currently is on screen.
+    pub fn content_bounds(&self) -> Option<Rect> {
+        let doc = self.doc.as_ref()?;
+        let (mx, my) = layout::layout(&doc.tree.root)
+            .iter()
+            .fold((0.0f32, 0.0f32), |a, p| (a.0.max(p.x), a.1.max(p.y)));
+        let min = self.canvas.min + self.pan;
+        Some(Rect::from_min_size(min, content_size(mx, my) * self.zoom))
+    }
+}
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -556,24 +594,26 @@ impl eframe::App for App {
             let (max_x, max_y) = placed
                 .iter()
                 .fold((0.0f32, 0.0f32), |a, p| (a.0.max(p.x), a.1.max(p.y)));
-            if self.fit_next {
-                let w = (max_x * GAP_X + NODE_W).max(1.0);
-                let h = (max_y * GAP_Y + NODE_H).max(1.0);
-                self.zoom = (rect.width() / w).min(rect.height() / h).clamp(0.1, 1.5) * 0.85;
-                self.pan = Vec2::new(
-                    (rect.width() - w * self.zoom) / 2.0,
-                    (rect.height() - h * self.zoom) / 2.0,
-                );
+            let key = (rect.size(), max_x, max_y);
+            if self.fit_next || (self.auto_fit && self.fit_key != Some(key)) {
+                let (z, pan) = fit(rect.size(), max_x, max_y);
+                self.zoom = z;
+                self.pan = pan;
                 self.fit_next = false;
+                self.auto_fit = true;
+                self.fit_key = Some(key);
             }
+            self.canvas = rect;
             if resp.dragged() {
                 self.pan += resp.drag_delta();
+                self.auto_fit = false;
             }
             if resp.hovered() {
                 let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
                 if scroll != 0.0 {
+                    self.auto_fit = false;
                     let old = self.zoom;
-                    self.zoom = (self.zoom * (1.0 + scroll * 0.002)).clamp(0.05, 4.0);
+                    self.zoom = (self.zoom * (1.0 + scroll * 0.002)).clamp(0.02, 4.0);
                     if let Some(m) = resp.hover_pos() {
                         let k = self.zoom / old;
                         let rel = m - rect.min;

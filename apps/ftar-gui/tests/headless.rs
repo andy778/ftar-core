@@ -416,3 +416,79 @@ fn report_controls_are_present_and_disabled_without_a_tree() {
         .accesskit_node()
         .is_disabled());
 }
+
+// -------------------------------------------------------------------- fit
+
+fn assert_fully_visible(app: &App, what: &str) {
+    let canvas = app.canvas;
+    let b = app.content_bounds().expect("bounds");
+    assert!(
+        canvas.contains_rect(b),
+        "{what}: drawing {b:?} sticks out of canvas {canvas:?}"
+    );
+}
+
+fn tree_with(file: &str) -> Harness<'static, App> {
+    let mut app = App::default();
+    app.open(data(file));
+    harness_for(app)
+}
+
+#[test]
+fn whole_tree_is_visible_after_opening() {
+    for f in ["theatre.fta", "lift.fta", "top.fta"] {
+        let mut h = tree_with(f);
+        h.run();
+        assert_fully_visible(h.state(), f);
+    }
+}
+
+#[test]
+fn tree_stays_fitted_when_the_edit_panel_grows() {
+    // selecting a primary event opens the (taller) database row under the canvas
+    let mut h = tree_with("lift.fta");
+    h.run();
+    assert_fully_visible(h.state(), "before select");
+    let tree = h.state().doc.as_ref().unwrap().tree.clone();
+    let leaf = ftar_core::edit::all_paths(&tree)
+        .into_iter()
+        .find(|p| ftar_core::edit::node_at(&tree, p).unwrap().kind == EventType::Basic)
+        .unwrap();
+    let before = h.state().canvas.height();
+    h.state_mut().select(Some(leaf));
+    h.run();
+    assert!(h.state().canvas.height() < before, "panel should take room");
+    assert_fully_visible(h.state(), "after select");
+}
+
+#[test]
+fn tree_stays_fitted_when_it_grows_or_the_window_resizes() {
+    let mut h = tree_with("theatre.fta");
+    h.run();
+    h.state_mut().select(Some(vec![0]));
+    for _ in 0..6 {
+        h.state_mut().add_child(EventType::Basic);
+        h.state_mut().select(Some(vec![0]));
+    }
+    h.run();
+    assert_fully_visible(h.state(), "after adding nodes");
+    h.set_size(vec2(700.0, 500.0));
+    h.run();
+    assert_fully_visible(h.state(), "after resize");
+}
+
+#[test]
+fn user_pan_and_zoom_turn_auto_fit_off_and_fit_button_restores_it() {
+    let mut h = tree_with("theatre.fta");
+    h.run();
+    assert!(h.state().auto_fit);
+    h.state_mut().auto_fit = false;
+    h.state_mut().zoom = 3.0;
+    h.state_mut().pan = vec2(-500.0, -500.0);
+    h.run();
+    assert!(h.state().zoom == 3.0, "manual view must not be overridden");
+    h.get_by_label("Fit").click();
+    h.run();
+    assert!(h.state().auto_fit);
+    assert_fully_visible(h.state(), "after Fit");
+}

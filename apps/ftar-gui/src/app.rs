@@ -60,6 +60,11 @@ pub struct App {
     pub zoom: f32,
     pub pan: Vec2,
     pub fit_next: bool,
+    /// Keep the tree fitted while the canvas or the tree changes size, until the user pans or zooms.
+    pub auto_fit: bool,
+    pub(crate) fit_key: Option<(Vec2, f32, f32)>,
+    /// Canvas rectangle of the last frame.
+    pub canvas: eframe::egui::Rect,
     // analysis
     pub tab: Tab,
     pub order: usize,
@@ -89,6 +94,9 @@ impl Default for App {
             zoom: 1.0,
             pan: Vec2::ZERO,
             fit_next: true,
+            auto_fit: true,
+            fit_key: None,
+            canvas: eframe::egui::Rect::ZERO,
             tab: Tab::CutSets,
             order: 0,
             terms: 5,
