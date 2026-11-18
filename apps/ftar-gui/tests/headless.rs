@@ -4,7 +4,10 @@
 use std::path::PathBuf;
 
 use eframe::egui::vec2;
-use egui_kittest::{kittest::Queryable, Harness};
+use egui_kittest::{
+    kittest::{NodeT, Queryable},
+    Harness,
+};
 use ftar_core::analysis::{probability_report, ProbabilityOptions};
 use ftar_core::EventType;
 use ftar_gui::{App, Pending, Tab};
@@ -339,4 +342,77 @@ fn unsaved_prompt_buttons_work() {
     h.get_by_label("Discard").click();
     h.run();
     assert!(h.state().title().starts_with("untitled"));
+}
+
+// ---------------------------------------------------------------- reports
+
+use ftar_core::report::ReportKind;
+
+#[test]
+fn every_report_kind_renders_and_is_reproducible() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.trials = 5_000;
+    for kind in ReportKind::ALL {
+        let a = app.report_text(kind, "T").unwrap();
+        let b = app.report_text(kind, "T").unwrap();
+        assert_eq!(a, b, "{kind:?}");
+        assert!(a.contains("Tree   : theatre"), "{kind:?}\n{a}");
+        assert!(a.contains("Time   : T"), "{kind:?}");
+    }
+    assert!(app
+        .report_text(ReportKind::Probability, "")
+        .unwrap()
+        .contains("Exact value"));
+}
+
+#[test]
+fn export_writes_the_report_for_the_edited_tree() {
+    let dir = scratch("report");
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.report_kind = ReportKind::CutSets;
+    let before = dir.join("before.txt");
+    app.export_report(&before).unwrap();
+    // remove one branch: the report must change
+    app.select(Some(vec![0, 1]));
+    app.delete_selected();
+    let after = dir.join("after.txt");
+    app.export_report(&after).unwrap();
+    let (a, b) = (
+        std::fs::read_to_string(before).unwrap(),
+        std::fs::read_to_string(after).unwrap(),
+    );
+    assert!(a.contains("Minimal Cut Sets") && a != b);
+    assert!(app.default_report_name().ends_with("theatre_cutsets.txt"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn export_without_a_tree_or_to_a_bad_path_reports_errors() {
+    let mut app = App::default();
+    assert!(app.export_report(std::path::Path::new("x.txt")).is_err());
+    assert!(app.error.is_some());
+    app.open(data("theatre.fta"));
+    let bad = std::env::temp_dir()
+        .join("ftar_no_such_dir_xyz")
+        .join("r.txt");
+    assert!(app.export_report(&bad).is_err());
+    assert!(app.error.as_deref().unwrap().contains("r.txt"));
+}
+
+#[test]
+fn report_controls_are_present_and_disabled_without_a_tree() {
+    let mut h = harness();
+    h.run();
+    h.get_by_label("Export report...");
+    h.get_by_label("Copy report");
+    let mut empty = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(|_| App::default());
+    empty.run();
+    assert!(empty
+        .get_by_label("Export report...")
+        .accesskit_node()
+        .is_disabled());
 }

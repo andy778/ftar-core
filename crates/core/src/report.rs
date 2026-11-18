@@ -50,8 +50,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use crate::analysis::{CutSet, ProbabilityOptions, ProbabilityReport};
-use crate::model::{EventType, Tree};
-use crate::montecarlo::MonteCarloReport;
+use crate::model::{EventType, PrimaryEventDb, Tree};
+use crate::montecarlo::{MonteCarloOptions, MonteCarloReport};
 
 // ------------------------------------------------------------------ helpers
 
@@ -550,4 +550,104 @@ pub fn failure_statistics_report(tree_name: &str, time: &str, stats: &FailureSta
         let _ = writeln!(out, "({:<3}) {} - {}", i, ids, m.count);
     }
     out
+}
+
+// ------------------------------------------------------------------ generate
+
+/// Which text report to produce.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReportKind {
+    CutSets,
+    Probability,
+    MonteCarlo,
+    FailureStatistics,
+}
+
+impl ReportKind {
+    pub const ALL: [ReportKind; 4] = [
+        ReportKind::CutSets,
+        ReportKind::Probability,
+        ReportKind::MonteCarlo,
+        ReportKind::FailureStatistics,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ReportKind::CutSets => "Cut sets",
+            ReportKind::Probability => "Probability",
+            ReportKind::MonteCarlo => "Monte Carlo",
+            ReportKind::FailureStatistics => "Failure statistics",
+        }
+    }
+
+    /// Short file-name friendly name.
+    pub fn slug(self) -> &'static str {
+        match self {
+            ReportKind::CutSets => "cutsets",
+            ReportKind::Probability => "probability",
+            ReportKind::MonteCarlo => "montecarlo",
+            ReportKind::FailureStatistics => "failure_statistics",
+        }
+    }
+
+    pub fn from_slug(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.slug() == s)
+    }
+}
+
+/// Parameters of the analyses behind the reports.
+#[derive(Debug, Clone)]
+pub struct ReportParams {
+    pub max_order: usize,
+    pub terms: usize,
+    pub monte_carlo: MonteCarloOptions,
+}
+
+impl Default for ReportParams {
+    fn default() -> Self {
+        Self {
+            max_order: usize::MAX,
+            terms: ProbabilityOptions::default().terms,
+            monte_carlo: MonteCarloOptions::default(),
+        }
+    }
+}
+
+/// Run the analysis behind `kind` and format its OpenFTA-style text report.
+/// `time` is the text for the `Time   :` header line (pass `""` for reproducible output).
+pub fn generate(
+    kind: ReportKind,
+    tree: &Tree,
+    db: &PrimaryEventDb,
+    tree_name: &str,
+    time: &str,
+    params: &ReportParams,
+) -> crate::Result<String> {
+    let events = primary_event_order(tree);
+    Ok(match kind {
+        ReportKind::CutSets => {
+            let sets = crate::analysis::minimal_cut_sets_limited(tree, params.max_order)?;
+            cut_sets_report(tree_name, time, &events, &sets)
+        }
+        ReportKind::Probability => {
+            let opts = ProbabilityOptions {
+                max_order: params.max_order,
+                terms: params.terms,
+                unit_time: params.monte_carlo.unit_time,
+            };
+            let all = crate::analysis::minimal_cut_sets_limited(tree, usize::MAX)?;
+            let max = all.iter().map(|c| c.len()).max().unwrap_or(0);
+            let r = crate::analysis::probability_report(tree, db, &opts)?;
+            probability_report_text(tree_name, time, &events, max, &opts, &r)
+        }
+        ReportKind::MonteCarlo | ReportKind::FailureStatistics => {
+            let r = crate::montecarlo::simulate(tree, db, &params.monte_carlo)?;
+            let stats = failure_statistics_from_modes(&r);
+            if kind == ReportKind::MonteCarlo {
+                monte_carlo_report_text(tree_name, time, params.monte_carlo.unit_time, &r, &stats)
+            } else {
+                failure_statistics_report(tree_name, time, &stats)
+            }
+        }
+    })
 }

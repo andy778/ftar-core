@@ -506,33 +506,26 @@ fn mc_json(r: &ftar_core::montecarlo::MonteCarloReport) -> Value {
 
 fn make_report(s: &mut Session, a: &Args, args: &Value) -> Result<Value, ToolError> {
     let (_, d) = s.doc_mut(args)?;
-    let kind = a.str("kind")?;
-    let time = a.opt_str("time")?.unwrap_or("");
-    let events = report::primary_event_order(&d.tree);
-    let text = match kind {
-        "cutsets" => {
-            let sets =
-                minimal_cut_sets_limited(&d.tree, a.opt_usize("max_order")?.unwrap_or(usize::MAX))?;
-            report::cut_sets_report(&d.name, time, &events, &sets)
-        }
-        "probability" => {
-            let opts = prob_opts(a)?;
-            let all = minimal_cut_sets_limited(&d.tree, usize::MAX)?;
-            let max = all.iter().map(CutSet::len).max().unwrap_or(0);
-            let r = probability_report(&d.tree, &d.db, &opts)?;
-            report::probability_report_text(&d.name, time, &events, max, &opts, &r)
-        }
-        "montecarlo" | "failure_statistics" => {
-            let opts = mc_opts(a)?;
-            let r = simulate(&d.tree, &d.db, &opts)?;
-            let stats = report::failure_statistics_from_modes(&r);
-            if kind == "montecarlo" {
-                report::monte_carlo_report_text(&d.name, time, opts.unit_time, &r, &stats)
-            } else {
-                report::failure_statistics_report(&d.name, time, &stats)
-            }
-        }
-        other => return Err(ToolError::args(format!("unknown report kind `{other}`"))),
+    let name = a.str("kind")?;
+    let kind = report::ReportKind::from_slug(name)
+        .or(if name == "montecarlo" {
+            Some(report::ReportKind::MonteCarlo)
+        } else {
+            None
+        })
+        .ok_or_else(|| ToolError::args(format!("unknown report kind `{name}`")))?;
+    let params = report::ReportParams {
+        max_order: a.opt_usize("max_order")?.unwrap_or(usize::MAX),
+        terms: prob_opts(a)?.terms,
+        monte_carlo: mc_opts(a)?,
     };
-    Ok(json!({ "kind": kind, "text": text }))
+    let text = report::generate(
+        kind,
+        &d.tree,
+        &d.db,
+        &d.name,
+        a.opt_str("time")?.unwrap_or(""),
+        &params,
+    )?;
+    Ok(json!({ "kind": name, "text": text }))
 }

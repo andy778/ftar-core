@@ -13,6 +13,7 @@ path = "src/main.rs"
 ftar-core = { path = "../../crates/core" }
 eframe = "0.37"
 rfd = "0.18"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["eframe"] }

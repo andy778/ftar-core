@@ -4,6 +4,7 @@ use eframe::egui::{
     self, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, Sense, Shape, Stroke, Vec2,
     ViewportCommand,
 };
+use ftar_core::report::ReportKind;
 use ftar_core::EventType;
 
 use crate::app::{App, Pending, Tab};
@@ -101,6 +102,16 @@ impl App {
                 }
             });
         });
+    }
+
+    fn export_report_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("Text report", &["txt"])
+            .set_file_name(self.default_report_name())
+            .save_file()
+        {
+            let _ = self.export_report(&p);
+        }
     }
 
     fn save_or_save_as(&mut self) {
@@ -420,6 +431,34 @@ impl eframe::App for App {
                 {
                     self.run_analysis();
                 }
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_label("report")
+                        .selected_text(self.report_kind.label())
+                        .show_ui(ui, |ui| {
+                            for k in ReportKind::ALL {
+                                ui.selectable_value(&mut self.report_kind, k, k.label());
+                            }
+                        });
+                    let has_doc = self.doc.is_some();
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Export report..."))
+                        .clicked()
+                    {
+                        self.export_report_dialog();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Copy report"))
+                        .clicked()
+                    {
+                        match self.report_text(self.report_kind, &App::now_text()) {
+                            Ok(t) => {
+                                ctx.copy_text(t);
+                                self.status = Some("Report copied to the clipboard".into());
+                            }
+                            Err(e) => self.error = Some(e),
+                        }
+                    }
+                });
                 if let Some(e) = &self.error {
                     ui.colored_label(Color32::LIGHT_RED, e);
                 }

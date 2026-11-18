@@ -10,6 +10,7 @@ use ftar_core::analysis::{
 use ftar_core::edit::{self, History, Issue};
 use ftar_core::montecarlo::{simulate, MonteCarloOptions, MonteCarloReport};
 use ftar_core::project::Document;
+use ftar_core::report::{self, ReportKind, ReportParams};
 use ftar_core::write::{write_fta_with, write_ped, LineEnding};
 use ftar_core::{EventType, PrimaryEvent, PrimaryEventDb, Tree};
 
@@ -53,6 +54,7 @@ pub struct App {
     pub pending: Option<Pending>,
     pub quit: bool,
     pub add_kind: EventType,
+    pub report_kind: ReportKind,
     pub buf: Buffers,
     // view
     pub zoom: f32,
@@ -82,6 +84,7 @@ impl Default for App {
             pending: None,
             quit: false,
             add_kind: EventType::Basic,
+            report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
             zoom: 1.0,
             pan: Vec2::ZERO,
@@ -515,6 +518,64 @@ impl App {
             .as_ref()
             .map(|d| edit::validate(&d.tree))
             .unwrap_or_default()
+    }
+
+    // ------------------------------------------------------------ reports
+
+    /// Name used in report headers and default file names.
+    pub fn tree_name(&self) -> String {
+        self.doc
+            .as_ref()
+            .and_then(|d| d.path.as_ref())
+            .and_then(|p| p.file_stem())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "untitled".into())
+    }
+
+    pub fn default_report_name(&self) -> String {
+        format!("{}_{}.txt", self.tree_name(), self.report_kind.slug())
+    }
+
+    /// The OpenFTA-style text report for `kind`, using the analysis settings
+    /// on screen and the current (edited) tree. `time` is the header timestamp.
+    pub fn report_text(&self, kind: ReportKind, time: &str) -> Result<String, String> {
+        let doc = self.doc.as_ref().ok_or("no tree open")?;
+        let p = doc.analysis_project().map_err(|e| e.to_string())?;
+        let params = ReportParams {
+            max_order: self.max_order(),
+            terms: self.terms,
+            monte_carlo: MonteCarloOptions {
+                trials: self.trials,
+                unit_time: self.unit_time,
+                ..Default::default()
+            },
+        };
+        report::generate(kind, &p.tree, &p.db, &self.tree_name(), time, &params)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Timestamp for report headers, in the style of C's `ctime`.
+    pub fn now_text() -> String {
+        chrono::Local::now()
+            .format("%a %b %e %H:%M:%S %Y")
+            .to_string()
+    }
+
+    /// Write the selected report to `path`.
+    pub fn export_report(&mut self, path: &Path) -> Result<(), String> {
+        let res = self
+            .report_text(self.report_kind, &Self::now_text())
+            .and_then(|text| {
+                std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+            });
+        match &res {
+            Ok(()) => {
+                self.error = None;
+                self.status = Some(format!("Exported {}", path.display()));
+            }
+            Err(e) => self.error = Some(e.clone()),
+        }
+        res
     }
 
     // ----------------------------------------------------------- analysis
