@@ -1,6 +1,6 @@
 [package]
 name = "ftar-render"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 description = "Headless drawing of fault trees: SVG, PNG and printable HTML"

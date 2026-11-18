@@ -1227,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-automation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ftar-core",
  "ftar-render",
@@ -1236,7 +1236,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ftar-automation",
  "ftar-core",
@@ -1247,11 +1247,11 @@ dependencies = [
 
 [[package]]
 name = "ftar-core"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "ftar-gui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "eframe",
@@ -1263,7 +1263,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ftar-automation",
  "serde_json",
@@ -1271,7 +1271,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-render"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ftar-core",
  "resvg",

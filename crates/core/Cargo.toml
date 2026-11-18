@@ -1,6 +1,6 @@
 [package]
 name = "ftar-core"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 description = "Fault tree analysis core: a Rust port of the OpenFTA engine"
 license.workspace = true

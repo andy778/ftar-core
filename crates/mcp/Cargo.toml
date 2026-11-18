@@ -1,6 +1,6 @@
 [package]
 name = "ftar-mcp"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 description = "Model Context Protocol server over the ftar automation tools (stdio, JSON-RPC 2.0)"
