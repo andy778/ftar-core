@@ -23,7 +23,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] `ftar` CLI
 - [ ] Compare numbers with reports from the original engine (needs a native OpenFTA build)
 - [ ] Failure statistics report, text report files compatible with OpenFTA
-- [ ] Writing `.fta`/`.ped`, tree editing
+- [x] Writing `.fta`/`.ped`, tree editing (GUI: add/delete/move/retype/rename, event database, undo/redo, save, unsaved-changes prompt)
 - [ ] GUI (egui) with tree canvas, printing, image export
 
 ## License

@@ -206,3 +206,31 @@ mod first_failure {
         );
     }
 }
+
+mod document {
+    use ftar_core::analysis::minimal_cut_sets;
+    use ftar_core::project::Document;
+
+    fn data(n: &str) -> String {
+        format!("{}/tests/data/{n}", env!("CARGO_MANIFEST_DIR"))
+    }
+
+    #[test]
+    fn keeps_transfers_raw_but_analyses_expanded() {
+        let d = Document::load(data("top.fta")).unwrap();
+        assert!(d
+            .tree
+            .nodes()
+            .iter()
+            .any(|n| n.kind == ftar_core::EventType::TransferIn));
+        let p = d.analysis_project().unwrap();
+        assert_eq!(minimal_cut_sets(&p.tree).unwrap().len(), 2);
+        assert_eq!(p.db.events.len(), 2);
+    }
+
+    #[test]
+    fn default_tree_is_valid_to_edit() {
+        let d = ftar_core::project::Document::default();
+        assert_eq!(d.tree.root.children.len(), 1);
+    }
+}
