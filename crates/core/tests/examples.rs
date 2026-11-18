@@ -125,3 +125,84 @@ fn monte_carlo_agrees_with_exact() {
     .unwrap();
     assert_eq!(mc.system_failures, again.system_failures); // reproducible
 }
+
+mod first_failure {
+    use ftar_core::analysis::{probability_report, ProbabilityOptions};
+    use ftar_core::montecarlo::{simulate, Method, MonteCarloOptions};
+    use ftar_core::project::Project;
+
+    fn theatre() -> Project {
+        let d = format!("{}/tests/data/theatre.fta", env!("CARGO_MANIFEST_DIR"));
+        Project::load(d).unwrap()
+    }
+
+    fn run(
+        p: &Project,
+        method: Method,
+        trials: u64,
+        seed: u64,
+    ) -> ftar_core::montecarlo::MonteCarloReport {
+        let o = MonteCarloOptions {
+            trials,
+            seed,
+            method,
+            ..Default::default()
+        };
+        simulate(&p.tree, &p.db, &o).unwrap()
+    }
+
+    #[test]
+    fn modes_account_for_every_system_failure() {
+        let p = theatre();
+        let r = run(&p, Method::FirstFailure, 50_000, 3);
+        assert_eq!(r.modes.iter().map(|m| m.1).sum::<u64>(), r.system_failures);
+        assert!((r.bas_prob - r.any_component_failure).abs() < 1e-15);
+        assert!(r.modes.windows(2).all(|w| w[0].1 >= w[1].1));
+        // every recorded mode really fails the system: it contains a cut set
+        let cs = ftar_core::analysis::minimal_cut_sets(&p.tree).unwrap();
+        for (m, _) in &r.modes {
+            assert!(cs.iter().any(|c| c.is_subset(m)), "{m:?}");
+        }
+    }
+
+    #[test]
+    fn first_failure_is_unbiased_and_less_noisy_than_direct() {
+        let p = theatre();
+        let exact = probability_report(&p.tree, &p.db, &ProbabilityOptions::default())
+            .unwrap()
+            .top;
+        let trials = 20_000;
+        let (mut se_first, mut se_direct, mut err_first) = (0.0, 0.0, 0.0);
+        let runs = 40;
+        for seed in 0..runs {
+            let f = run(&p, Method::FirstFailure, trials, seed);
+            let d = run(&p, Method::Direct, trials, seed);
+            err_first += f.probability - exact;
+            se_first += (f.probability - exact).powi(2);
+            se_direct += (d.probability - exact).powi(2);
+        }
+        let mean_err = err_first / runs as f64;
+        let rmse_first = (se_first / runs as f64).sqrt();
+        assert!(
+            mean_err.abs() < 3.0 * rmse_first / (runs as f64).sqrt(),
+            "bias {mean_err}"
+        );
+        assert!(
+            rmse_first < (se_direct / runs as f64).sqrt(),
+            "first-failure should have lower variance"
+        );
+    }
+
+    #[test]
+    fn all_zero_probabilities_abandon_the_analysis() {
+        let mut p = theatre();
+        for e in p.db.events.values_mut() {
+            e.probability = 0.0;
+        }
+        let r = run(&p, Method::FirstFailure, 1000, 1);
+        assert_eq!(
+            (r.system_failures, r.probability, r.any_component_failure),
+            (0, 0.0, 0.0)
+        );
+    }
+}

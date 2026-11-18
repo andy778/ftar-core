@@ -63,11 +63,13 @@ pub fn tools() -> Vec<ToolInfo> {
         t("analysis_probability", "Cut-set probabilities, top-event probability (inclusion-exclusion with bounds) and event importance.",
           obj(json!({ "doc": doc, "max_order": order, "terms": {"type":"integer","minimum":1}, "unit_time": unit }), &[])),
         t("analysis_montecarlo", "Monte Carlo simulation; deterministic for a given seed.",
-          obj(json!({ "doc": doc, "trials": {"type":"integer","minimum":1}, "seed": {"type":"integer","minimum":0}, "unit_time": unit }), &[])),
+          obj(json!({ "doc": doc, "trials": {"type":"integer","minimum":1}, "seed": {"type":"integer","minimum":0}, "unit_time": unit,
+                      "method": {"type":"string","enum":["first_failure","direct"],"description":"first_failure (default, OpenFTA's fast method) or direct."} }), &[])),
         t("report", "OpenFTA-style text report. kind: cutsets, probability, montecarlo, failure_statistics.",
           obj(json!({ "doc": doc, "kind": {"type":"string","enum":["cutsets","probability","montecarlo","failure_statistics"]},
                       "max_order": order, "terms": {"type":"integer","minimum":1}, "unit_time": unit,
                       "trials": {"type":"integer","minimum":1}, "seed": {"type":"integer","minimum":0},
+                      "method": {"type":"string","enum":["first_failure","direct"]},
                       "time": {"type":"string","description":"Timestamp text for the header (default empty, for reproducible output)."} }), &["kind"])),
     ]
 }

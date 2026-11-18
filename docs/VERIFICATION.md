@@ -78,7 +78,7 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
 7. **Probability precision**: C stores probabilities, cut-set terms and sums as `float` (`primary_event.h`, `ProbabilityAnalysis.c:95-96`,
    `NormalisedBooleanExpressions.c:877-878`); Rust uses `f64`. Expect ~1e-7 relative differences versus a native OpenFTA
    report, larger for many-term sums. Rust is the more accurate one.
-8. **Monte Carlo estimator.** C simulates only runs with at least one failure: it picks the first failed event with the
+8. **Monte Carlo estimator. (RESOLVED: ported - `Method::FirstFailure` is now the default, with the failure-mode table and the C error formula; `Method::Direct` keeps the old behaviour. Text below describes the original discrepancy.)** C simulates only runs with at least one failure: it picks the first failed event with the
    conditional distribution `rel[]` and fails the later events independently (`MonteCarloSimulation.c:536-575`,
    `calc_bas_parms`), and reports `P = P(any failure) * failures / tests` with error `P/sqrt(failures)` (`…c:312, 342-344`).
    Rust draws every event independently on every trial and reports `failures / trials` with error `sqrt(p(1-p)/n)`.

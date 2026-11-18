@@ -20,7 +20,7 @@ use ftar_core::analysis::{
     minimal_cut_sets, minimal_cut_sets_limited, probability_report, CutSet, ProbabilityOptions,
 };
 use ftar_core::model::{EventType, Node};
-use ftar_core::montecarlo::{simulate, MonteCarloOptions};
+use ftar_core::montecarlo::{simulate, Method, MonteCarloOptions};
 use ftar_core::parse::parse_fta;
 use ftar_core::project::Project;
 
@@ -601,34 +601,37 @@ fn random_trees_monte_carlo_agrees_with_truth_table() {
             continue;
         }
         let trials = 200_000;
-        let opts = MonteCarloOptions {
-            trials,
-            unit_time: c.unit_time,
-            seed: seed + 1,
-        };
-        let r = simulate(&proj.tree, &proj.db, &opts).unwrap();
-        let tol = 6.0 * (exact * (1.0 - exact) / trials as f64).sqrt() + 1e-4;
-        assert!(
-            (r.probability - exact).abs() < tol,
-            "seed {seed}: {} vs {exact}",
-            r.probability
-        );
-        close(
-            r.any_component_failure,
-            1.0 - p.iter().map(|x| 1.0 - x).product::<f64>(),
-            "any component failure",
-            "mc",
-        );
-        // event_failures / trials estimates P(top and event failed)
-        for (id, n) in &r.event_failures {
-            let i = o.ids.iter().position(|x| x == id).unwrap();
-            let joint = o.prob(&p, |m| o.truth[m] && m >> i & 1 == 1);
-            let est = *n as f64 / trials as f64;
-            let tol = 6.0 * (joint * (1.0 - joint) / trials as f64).sqrt() + 1e-4;
+        for method in [Method::FirstFailure, Method::Direct] {
+            let opts = MonteCarloOptions {
+                trials,
+                unit_time: c.unit_time,
+                seed: seed + 1,
+                method,
+            };
+            let r = simulate(&proj.tree, &proj.db, &opts).unwrap();
+            let tol = 6.0 * (exact * (1.0 - exact) / trials as f64).sqrt() + 1e-4;
             assert!(
-                (est - joint).abs() < tol,
-                "seed {seed} event {id}: {est} vs {joint}"
+                (r.probability - exact).abs() < tol,
+                "seed {seed} {method:?}: {} vs {exact}",
+                r.probability
             );
+            close(
+                r.any_component_failure,
+                1.0 - p.iter().map(|x| 1.0 - x).product::<f64>(),
+                "any component failure",
+                "mc",
+            );
+            // event_failures / trials estimates P(top and event failed)
+            for (id, n) in &r.event_failures {
+                let i = o.ids.iter().position(|x| x == id).unwrap();
+                let joint = o.prob(&p, |m| o.truth[m] && m >> i & 1 == 1);
+                let est = r.bas_prob * *n as f64 / trials as f64;
+                let tol = 6.0 * (joint * (1.0 - joint) / trials as f64).sqrt() + 1e-4;
+                assert!(
+                    (est - joint).abs() < tol,
+                    "seed {seed} {method:?} event {id}: {est} vs {joint}"
+                );
+            }
         }
         compared += 1;
         let _ = std::fs::remove_dir_all(&c.dir);

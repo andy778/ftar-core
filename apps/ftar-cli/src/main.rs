@@ -24,6 +24,7 @@ options:
   --time T     unit time for failure-rate events (default: 1)
   --trials N   Monte Carlo trials (default: 100000)
   --seed N     Monte Carlo seed
+  --method M   Monte Carlo: first (default, OpenFTA fast method) or direct
   --root DIR   (call/run) confine all file access to DIR
 ";
 
@@ -56,6 +57,7 @@ fn run() -> Result<(), String> {
     let mut time = 1.0f64;
     let mut trials = 100_000u64;
     let mut seed = MonteCarloOptions::default().seed;
+    let mut method = ftar_core::montecarlo::Method::FirstFailure;
     let mut i = 2;
     while i < args.len() {
         let v = args
@@ -81,6 +83,13 @@ fn run() -> Result<(), String> {
                 trials = v
                     .parse()
                     .map_err(|_| format!("bad value `{v}` for {}", args[i]))?
+            }
+            "--method" => {
+                method = match v.as_str() {
+                    "first" | "first_failure" => ftar_core::montecarlo::Method::FirstFailure,
+                    "direct" => ftar_core::montecarlo::Method::Direct,
+                    _ => return Err(format!("bad value `{v}` for --method (first, direct)")),
+                }
             }
             "--seed" => {
                 seed = v
@@ -174,29 +183,19 @@ fn run() -> Result<(), String> {
                     trials,
                     unit_time: time,
                     seed,
+                    method,
                 },
             )
             .map_err(|e| e.to_string())?;
-            println!("Number of tests           = {}", r.trials);
-            println!("Number of system failures = {}", r.system_failures);
-            println!(
-                "P(at least one component failure) = {:E} (exact)",
-                r.any_component_failure
+            let stats = ftar_core::report::failure_statistics_from_modes(&r);
+            let name = std::path::Path::new(file)
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            print!(
+                "{}",
+                ftar_core::report::monte_carlo_report_text(&name, "", time, &r, &stats)
             );
-            println!(
-                "P(top event)              = {:E} (+/- {:E})",
-                r.probability, r.std_error
-            );
-            println!("\nCut sets by hits:");
-            let mut h = r.cut_set_hits.clone();
-            h.sort_by_key(|x| std::cmp::Reverse(x.1));
-            for (cs, n) in h {
-                println!(
-                    "{:>8}  {}",
-                    n,
-                    cs.iter().cloned().collect::<Vec<_>>().join(" ")
-                );
-            }
         }
         c => return Err(format!("unknown command `{c}`\n\n{USAGE}")),
     }

@@ -31,13 +31,14 @@
 //! * event contribution = sum of the mode probabilities of the (compressed)
 //!   modes containing the event; event importance = `100 * contribution / P(top)`.
 //!
-//! The Rust simulation ([`crate::montecarlo::simulate`]) draws *every* trial
-//! (it does not condition on "at least one failure" as the C "fast method"
-//! does), so the Rust reports use `bas_prob = 1`, i.e. probability `n / trials`,
-//! and omit the "only runs with at least one component failure" note.
-//! [`crate::montecarlo::MonteCarloReport`] does not retain individual failure
-//! vectors, only per-cut-set hit counts; [`failure_statistics_from_hits`]
-//! builds the statistics from those (each fully-failed minimal cut set is a mode).
+//! The Rust simulation ([`crate::montecarlo::simulate`]) uses the same
+//! first-failure scheme as the C "fast method" by default, so `bas_prob` is the
+//! probability of at least one component failure and the "only runs with at
+//! least one component failure" note is printed. With
+//! [`crate::montecarlo::Method::Direct`] `bas_prob = 1`.
+//! [`failure_statistics_from_modes`] builds the statistics from the recorded
+//! failure vectors; [`failure_statistics_from_hits`] is the older approximation
+//! from per-cut-set hit counts.
 //!
 //! # Reports
 //!
@@ -251,6 +252,16 @@ pub fn failure_statistics_from_hits(
     fs
 }
 
+/// Failure statistics from the recorded failure vectors of a Monte Carlo run
+/// (OpenFTA's `record_failure`, unlimited like `MONTE_MAX_F = 0`).
+pub fn failure_statistics_from_modes(report: &MonteCarloReport) -> FailureStatistics {
+    let mut fs = FailureStatistics::new(1 << 30);
+    for (cs, n) in &report.modes {
+        fs.record_n(cs, *n);
+    }
+    fs
+}
+
 /// Contribution and importance of each event, computed from failure modes
 /// (`MonteFileWriteImportance`). `scale` multiplies `count / trials`
 /// (the C `bas_prob`). Returns `(event, contribution, importance %)` in `events` order.
@@ -403,6 +414,7 @@ fn mode_rows(
     events: &[String],
     trials: u64,
     failures: u64,
+    scale: f64,
 ) {
     for (i, m) in modes.iter().enumerate() {
         let lines = paragraph(&m.events, events, 20);
@@ -413,8 +425,8 @@ fn mode_rows(
             i + 1,
             lines[0],
             m.count,
-            fmt_e(n / trials as f64),
-            fmt_e(n.sqrt() / trials as f64),
+            fmt_e(scale * n / trials as f64),
+            fmt_e(scale * n.sqrt() / trials as f64),
             100.0 * n / failures as f64
         );
         for l in &lines[1..] {
@@ -446,6 +458,9 @@ pub fn monte_carlo_report_text(
         out.push_str("All primary event probabilties are 0.0 - analysis abandoned\n\n");
         return out;
     }
+    if report.method == crate::montecarlo::Method::FirstFailure {
+        out.push_str("Note: Only runs with at least one component failure are simulated\n\n");
+    }
     let _ = writeln!(out, "Number of primary events  = {}", events.len());
     let _ = writeln!(out, "Number of tests           = {}", report.trials);
     let _ = write!(out, "Unit Time span used       = {unit_time:.6}\n\n");
@@ -461,7 +476,7 @@ pub fn monte_carlo_report_text(
     );
     out.push_str("one component failure\n\n");
     let p = report.probability;
-    let err = p / (report.system_failures as f64).sqrt();
+    let err = report.std_error;
     let _ = write!(
         out,
         "Probability of top event  = {}  ( +/- {} )\n\n",
@@ -478,13 +493,14 @@ pub fn monte_carlo_report_text(
         &events,
         report.trials,
         report.system_failures,
+        report.bas_prob,
     );
     if stats.other() > 0 {
         let _ = writeln!(
             out,
             "other failures ( mode not recorded ) {:<8}  {}",
             stats.other(),
-            fmt_e(stats.other() as f64 / report.trials as f64)
+            fmt_e(report.bas_prob * stats.other() as f64 / report.trials as f64)
         );
     }
 
@@ -497,11 +513,13 @@ pub fn monte_carlo_report_text(
         &events,
         report.trials,
         report.system_failures,
+        report.bas_prob,
     );
 
     out.push_str("\n\nPrimary Event Analysis:\n\n");
     out.push_str(" Event          Failure contrib.    Importance\n\n");
-    for (e, c, imp) in event_contributions(&events, &compressed, report.trials, 1.0, p) {
+    for (e, c, imp) in event_contributions(&events, &compressed, report.trials, report.bas_prob, p)
+    {
         let _ = writeln!(
             out,
             "{:<15} {}            {:>5.2}%",

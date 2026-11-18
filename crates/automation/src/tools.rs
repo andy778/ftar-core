@@ -6,7 +6,7 @@ use ftar_core::analysis::{
     minimal_cut_sets_limited, probability_report, CutSet, ProbabilityOptions,
 };
 use ftar_core::edit::{self, History};
-use ftar_core::montecarlo::{simulate, MonteCarloOptions};
+use ftar_core::montecarlo::{simulate, Method, MonteCarloOptions};
 use ftar_core::parse::{parse_fta, parse_ped};
 use ftar_core::project::Project;
 use ftar_core::report;
@@ -464,6 +464,15 @@ fn mc_opts(a: &Args) -> Result<MonteCarloOptions, ToolError> {
         trials,
         unit_time: a.opt_f64("unit_time")?.unwrap_or(d.unit_time),
         seed: a.opt_u64("seed")?.unwrap_or(d.seed),
+        method: match a.opt_str("method")? {
+            None | Some("first_failure") => Method::FirstFailure,
+            Some("direct") => Method::Direct,
+            Some(m) => {
+                return Err(ToolError::args(format!(
+                    "unknown method `{m}` (first_failure, direct)"
+                )))
+            }
+        },
     })
 }
 
@@ -482,12 +491,15 @@ fn prob_json(r: &ftar_core::analysis::ProbabilityReport) -> Value {
 
 fn mc_json(r: &ftar_core::montecarlo::MonteCarloReport) -> Value {
     json!({
+        "method": if r.method == Method::Direct { "direct" } else { "first_failure" },
         "trials": r.trials,
         "system_failures": r.system_failures,
+        "bas_prob": r.bas_prob,
         "probability": r.probability,
         "std_error": r.std_error,
         "any_component_failure": r.any_component_failure,
         "cut_set_hits": r.cut_set_hits.iter().map(|(c, n)| json!({ "events": cs_json(c), "hits": n })).collect::<Vec<_>>(),
+        "modes": r.modes.iter().map(|(c, n)| json!({ "events": cs_json(c), "count": n })).collect::<Vec<_>>(),
         "event_failures": r.event_failures.iter().map(|(e, n)| json!({ "id": e, "failures": n })).collect::<Vec<_>>(),
     })
 }
@@ -513,7 +525,7 @@ fn make_report(s: &mut Session, a: &Args, args: &Value) -> Result<Value, ToolErr
         "montecarlo" | "failure_statistics" => {
             let opts = mc_opts(a)?;
             let r = simulate(&d.tree, &d.db, &opts)?;
-            let stats = report::failure_statistics_from_hits(&r, 50);
+            let stats = report::failure_statistics_from_modes(&r);
             if kind == "montecarlo" {
                 report::monte_carlo_report_text(&d.name, time, opts.unit_time, &r, &stats)
             } else {
