@@ -13,4 +13,4 @@ Status (v0.1 scaffold):
 - [ ] Verify numbers against the original engine's reports (`src/lib/Analysis` upstream)
 - [ ] CLI (`ftar`) and GUI
 
-License: GPL-2.0-or-later (derived from OpenFTA, © 2005 FSC Limited). A `LICENSE` file with the GPL-2.0 text still needs adding.
+License: GPL-2.0-or-later. A `LICENSE` file with the GPL-2.0 text still needs adding.
