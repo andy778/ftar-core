@@ -56,8 +56,38 @@ pub(crate) struct Doc {
     pub path: Option<PathBuf>,
     pub tree: Tree,
     pub db: PrimaryEventDb,
-    pub history: History<Tree>,
+    /// Undo history; each snapshot holds the tree and the event database.
+    pub history: History<(Tree, PrimaryEventDb)>,
     pub dirty: bool,
+}
+
+impl Doc {
+    /// Run an edit on the tree. On success the previous state (tree and
+    /// database) is recorded for undo; on failure everything is restored.
+    pub(crate) fn edit_tree<R, E>(
+        &mut self,
+        f: impl FnOnce(&mut Tree) -> Result<R, E>,
+    ) -> Result<R, E> {
+        self.edit_both(|t, _| f(t))
+    }
+
+    /// Like [`Doc::edit_tree`], for edits that also touch the event database.
+    pub(crate) fn edit_both<R, E>(
+        &mut self,
+        f: impl FnOnce(&mut Tree, &mut PrimaryEventDb) -> Result<R, E>,
+    ) -> Result<R, E> {
+        let before = (self.tree.clone(), self.db.clone());
+        match f(&mut self.tree, &mut self.db) {
+            Ok(r) => {
+                self.history.record(before);
+                Ok(r)
+            }
+            Err(e) => {
+                (self.tree, self.db) = before;
+                Err(e)
+            }
+        }
+    }
 }
 
 /// Open documents plus the file-system sandbox. One per script/agent.

@@ -151,11 +151,18 @@ fn build_a_tree_by_edits_then_undo_and_save() {
     let p = s.call("analysis_probability", &json!({})).unwrap();
     assert!((p["top"].as_f64().unwrap() - 0.28).abs() < 1e-12);
 
-    // undo removes the last insert; redo restores it
-    s.call("tree_undo", &json!({})).unwrap();
+    // history has four steps: insert a, insert b, event_set a, event_set b.
+    // Three undos remove event b's values, event a's values and the second insert.
+    for _ in 0..3 {
+        s.call("tree_undo", &json!({})).unwrap();
+    }
     assert_eq!(s.call("analysis_cutsets", &json!({})).unwrap()["count"], 1);
-    s.call("tree_redo", &json!({})).unwrap();
+    for _ in 0..3 {
+        s.call("tree_redo", &json!({})).unwrap();
+    }
     assert_eq!(s.call("analysis_cutsets", &json!({})).unwrap()["count"], 2);
+    let p = s.call("analysis_probability", &json!({})).unwrap();
+    assert!((p["top"].as_f64().unwrap() - 0.28).abs() < 1e-12);
 
     // a rejected edit leaves the tree and history untouched
     let before = s.call("tree_get", &json!({})).unwrap();
@@ -260,4 +267,102 @@ fn reported_paths_have_no_windows_verbatim_prefix() {
         .call("tree_open", &json!({ "path": "theatre.fta" }))
         .unwrap();
     assert!(!v["path"].as_str().unwrap().starts_with(r"\?\"));
+}
+
+fn event_ids(s: &mut Session) -> Vec<String> {
+    let v = s.call("event_list", &json!({})).unwrap();
+    v["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Regression: `event_set` used to change the database outside the undo history, so
+/// undoing an edit left an orphan database entry behind (found testing the MCP server).
+#[test]
+fn undo_and_redo_cover_event_set_as_well_as_tree_edits() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "theatre.fta", "raw": true }))
+        .unwrap();
+    let base = event_ids(&mut s);
+    let top = |s: &mut Session| {
+        s.call("analysis_probability", &json!({})).unwrap()["top"]
+            .as_f64()
+            .unwrap()
+    };
+    let before = top(&mut s);
+
+    s.call(
+        "tree_edit",
+        &json!({ "op": "insert_child", "parent": [0], "kind": "basic", "id": "SPARE" }),
+    )
+    .unwrap();
+    s.call("event_set", &json!({ "id": "SPARE", "probability": 0.5 }))
+        .unwrap();
+    assert!(event_ids(&mut s).contains(&"SPARE".to_string()));
+    assert!((top(&mut s) - before / 2.0).abs() < 1e-12 || top(&mut s) < before);
+
+    // first undo reverts the event_set (the last change): the entry is gone, the node remains
+    assert_eq!(s.call("tree_undo", &json!({})).unwrap()["applied"], true);
+    assert_eq!(event_ids(&mut s), base);
+    assert_eq!(
+        s.call("tree_get", &json!({ "path": [0, 2] })).unwrap()["id"],
+        "SPARE"
+    );
+    // second undo removes the node: back to the original tree and database
+    assert_eq!(s.call("tree_undo", &json!({})).unwrap()["applied"], true);
+    assert_eq!(event_ids(&mut s), base);
+    assert!(s.call("tree_get", &json!({ "path": [0, 2] })).is_err());
+    assert!((top(&mut s) - before).abs() < 1e-15);
+    assert_eq!(s.call("tree_undo", &json!({})).unwrap()["applied"], false);
+
+    // redo brings both back, in order
+    s.call("tree_redo", &json!({})).unwrap();
+    s.call("tree_redo", &json!({})).unwrap();
+    assert!(event_ids(&mut s).contains(&"SPARE".to_string()));
+    assert_eq!(
+        s.call("tree_get", &json!({ "path": [0, 2] })).unwrap()["id"],
+        "SPARE"
+    );
+}
+
+#[test]
+fn changing_an_existing_event_can_be_undone() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "theatre.fta" }))
+        .unwrap();
+    let p = |s: &mut Session| {
+        s.call("analysis_probability", &json!({})).unwrap()["top"]
+            .as_f64()
+            .unwrap()
+    };
+    let before = p(&mut s);
+    s.call(
+        "event_set",
+        &json!({ "id": "MAINS_FAIL", "probability": 0.9 }),
+    )
+    .unwrap();
+    assert!(p(&mut s) > before * 10.0);
+    assert_eq!(s.call("tree_info", &json!({})).unwrap()["can_undo"], true);
+    s.call("tree_undo", &json!({})).unwrap();
+    assert!((p(&mut s) - before).abs() < 1e-15);
+}
+
+#[test]
+fn rejected_edits_do_not_pollute_history_or_database() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "theatre.fta", "raw": true }))
+        .unwrap();
+    let base = event_ids(&mut s);
+    let e = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "insert_child", "parent": [0, 0], "kind": "basic", "id": "X" }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "edit_rejected");
+    assert_eq!(event_ids(&mut s), base);
+    assert_eq!(s.call("tree_info", &json!({})).unwrap()["can_undo"], false);
 }

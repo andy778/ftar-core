@@ -68,14 +68,17 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         "tree_edit" => tree_edit(s, &a),
         "tree_undo" | "tree_redo" => {
             let (_, d) = s.doc_mut(args)?;
+            // history snapshots hold the tree *and* the event database
+            let now = (d.tree.clone(), d.db.clone());
             let next = if tool == "tree_undo" {
-                d.history.undo(&d.tree)
+                d.history.undo(&now)
             } else {
-                d.history.redo(&d.tree)
+                d.history.redo(&now)
             };
             match next {
-                Some(t) => {
+                Some((t, db)) => {
                     d.tree = t;
+                    d.db = db;
                     d.dirty = true;
                     Ok(
                         json!({ "applied": true, "can_undo": d.history.can_undo(), "can_redo": d.history.can_redo() }),
@@ -264,7 +267,7 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                 node.text = t.to_string();
             }
             let index = a.opt_usize("index")?;
-            let p = d.history.edit(&mut d.tree, |t| {
+            let p = d.edit_tree(|t| {
                 let at = match index {
                     Some(i) => i,
                     None => edit::node_at(t, &parent)
@@ -278,8 +281,7 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         }
         "delete" => {
             let path = a.path("path")?;
-            d.history
-                .edit(&mut d.tree, |t| edit::delete_subtree(t, &path))?;
+            d.edit_tree(|t| edit::delete_subtree(t, &path))?;
             json!({ "deleted": path })
         }
         "move" => {
@@ -288,7 +290,7 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                 a.path("new_parent")?,
                 a.opt_usize("index")?,
             );
-            let p = d.history.edit(&mut d.tree, |t| {
+            let p = d.edit_tree(|t| {
                 // default: append; siblings are counted after the node is taken out
                 let at = match index {
                     Some(i) => i,
@@ -311,36 +313,30 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                 a.opt_usize("index")?
                     .ok_or_else(|| ToolError::args("missing `index`"))?,
             );
-            let p = d
-                .history
-                .edit(&mut d.tree, |t| edit::reorder(t, &path, index))?;
+            let p = d.edit_tree(|t| edit::reorder(t, &path, index))?;
             json!({ "path": p })
         }
         "change_type" => {
             let (path, kind) = (a.path("path")?, a.kind("kind")?);
-            d.history
-                .edit(&mut d.tree, |t| edit::change_type(t, &path, kind, None))?;
+            d.edit_tree(|t| edit::change_type(t, &path, kind, None))?;
             json!({ "path": path, "kind": kind_name(kind) })
         }
         "set_id" => {
             let (path, id) = (a.path("path")?, a.str("id")?);
-            d.history
-                .edit(&mut d.tree, |t| edit::set_id(t, &path, id))?;
+            d.edit_tree(|t| edit::set_id(t, &path, id))?;
             json!({ "path": path, "id": id })
         }
         "set_text" => {
             let (path, text) = (a.path("path")?, a.str("text")?);
-            d.history
-                .edit(&mut d.tree, |t| edit::set_text(t, &path, text))?;
+            d.edit_tree(|t| edit::set_text(t, &path, text))?;
             json!({ "path": path })
         }
         "set_note" => {
             let note = a.str("note")?;
-            d.history
-                .edit(&mut d.tree, |t| -> Result<(), edit::EditError> {
-                    edit::set_note(t, note);
-                    Ok(())
-                })?;
+            d.edit_tree(|t| -> Result<(), edit::EditError> {
+                edit::set_note(t, note);
+                Ok(())
+            })?;
             json!({})
         }
         other => return Err(ToolError::args(format!("unknown op `{other}`"))),
@@ -399,7 +395,11 @@ fn event_set(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         },
     };
     let out = event_json(&ev);
-    d.db.events.insert(ev.id.clone(), ev);
+    // recorded for undo, like tree edits (a failure can't happen here, but stay uniform)
+    d.edit_both(|_, db| {
+        db.events.insert(ev.id.clone(), ev);
+        Ok::<(), ToolError>(())
+    })?;
     d.dirty = true;
     Ok(out)
 }
