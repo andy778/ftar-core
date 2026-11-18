@@ -1,0 +1,459 @@
+//! OpenFTA-style text reports and the failure statistics of the Monte Carlo analysis.
+//!
+//! # Failure statistics
+//!
+//! In the original, `FailureStatistics.c` is not a reliability-statistics
+//! (MTTF / failure-rate) module. It is the bookkeeping behind the Monte Carlo
+//! report: every simulated system failure is a *failure vector* (the set of
+//! primary events that had failed); the module counts how often each distinct
+//! vector occurred, keeps them ranked by count, and can *compress* them to
+//! minimal sets. [`FailureStatistics`] ports exactly that:
+//!
+//! * [`FailureStatistics::record`] = `record_failure`. A new mode is put at the
+//!   bottom of the rank list with count 1; when a count grows above the count
+//!   of the mode ranked directly above it, the two swap (strict `>`, so among
+//!   equal counts the mode that got there first stays on top).
+//! * `max_fail` = `initialise_failures(n)`. `0` means unlimited. As in the C
+//!   code the test is `nfm <= max_fail`, so `max_fail + 1` modes are kept; further
+//!   new modes only increment [`FailureStatistics::other`].
+//! * [`FailureStatistics::compress`] = `compress_fail_data2`: modes are put in
+//!   increasing order of size (stable; within a size by increasing count, the
+//!   order of the rank list from its low end). Then, for each mode `p` in that
+//!   order, every earlier surviving mode `q` that is a subset of `p` absorbs
+//!   it (`q.count += p.count`, once per absorbing `q`, as in C) and `p` is
+//!   dropped. Output order is the same increasing-size order.
+//!
+//! Derived numbers used in the Monte Carlo report (`bas_prob` is the
+//! probability that at least one component fails):
+//!
+//! * mode probability  `bas_prob * n / trials` (± `bas_prob * sqrt(n) / trials`)
+//! * mode importance   `100 * n / system_failures` percent
+//! * event contribution = sum of the mode probabilities of the (compressed)
+//!   modes containing the event; event importance = `100 * contribution / P(top)`.
+//!
+//! The Rust simulation ([`crate::montecarlo::simulate`]) draws *every* trial
+//! (it does not condition on "at least one failure" as the C "fast method"
+//! does), so the Rust reports use `bas_prob = 1`, i.e. probability `n / trials`,
+//! and omit the "only runs with at least one component failure" note.
+//! [`crate::montecarlo::MonteCarloReport`] does not retain individual failure
+//! vectors, only per-cut-set hit counts; [`failure_statistics_from_hits`]
+//! builds the statistics from those (each fully-failed minimal cut set is a mode).
+//!
+//! # Reports
+//!
+//! All generators return a `String` and take the `Time   :` text as an argument
+//! (C `ctime` without the trailing newline, e.g. `"Mon Jan  1 12:00:00 2024"`).
+//! Number formatting follows C: `%E` is [`fmt_e`], `%f` is `{:.6}`.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+
+use crate::analysis::{CutSet, ProbabilityOptions, ProbabilityReport};
+use crate::model::{EventType, Tree};
+use crate::montecarlo::MonteCarloReport;
+
+// ------------------------------------------------------------------ helpers
+
+/// C `printf("%E")`: six decimals and an exponent with sign and at least two digits.
+pub fn fmt_e(x: f64) -> String {
+    if x.is_nan() {
+        return "NAN".into();
+    }
+    if x.is_infinite() {
+        return if x < 0.0 { "-INF".into() } else { "INF".into() };
+    }
+    let s = format!("{x:.6E}");
+    let (m, e) = s.split_once('E').expect("exponent");
+    let e: i32 = e.parse().expect("exponent value");
+    format!("{m}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
+}
+
+/// Primary event ids in tree order (the order of the original event list / bit positions).
+pub fn primary_event_order(tree: &Tree) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for n in tree.nodes() {
+        if (n.kind.is_primary() || n.kind == EventType::ConditionAnalysed) && !ids.contains(&n.id) {
+            ids.push(n.id.clone());
+        }
+    }
+    ids
+}
+
+/// Port of `BitPara`/`ParaGrow`: event ids (in `events` order) as lines of at
+/// most `width` characters, every id preceded by a space.
+fn paragraph(set: &CutSet, events: &[String], width: usize) -> Vec<String> {
+    let mut ids: Vec<&String> = events.iter().filter(|e| set.contains(*e)).collect();
+    // Events missing from the order list are appended alphabetically rather than lost.
+    ids.extend(set.iter().filter(|e| !events.contains(e)));
+    let mut lines: Vec<String> = Vec::new();
+    for id in ids {
+        let s = format!(" {id}");
+        match lines.last_mut() {
+            Some(l) if l.len() + s.len() <= width => l.push_str(&s),
+            _ => lines.push(s),
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+fn header(out: &mut String, title: &str, tree_name: &str, time: &str) {
+    let _ = write!(out, "{title}\n{}\n\n", "=".repeat(title.len()));
+    let _ = writeln!(out, "Tree   : {tree_name}");
+    // ctime() ends in a newline, so the original has a blank line after it.
+    let _ = write!(out, "Time   : {time}\n\n");
+}
+
+// ------------------------------------------------------- failure statistics
+
+/// A failure mode (set of failed primary events) with its number of occurrences.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FailureMode {
+    pub events: CutSet,
+    pub count: u64,
+}
+
+/// Ranked failure-mode counts (port of `FailureStatistics.c`).
+#[derive(Debug, Clone, Default)]
+pub struct FailureStatistics {
+    max_fail: usize,
+    nodes: Vec<FailureMode>,
+    /// Node ids from the low end (newest / smallest counts) to the high end of the rank list.
+    order: Vec<usize>,
+    /// Position of every node in `order`.
+    pos: Vec<usize>,
+    index: BTreeMap<CutSet, usize>,
+    other: u64,
+}
+
+impl FailureStatistics {
+    /// `initialise_failures(max_fail)`; `0` = unlimited.
+    pub fn new(max_fail: usize) -> Self {
+        Self { max_fail, ..Self::default() }
+    }
+
+    /// `record_failure`: count one more occurrence of `failure`.
+    pub fn record(&mut self, failure: &CutSet) {
+        self.record_n(failure, 1);
+    }
+
+    /// Count `n` occurrences at once (same final counts as `n` calls of [`record`](Self::record);
+    /// tie order may differ).
+    pub fn record_n(&mut self, failure: &CutSet, n: u64) {
+        if n == 0 {
+            return;
+        }
+        let id = match self.index.get(failure) {
+            Some(&id) => {
+                self.nodes[id].count += n;
+                id
+            }
+            None => {
+                // C quirk: `nfm <= max_fail` keeps max_fail + 1 modes.
+                if self.max_fail != 0 && self.nodes.len() > self.max_fail {
+                    self.other += n;
+                    return;
+                }
+                let id = self.nodes.len();
+                self.nodes.push(FailureMode { events: failure.clone(), count: n });
+                self.index.insert(failure.clone(), id);
+                self.order.insert(0, id);
+                self.pos.push(0);
+                self.reindex();
+                id
+            }
+        };
+        // Bubble towards the high end while strictly larger than the neighbour above.
+        let mut p = self.pos[id];
+        while p + 1 < self.order.len() && self.nodes[id].count > self.nodes[self.order[p + 1]].count {
+            self.order.swap(p, p + 1);
+            self.pos[self.order[p]] = p;
+            p += 1;
+        }
+        self.pos[id] = p;
+    }
+
+    fn reindex(&mut self) {
+        for (i, &nid) in self.order.iter().enumerate() {
+            self.pos[nid] = i;
+        }
+    }
+
+    /// Number of distinct modes recorded (`nfm`).
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
+    /// Failures of modes that could not be recorded because of `max_fail` (`nother`).
+    pub fn other(&self) -> u64 {
+        self.other
+    }
+
+    /// Modes ranked from most to least frequent (the order of `list_print`).
+    pub fn ranked(&self) -> Vec<FailureMode> {
+        self.order.iter().rev().map(|&i| self.nodes[i].clone()).collect()
+    }
+
+    /// `compress_fail_data2`: absorb modes that contain another mode (see module docs).
+    pub fn compress(&self) -> Vec<FailureMode> {
+        let mut modes: Vec<FailureMode> = self.order.iter().map(|&i| self.nodes[i].clone()).collect();
+        modes.sort_by_key(|m| m.events.len()); // stable: keeps low-to-high rank order inside a size
+        let mut alive = vec![true; modes.len()];
+        for p in 0..modes.len() {
+            let mut absorbed = false;
+            for q in 0..p {
+                if alive[q] && modes[q].count != 0 && modes[q].events.is_subset(&modes[p].events) {
+                    absorbed = true;
+                    modes[q].count += modes[p].count;
+                }
+            }
+            if absorbed {
+                alive[p] = false;
+            }
+        }
+        modes.into_iter().zip(alive).filter(|(_, a)| *a).map(|(m, _)| m).collect()
+    }
+}
+
+/// Failure statistics from the per-cut-set hit counts of a Monte Carlo run
+/// (cut sets that were never fully failed are skipped).
+pub fn failure_statistics_from_hits(report: &MonteCarloReport, max_fail: usize) -> FailureStatistics {
+    let mut fs = FailureStatistics::new(max_fail);
+    for (cs, n) in &report.cut_set_hits {
+        fs.record_n(cs, *n);
+    }
+    fs
+}
+
+/// Contribution and importance of each event, computed from failure modes
+/// (`MonteFileWriteImportance`). `scale` multiplies `count / trials`
+/// (the C `bas_prob`). Returns `(event, contribution, importance %)` in `events` order.
+pub fn event_contributions(
+    events: &[String],
+    modes: &[FailureMode],
+    trials: u64,
+    scale: f64,
+    top_probability: f64,
+) -> Vec<(String, f64, f64)> {
+    events
+        .iter()
+        .map(|e| {
+            let c: f64 = modes
+                .iter()
+                .filter(|m| m.events.contains(e))
+                .map(|m| scale * m.count as f64 / trials as f64)
+                .sum();
+            (e.clone(), c, 100.0 * c / top_probability)
+        })
+        .collect()
+}
+
+// --------------------------------------------------------------- cut sets
+
+/// `Minimal Cut Sets` report (`mcs_print` + header of the algebraic method).
+///
+/// `cut_sets` are grouped by order; `events` gives the primary event order
+/// (see [`primary_event_order`]).
+#[allow(clippy::needless_range_loop)]
+pub fn cut_sets_report(tree_name: &str, time: &str, events: &[String], cut_sets: &[CutSet]) -> String {
+    let mut out = String::new();
+    header(&mut out, "Minimal Cut Sets", tree_name, time);
+    let max_order = cut_sets.iter().map(|c| c.len()).max().unwrap_or(0);
+    let _ = writeln!(out, "Method : Algebraic\n");
+    let _ = writeln!(out, "No. of primary events = {}", events.len());
+    let _ = writeln!(out, "Minimal cut set order = 1 to {max_order}");
+
+    let mut counts = vec![0usize; max_order + 1];
+    for order in 1..=max_order {
+        let _ = write!(out, "\nOrder {order}:\n");
+        for cs in cut_sets.iter().filter(|c| c.len() == order) {
+            counts[order] += 1;
+            let lines = paragraph(cs, events, 50);
+            let _ = writeln!(out, "  {:>3}) {:<50}", counts[order], lines[0]);
+            for l in &lines[1..] {
+                let _ = writeln!(out, "       {l:<50}");
+            }
+        }
+    }
+    out.push_str("\n\nQualitative Importance Analysis:\n\n");
+    out.push_str("Order        Number\n");
+    out.push_str("-----        ------\n");
+    for order in 1..=max_order {
+        let _ = writeln!(out, "{order:>4}           {}", counts[order]);
+    }
+    let _ = write!(out, "  ALL          {}\n\n", counts[1..].iter().sum::<usize>());
+    out
+}
+
+// ---------------------------------------------------------- probabilities
+
+/// `Probabilities Analysis` report (`calculate_probs`).
+///
+/// `tree_max_order` is the largest cut set order of the full analysis; `report`
+/// must come from [`crate::analysis::probability_report`] with `opts`.
+pub fn probability_report_text(
+    tree_name: &str,
+    time: &str,
+    events: &[String],
+    tree_max_order: usize,
+    opts: &ProbabilityOptions,
+    report: &ProbabilityReport,
+) -> String {
+    let mut out = String::new();
+    header(&mut out, "Probabilities Analysis", tree_name, time);
+    let max_order = opts.max_order.min(tree_max_order);
+    let _ = writeln!(out, "Number of primary events   = {}", report.events.len());
+    let _ = writeln!(out, "Number of minimal cut sets = {}", report.cut_sets.len());
+    let _ = writeln!(out, "Order of minimal cut sets  = {tree_max_order}");
+    if max_order < tree_max_order {
+        let _ = write!(out, "               (order <= {max_order} used)\n\n");
+    } else {
+        out.push('\n');
+    }
+    let _ = write!(out, "Unit time span         = {:.6}\n\n", opts.unit_time);
+
+    out.push_str("Minimal cut set probabilities :\n\n");
+    for (i, (cs, p)) in report.cut_sets.iter().enumerate() {
+        let lines = paragraph(cs, events, 30);
+        let _ = writeln!(out, "{:>3}   {:<30}   {}", i + 1, lines[0], fmt_e(*p));
+        for l in &lines[1..] {
+            let _ = writeln!(out, "      {l:<20}");
+        }
+    }
+
+    let _ = write!(
+        out,
+        "\n\nProbability of top level event (minimal cut sets up to order {max_order} used):\n\n"
+    );
+    for (k, (t, s)) in report.terms.iter().zip(&report.partial_sums).enumerate() {
+        let i = k + 1;
+        let _ = writeln!(
+            out,
+            "{:>2} term{}   {}{}   = {} ({} bound)",
+            i,
+            if i > 1 { "s" } else { " " },
+            if i % 2 == 1 { "+" } else { "-" },
+            fmt_e(t.abs()),
+            fmt_e(*s),
+            if i % 2 == 1 { "upper" } else { "lower" }
+        );
+    }
+    if report.exact {
+        let _ = write!(out, "\nExact value : {}\n", fmt_e(report.top));
+    }
+
+    out.push_str("\n\nPrimary Event Analysis:\n\n");
+    out.push_str(" Event          Failure contrib.    Importance\n\n");
+    for e in &report.events {
+        let _ = writeln!(
+            out,
+            "{:<15} {}            {:>5.2}%",
+            format!(" {}", e.id),
+            fmt_e(e.contribution),
+            e.importance_pct
+        );
+    }
+    out
+}
+
+// ------------------------------------------------------------ Monte Carlo
+
+fn mode_rows(out: &mut String, modes: &[FailureMode], events: &[String], trials: u64, failures: u64) {
+    for (i, m) in modes.iter().enumerate() {
+        let lines = paragraph(&m.events, events, 20);
+        let n = m.count as f64;
+        let _ = writeln!(
+            out,
+            "{:>3}   {:<20}  {:<8}  {} ( +/- {} )  {:>5.2}%",
+            i + 1,
+            lines[0],
+            m.count,
+            fmt_e(n / trials as f64),
+            fmt_e(n.sqrt() / trials as f64),
+            100.0 * n / failures as f64
+        );
+        for l in &lines[1..] {
+            let _ = writeln!(out, "      {l:<20}");
+        }
+    }
+}
+
+/// `Monte Carlo Simulation` report (`MonteFileWrite`).
+///
+/// `stats` holds the recorded failure modes (e.g. from
+/// [`failure_statistics_from_hits`]); event order is taken from
+/// `report.event_failures`.
+pub fn monte_carlo_report_text(
+    tree_name: &str,
+    time: &str,
+    unit_time: f64,
+    report: &MonteCarloReport,
+    stats: &FailureStatistics,
+) -> String {
+    let mut out = String::new();
+    header(&mut out, "Monte Carlo Simulation", tree_name, time);
+    let events: Vec<String> = report.event_failures.iter().map(|(e, _)| e.clone()).collect();
+    if report.any_component_failure == 0.0 {
+        out.push_str("All primary event probabilties are 0.0 - analysis abandoned\n\n");
+        return out;
+    }
+    let _ = writeln!(out, "Number of primary events  = {}", events.len());
+    let _ = writeln!(out, "Number of tests           = {}", report.trials);
+    let _ = write!(out, "Unit Time span used       = {unit_time:.6}\n\n");
+    let _ = write!(out, "Number of system failures = {}\n\n", report.system_failures);
+    let _ = writeln!(out, "Probability of at least   = {}  ( exact )", fmt_e(report.any_component_failure));
+    out.push_str("one component failure\n\n");
+    let p = report.probability;
+    let err = p / (report.system_failures as f64).sqrt();
+    let _ = write!(out, "Probability of top event  = {}  ( +/- {} )\n\n", fmt_e(p), fmt_e(err));
+
+    out.push_str("Rank   Failure mode         Failures  Estimated Probability         Importance\n\n");
+    mode_rows(&mut out, &stats.ranked(), &events, report.trials, report.system_failures);
+    if stats.other() > 0 {
+        let _ = writeln!(
+            out,
+            "other failures ( mode not recorded ) {:<8}  {}",
+            stats.other(),
+            fmt_e(stats.other() as f64 / report.trials as f64)
+        );
+    }
+
+    let compressed = stats.compress();
+    out.push_str("\n\nCompressed:\n\n");
+    out.push_str("Rank   Failure mode         Failures  Estimated Probability    Importance\n\n");
+    mode_rows(&mut out, &compressed, &events, report.trials, report.system_failures);
+
+    out.push_str("\n\nPrimary Event Analysis:\n\n");
+    out.push_str(" Event          Failure contrib.    Importance\n\n");
+    for (e, c, imp) in event_contributions(&events, &compressed, report.trials, 1.0, p) {
+        let _ = writeln!(out, "{:<15} {}            {:>5.2}%", format!(" {e}"), fmt_e(c), imp);
+    }
+    out
+}
+
+// -------------------------------------------------------------- statistics
+
+/// Plain listing of the ranked failure modes (`list_print`) with a summary.
+pub fn failure_statistics_report(tree_name: &str, time: &str, stats: &FailureStatistics) -> String {
+    let mut out = String::new();
+    header(&mut out, "Failure Statistics", tree_name, time);
+    let _ = writeln!(out, "Number of failure modes   = {}", stats.len());
+    let _ = write!(out, "Other failures (not kept) = {}\n\n", stats.other());
+    out.push_str("Ranked failure modes:\n\n");
+    for (i, m) in stats.ranked().iter().enumerate() {
+        let ids = m.events.iter().cloned().collect::<Vec<_>>().join(" ");
+        let _ = writeln!(out, "({:<3}) {} - {}", i, ids, m.count);
+    }
+    out.push_str("\nCompressed (minimal) modes:\n\n");
+    for (i, m) in stats.compress().iter().enumerate() {
+        let ids = m.events.iter().cloned().collect::<Vec<_>>().join(" ");
+        let _ = writeln!(out, "({:<3}) {} - {}", i, ids, m.count);
+    }
+    out
+}
