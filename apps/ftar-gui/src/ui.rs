@@ -4,6 +4,7 @@ use eframe::egui::{
     self, Align2, Color32, FontId, Key, Modifiers, Pos2, Rect, Sense, Shape, Stroke, Vec2,
     ViewportCommand,
 };
+use ftar_core::montecarlo::Method;
 use ftar_core::report::ReportKind;
 use ftar_core::EventType;
 
@@ -37,12 +38,14 @@ impl App {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         // keyboard shortcuts
-        let (save, undo, redo, del) = ctx.input_mut(|i| {
+        let (save, undo, redo, del, new, open) = ctx.input_mut(|i| {
             (
                 i.consume_key(Modifiers::COMMAND, Key::S),
                 i.consume_key(Modifiers::COMMAND, Key::Z),
                 i.consume_key(Modifiers::COMMAND, Key::Y),
                 i.consume_key(Modifiers::NONE, Key::Delete),
+                i.consume_key(Modifiers::COMMAND, Key::N),
+                i.consume_key(Modifiers::COMMAND, Key::O),
             )
         });
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
@@ -54,29 +57,78 @@ impl App {
         }
 
         egui::Panel::top("menu").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("New").clicked() {
-                    self.request_new();
-                }
-                if ui.button("Open...").clicked() {
-                    if let Some(p) = rfd::FileDialog::new()
-                        .add_filter("OpenFTA tree", &["fta"])
-                        .pick_file()
-                    {
-                        self.request_open(p);
-                    }
-                }
+            egui::MenuBar::new().ui(ui, |ui| {
                 let has_doc = self.doc.is_some();
-                if ui.add_enabled(has_doc, egui::Button::new("Save")).clicked() || (save && has_doc)
-                {
-                    self.save_or_save_as();
-                }
-                if ui
-                    .add_enabled(has_doc, egui::Button::new("Save As..."))
-                    .clicked()
-                {
-                    self.save_as_dialog();
-                }
+                ui.menu_button("File", |ui| {
+                    if ui.button("New").clicked() {
+                        self.request_new();
+                        ui.close();
+                    }
+                    if ui.button("Open...").clicked() {
+                        ui.close();
+                        self.open_dialog();
+                    }
+                    ui.separator();
+                    if ui.add_enabled(has_doc, egui::Button::new("Save")).clicked() {
+                        ui.close();
+                        self.save_or_save_as();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Save As..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.save_as_dialog();
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Export report..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.export_report_dialog();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.mc.is_some(),
+                            egui::Button::new("Export Monte Carlo failure modes (CSV)..."),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.export_modes_csv_dialog();
+                    }
+                    ui.separator();
+                    if ui.button("Quit").clicked() {
+                        ui.close();
+                        self.request_quit();
+                    }
+                });
+                ui.menu_button("Edit", |ui| {
+                    if ui
+                        .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.undo();
+                    }
+                    if ui
+                        .add_enabled(self.history.can_redo(), egui::Button::new("Redo"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.redo();
+                    }
+                    ui.separator();
+                    let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
+                    if ui
+                        .add_enabled(can_delete, egui::Button::new("Delete selected"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.delete_selected();
+                    }
+                });
                 ui.separator();
                 if ui
                     .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
@@ -97,6 +149,15 @@ impl App {
                     self.fit_next = true;
                 }
                 ui.label(self.title());
+                if save && has_doc {
+                    self.save_or_save_as();
+                }
+                if new {
+                    self.request_new();
+                }
+                if open {
+                    self.open_dialog();
+                }
                 if del && self.selected.as_ref().is_some_and(|p| !p.is_empty()) {
                     self.delete_selected();
                 }
@@ -111,6 +172,25 @@ impl App {
             .save_file()
         {
             let _ = self.export_report(&p);
+        }
+    }
+
+    fn export_modes_csv_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("CSV", &["csv"])
+            .set_file_name(self.default_modes_csv_name())
+            .save_file()
+        {
+            let _ = self.export_modes_csv(&p);
+        }
+    }
+
+    fn open_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("OpenFTA tree", &["fta"])
+            .pick_file()
+        {
+            self.request_open(p);
         }
     }
 
@@ -430,9 +510,14 @@ impl eframe::App for App {
             .default_size(420.0)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    let before = self.tab;
                     ui.selectable_value(&mut self.tab, Tab::CutSets, "Cut sets");
                     ui.selectable_value(&mut self.tab, Tab::Probability, "Probability");
                     ui.selectable_value(&mut self.tab, Tab::MonteCarlo, "Monte Carlo");
+                    if self.tab != before {
+                        // the report to export follows the tab you are looking at
+                        self.report_kind = App::kind_for_tab(self.tab);
+                    }
                 });
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -458,6 +543,28 @@ impl eframe::App for App {
                                 .labelled_by(l.id);
                             let l = ui.label("unit time");
                             ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
+                                .labelled_by(l.id);
+                        });
+                        ui.horizontal(|ui| {
+                            egui::ComboBox::from_label("method")
+                                .selected_text(match self.mc_method {
+                                    Method::FirstFailure => "first failure (fast)",
+                                    Method::Direct => "direct",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut self.mc_method,
+                                        Method::FirstFailure,
+                                        "first failure (fast)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.mc_method,
+                                        Method::Direct,
+                                        "direct",
+                                    );
+                                });
+                            let l = ui.label("seed");
+                            ui.add(egui::DragValue::new(&mut self.seed))
                                 .labelled_by(l.id);
                         });
                     }
@@ -497,6 +604,16 @@ impl eframe::App for App {
                         }
                     }
                 });
+                if self.tab == Tab::MonteCarlo
+                    && ui
+                        .add_enabled(
+                            self.mc.is_some(),
+                            egui::Button::new("Export failure modes (CSV)..."),
+                        )
+                        .clicked()
+                {
+                    self.export_modes_csv_dialog();
+                }
                 if let Some(e) = &self.error {
                     ui.colored_label(Color32::LIGHT_RED, e);
                 }
@@ -562,13 +679,19 @@ impl eframe::App for App {
                                 r.any_component_failure
                             ));
                             ui.add_space(6.0);
-                            let mut h = r.cut_set_hits.clone();
-                            h.sort_by_key(|x| std::cmp::Reverse(x.1));
-                            for (cs, n) in h {
+                            ui.strong(format!("Failure modes ({})", r.modes.len()));
+                            for (cs, n) in r.modes.iter().take(40) {
                                 ui.monospace(format!(
-                                    "{:>8}  {}",
+                                    "{:>8}  {:.3E}  {}",
                                     n,
+                                    r.bas_prob * *n as f64 / r.trials.max(1) as f64,
                                     cs.iter().cloned().collect::<Vec<_>>().join(" ")
+                                ));
+                            }
+                            if r.modes.len() > 40 {
+                                ui.label(format!(
+                                    "... {} more (export to see all)",
+                                    r.modes.len() - 40
                                 ));
                             }
                         }

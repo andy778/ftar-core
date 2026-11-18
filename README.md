@@ -24,7 +24,8 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [ ] Compare numbers with reports from the original engine (needs a native OpenFTA build)
 - [ ] Failure statistics report, text report files compatible with OpenFTA
 - [x] Writing `.fta`/`.ped`, tree editing (GUI: add/delete/move/retype/rename, event database, undo/redo, save, unsaved-changes prompt)
-- [ ] GUI (egui) with tree canvas, printing, image export
+- [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
+- [ ] GUI: printing and image export
 
 ## License
 

@@ -492,3 +492,205 @@ fn user_pan_and_zoom_turn_auto_fit_off_and_fit_button_restores_it() {
     assert!(h.state().auto_fit);
     assert_fully_visible(h.state(), "after Fit");
 }
+
+// ------------------------------------------------- File menu, Monte Carlo tab
+
+use ftar_core::montecarlo::Method;
+
+#[test]
+fn file_menu_new_and_quit_with_the_unsaved_prompt() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.select(Some(vec![0]));
+    app.add_child(EventType::Basic);
+    let mut h = harness_for(app);
+    h.run();
+    h.get_by_label("File").click();
+    h.run();
+    h.get_by_label("Quit").click();
+    h.run();
+    assert_eq!(
+        h.state().pending,
+        Some(Pending::Quit),
+        "dirty tree must ask first"
+    );
+    assert!(!h.state().quit);
+    h.get_by_label("Cancel").click();
+    h.run();
+    h.get_by_label("File").click();
+    h.run();
+    h.get_by_label("New").click();
+    h.run();
+    assert_eq!(h.state().pending, Some(Pending::New));
+}
+
+#[test]
+fn file_menu_new_starts_an_untitled_tree_when_clean() {
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(|_| App::default());
+    h.run();
+    h.get_by_label("File").click();
+    h.run();
+    h.get_by_label("New").click();
+    h.run();
+    assert!(h.state().title().starts_with("untitled"));
+}
+
+#[test]
+fn file_menu_save_and_exports_are_disabled_when_there_is_nothing_to_save() {
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(|_| App::default());
+    h.run();
+    h.get_by_label("File").click();
+    h.run();
+    // "Export report..." exists both in the menu and in the analysis panel: all instances
+    for item in ["Save", "Save As...", "Export report..."] {
+        let all: Vec<_> = h.get_all_by_label(item).collect();
+        assert!(!all.is_empty(), "{item} missing");
+        for n in all {
+            assert!(
+                n.accesskit_node().is_disabled(),
+                "{item} should be disabled"
+            );
+        }
+    }
+    assert!(h
+        .get_by_label("Export Monte Carlo failure modes (CSV)...")
+        .accesskit_node()
+        .is_disabled());
+}
+
+#[test]
+fn edit_menu_undo_works() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.select(Some(vec![0]));
+    let n = children(&app, &[0]);
+    app.add_child(EventType::Basic);
+    let mut h = harness_for(app);
+    h.run();
+    h.get_by_label("Edit").click();
+    h.run();
+    // the menu entry and the toolbar button share the name; the menu one is last
+    h.get_all_by_label("Undo").last().unwrap().click();
+    h.run();
+    assert_eq!(children(h.state(), &[0]), n);
+}
+
+#[test]
+fn monte_carlo_tab_selects_its_report_and_shows_failure_modes() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.trials = 20_000;
+    let mut h = harness_for(app);
+    h.run();
+    h.get_by_label("Monte Carlo").click();
+    h.run();
+    assert_eq!(h.state().report_kind, ReportKind::MonteCarlo);
+    assert!(h
+        .get_by_label("Export failure modes (CSV)...")
+        .accesskit_node()
+        .is_disabled());
+    h.get_by_label("Run").click();
+    h.run();
+    h.get_by_label_contains("Failure modes (");
+    assert!(!h
+        .get_by_label("Export failure modes (CSV)...")
+        .accesskit_node()
+        .is_disabled());
+    h.get_by_label("Probability").click();
+    h.run();
+    assert_eq!(h.state().report_kind, ReportKind::Probability);
+}
+
+#[test]
+fn failure_modes_csv_is_well_formed_and_consistent() {
+    let dir = scratch("csv");
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    assert!(app.modes_csv().is_err(), "needs a run first");
+    app.trials = 50_000;
+    app.tab = Tab::MonteCarlo;
+    app.run_analysis();
+    let path = dir.join("m.csv");
+    app.export_modes_csv(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let mut lines = text.lines();
+    assert_eq!(lines.next(), Some("rank,failures,probability,events"));
+    let r = app.mc.as_ref().unwrap();
+    let rows: Vec<&str> = lines.collect();
+    assert_eq!(rows.len(), r.modes.len());
+    let total: u64 = rows
+        .iter()
+        .map(|l| l.split(',').nth(1).unwrap().parse::<u64>().unwrap())
+        .sum();
+    assert_eq!(total, r.system_failures);
+    let p: f64 = rows
+        .iter()
+        .map(|l| l.split(',').nth(2).unwrap().parse::<f64>().unwrap())
+        .sum();
+    assert!((p - r.probability).abs() < 1e-12);
+    assert!(app
+        .default_modes_csv_name()
+        .ends_with("theatre_failure_modes.csv"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn csv_quotes_event_ids_that_contain_commas() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    let tree = app.doc.as_ref().unwrap().tree.clone();
+    let leaf = ftar_core::edit::all_paths(&tree)
+        .into_iter()
+        .find(|p| ftar_core::edit::node_at(&tree, p).unwrap().id == "RELAY_FAIL")
+        .unwrap();
+    app.select(Some(leaf));
+    app.set_id("RELAY,2");
+    app.trials = 200_000;
+    app.tab = Tab::MonteCarlo;
+    app.run_analysis();
+    let csv = app.modes_csv().unwrap();
+    assert!(
+        csv.lines()
+            .skip(1)
+            .any(|l| l.ends_with("\"MAINS_FAIL RELAY,2\"")),
+        "{csv}"
+    );
+}
+
+#[test]
+fn monte_carlo_seed_and_method_are_honoured() {
+    let run = |seed, method| {
+        let mut app = App::default();
+        app.open(data("theatre.fta"));
+        app.trials = 20_000;
+        app.seed = seed;
+        app.mc_method = method;
+        app.tab = Tab::MonteCarlo;
+        app.run_analysis();
+        app.mc.unwrap()
+    };
+    let a = run(1, Method::FirstFailure);
+    assert_eq!(
+        a.system_failures,
+        run(1, Method::FirstFailure).system_failures
+    );
+    assert_ne!(a.modes, run(2, Method::FirstFailure).modes);
+    let d = run(1, Method::Direct);
+    assert_eq!(d.method, Method::Direct);
+    assert_eq!(d.bas_prob, 1.0);
+    // the exported text report uses the same settings
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.trials = 20_000;
+    app.seed = 5;
+    app.mc_method = Method::Direct;
+    let text = app.report_text(ReportKind::MonteCarlo, "").unwrap();
+    assert!(
+        !text.contains("Only runs with at least one"),
+        "direct method has no such note"
+    );
+}

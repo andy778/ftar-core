@@ -8,7 +8,7 @@ use ftar_core::analysis::{
     minimal_cut_sets_limited, probability_report, CutSet, ProbabilityOptions, ProbabilityReport,
 };
 use ftar_core::edit::{self, History, Issue};
-use ftar_core::montecarlo::{simulate, MonteCarloOptions, MonteCarloReport};
+use ftar_core::montecarlo::{simulate, Method, MonteCarloOptions, MonteCarloReport};
 use ftar_core::project::Document;
 use ftar_core::report::{self, ReportKind, ReportParams};
 use ftar_core::write::{write_fta_with, write_ped, LineEnding};
@@ -71,6 +71,8 @@ pub struct App {
     pub terms: usize,
     pub unit_time: f64,
     pub trials: u64,
+    pub seed: u64,
+    pub mc_method: Method,
     pub cut_sets: Option<Vec<CutSet>>,
     pub prob: Option<ProbabilityReport>,
     pub mc: Option<MonteCarloReport>,
@@ -102,6 +104,8 @@ impl Default for App {
             terms: 5,
             unit_time: 1.0,
             trials: 100_000,
+            seed: 1,
+            mc_method: Method::FirstFailure,
             cut_sets: None,
             prob: None,
             mc: None,
@@ -530,6 +534,64 @@ impl App {
 
     // ------------------------------------------------------------ reports
 
+    /// Monte Carlo settings as chosen on screen.
+    pub fn mc_options(&self) -> MonteCarloOptions {
+        MonteCarloOptions {
+            trials: self.trials,
+            unit_time: self.unit_time,
+            seed: self.seed,
+            method: self.mc_method,
+        }
+    }
+
+    /// The report kind that matches an analysis tab.
+    pub fn kind_for_tab(tab: Tab) -> ReportKind {
+        match tab {
+            Tab::CutSets => ReportKind::CutSets,
+            Tab::Probability => ReportKind::Probability,
+            Tab::MonteCarlo => ReportKind::MonteCarlo,
+        }
+    }
+
+    /// Failure modes of the last Monte Carlo run as CSV:
+    /// `rank,failures,probability,events` (events separated by spaces).
+    pub fn modes_csv(&self) -> Result<String, String> {
+        let r = self
+            .mc
+            .as_ref()
+            .ok_or("run the Monte Carlo analysis first")?;
+        let mut out = String::from("rank,failures,probability,events\r\n");
+        for (i, (cs, n)) in r.modes.iter().enumerate() {
+            let events = cs.iter().cloned().collect::<Vec<_>>().join(" ");
+            out.push_str(&format!(
+                "{},{},{:e},{}\r\n",
+                i + 1,
+                n,
+                r.bas_prob * *n as f64 / r.trials.max(1) as f64,
+                csv_field(&events)
+            ));
+        }
+        Ok(out)
+    }
+
+    pub fn export_modes_csv(&mut self, path: &Path) -> Result<(), String> {
+        let res = self.modes_csv().and_then(|text| {
+            std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+        });
+        match &res {
+            Ok(()) => {
+                self.error = None;
+                self.status = Some(format!("Exported {}", path.display()));
+            }
+            Err(e) => self.error = Some(e.clone()),
+        }
+        res
+    }
+
+    pub fn default_modes_csv_name(&self) -> String {
+        format!("{}_failure_modes.csv", self.tree_name())
+    }
+
     /// Name used in report headers and default file names.
     pub fn tree_name(&self) -> String {
         self.doc
@@ -552,11 +614,7 @@ impl App {
         let params = ReportParams {
             max_order: self.max_order(),
             terms: self.terms,
-            monte_carlo: MonteCarloOptions {
-                trials: self.trials,
-                unit_time: self.unit_time,
-                ..Default::default()
-            },
+            monte_carlo: self.mc_options(),
         };
         report::generate(kind, &p.tree, &p.db, &self.tree_name(), time, &params)
             .map_err(|e| e.to_string())
@@ -623,15 +681,7 @@ impl App {
                 Tab::MonteCarlo => (
                     None,
                     None,
-                    Some(simulate(
-                        &p.tree,
-                        &p.db,
-                        &MonteCarloOptions {
-                            trials: self.trials,
-                            unit_time: self.unit_time,
-                            ..Default::default()
-                        },
-                    )?),
+                    Some(simulate(&p.tree, &p.db, &self.mc_options())?),
                 ),
             })
         })();
@@ -643,5 +693,14 @@ impl App {
             }
             Err(e) => self.error = Some(e.to_string()),
         }
+    }
+}
+
+/// Quote a CSV field when it contains a separator, quote or line break.
+fn csv_field(s: &str) -> String {
+    if s.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
     }
 }
