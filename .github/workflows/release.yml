@@ -103,7 +103,7 @@ jobs:
           ext=""
           [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
           cp "target/${{ matrix.target }}/release/ftar$ext" "target/${{ matrix.target }}/release/ftar-gui$ext" "$name/"
-          cp LICENSE README.md "$name/"
+          cp LICENSE NOTICE README.md "$name/"
           cp -r docs "$name/docs"
           if [ "${{ matrix.archive }}" = "zip" ]; then
             7z a -tzip "$name.zip" "$name" > /dev/null

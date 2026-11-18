@@ -27,14 +27,10 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 
-## License
-
-GPL-2.0-or-later (derived from OpenFTA, (c) 2005 FSC Limited).
-
 ## Releases
 
 Pushing a tag `vX.Y.Z` (it must equal the `ftar-cli` version in `Cargo.toml`) runs `.github/workflows/release.yml`:
 it builds `ftar` and `ftar-gui` with `cargo build --release --locked` for Linux (x86_64), Windows (x86_64) and macOS
-(arm64), smoke-tests the CLI, packages each platform (binaries, LICENSE, README, docs), and publishes a GitHub release with
+(arm64), smoke-tests the CLI, packages each platform (binaries, LICENSE, NOTICE, README, docs), and publishes a GitHub release with
 the archives and `SHA256SUMS.txt`. The same workflow runs as a build-only dry run on manual dispatch and on pull requests that
 touch `Cargo.toml`, `Cargo.lock` or the workflow.
