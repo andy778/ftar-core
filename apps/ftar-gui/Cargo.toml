@@ -1,0 +1,21 @@
+[package]
+name = "ftar-gui"
+version = "0.1.0"
+edition.workspace = true
+description = "egui front end for ftar-core"
+license.workspace = true
+
+[[bin]]
+name = "ftar-gui"
+path = "src/main.rs"
+
+[dependencies]
+ftar-core = { path = "../../crates/core" }
+eframe = "0.37"
+rfd = "0.18"
+
+[dev-dependencies]
+egui_kittest = { version = "0.37", features = ["eframe"] }
+
+[lints]
+workspace = true

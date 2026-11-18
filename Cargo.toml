@@ -1,9 +1,16 @@
-[package]
-name = "ftar-core"
-version = "0.1.0"
-edition = "2021"
-description = "Fault tree analysis core: a Rust port of the OpenFTA engine"
-license = "GPL-2.0-or-later"
-rust-version = "1.75"
+[workspace]
+resolver = "2"
+members = ["crates/*", "apps/*", "xtask"]
 
-[dependencies]
+[workspace.package]
+edition = "2021"
+license = "GPL-2.0-or-later"
+rust-version = "1.85"
+repository = "https://github.com/andy778/ftar-core"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"

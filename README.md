@@ -6,9 +6,9 @@ Java 21 baseline of the original: <https://github.com/andy778/OpenFTA/tree/dev>.
 ## Usage
 
 ```
-cargo run --release --bin ftar -- prob tests/data/theatre.fta
-cargo run --release --bin ftar -- cutsets tests/data/top.fta     # follows transfer-in trees
-cargo run --release --bin ftar -- mc tests/data/theatre.fta --trials 1000000
+cargo run --release -p ftar-cli -- prob crates/core/tests/data/theatre.fta
+cargo run --release -p ftar-cli -- cutsets crates/core/tests/data/top.fta     # follows transfer-in trees
+cargo run --release -p ftar-cli -- mc crates/core/tests/data/theatre.fta --trials 1000000
 ```
 
 Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --trials --seed`.
