@@ -175,10 +175,10 @@ fn gate_label(k: EventType) -> &'static str {
     }
 }
 
-const NODE_W: f32 = 120.0;
+const NODE_W: f32 = 96.0;
 const NODE_H: f32 = 56.0;
-const GAP_X: f32 = 150.0;
-const GAP_Y: f32 = 110.0;
+const GAP_X: f32 = 104.0;
+const GAP_Y: f32 = 96.0;
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -476,7 +476,7 @@ impl eframe::App for App {
                         painter.rect(rr, 3.0 * z, fill, stroke, egui::StrokeKind::Middle);
                     }
                 }
-                if z > 0.35 {
+                if z > 0.22 {
                     let fs = (12.0 * z).clamp(7.0, 22.0);
                     painter.text(
                         c,
@@ -491,7 +491,17 @@ impl eframe::App for App {
                         _ => "",
                     };
                     if !cap.is_empty() {
-                        let short: String = cap.chars().take(40).collect();
+                        let fs = (10.0 * z).clamp(7.0, 16.0);
+                        // keep captions inside their column so neighbours don't overlap
+                        let max = ((GAP_X * z - 4.0) / (fs * 0.5)).floor().max(4.0) as usize;
+                        let short: String = if cap.chars().count() > max {
+                            cap.chars()
+                                .take(max - 1)
+                                .chain(std::iter::once('…'))
+                                .collect()
+                        } else {
+                            cap.to_string()
+                        };
                         painter.text(
                             c + Vec2::new(0.0, NODE_H * 0.5 * z + 2.0),
                             Align2::CENTER_TOP,
