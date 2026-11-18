@@ -260,6 +260,70 @@ fn confinement_is_exact_for_real_files_outside_the_root() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// A tree inside the root must not pull in its database or a transfer-in
+/// tree from outside the root through the names stored in the file.
+#[test]
+fn files_named_inside_a_tree_stay_confined() {
+    let base = std::env::temp_dir().join(format!("ftar_conf_named_{}", std::process::id()));
+    let root = base.join("root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(base.join("secret.ped"), "SECRET;g;B ;secret text;0.5; ;\n").unwrap();
+    std::fs::write(
+        base.join("sub.fta"),
+        "NULL\nS NULL 0\n0\nM SUB 1\n6 Hidden\nO NULL 1\nB LEAKED 0\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("db.fta"),
+        "../secret.ped\nS NULL 0\n0\nM TOP 1\n3 Top\nO NULL 1\nB SECRET 0\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("transfer.fta"),
+        "NULL\nS NULL 0\n0\nM TOP 1\n3 Top\nO NULL 1\nI ../sub.fta 0\n",
+    )
+    .unwrap();
+
+    let mut s = Session::with_root(&root).unwrap();
+    for raw in [false, true] {
+        s.call("tree_open", &json!({ "path": "db.fta", "raw": raw }))
+            .unwrap();
+        let ev = s.call("event_list", &json!({})).unwrap();
+        assert!(!ev.to_string().contains("secret text"), "raw={raw}: {ev}");
+    }
+    let e = s
+        .call("tree_open", &json!({ "path": "transfer.fta" }))
+        .unwrap_err();
+    assert_eq!(e.code, "io", "{e}");
+    assert!(!e.message.contains("LEAKED"));
+
+    // The same files load when the root is wide enough to contain them.
+    let mut wide = Session::with_root(&base).unwrap();
+    let ev = wide
+        .call("tree_open", &json!({ "path": "root/transfer.fta" }))
+        .and_then(|_| wide.call("analysis_cutsets", &json!({})))
+        .unwrap();
+    assert!(ev.to_string().contains("LEAKED"));
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A deeply nested file is rejected with an error instead of overflowing the stack.
+#[test]
+fn deeply_nested_tree_is_an_error_not_a_crash() {
+    let dir = std::env::temp_dir().join(format!("ftar_deep_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut f = String::from("NULL\nS NULL 0\n0\n");
+    f.push_str(&"O NULL 1\n".repeat(200_000));
+    f.push_str("B X 0\n");
+    std::fs::write(dir.join("deep.fta"), f).unwrap();
+    let mut s = Session::with_root(&dir).unwrap();
+    let e = s
+        .call("tree_open", &json!({ "path": "deep.fta" }))
+        .unwrap_err();
+    assert!(e.message.contains("levels deep"), "{e}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn reported_paths_have_no_windows_verbatim_prefix() {
     let mut s = session();

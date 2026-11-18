@@ -7,8 +7,7 @@ use ftar_core::analysis::{
 };
 use ftar_core::edit::{self, History};
 use ftar_core::montecarlo::{simulate, Method, MonteCarloOptions};
-use ftar_core::parse::{parse_fta, parse_ped};
-use ftar_core::project::Project;
+use ftar_core::project::{Document, LoadOptions, Project};
 use ftar_core::report;
 use ftar_core::write::{write_fta, write_ped};
 use ftar_core::{EventType, Node, PrimaryEvent, PrimaryEventDb, Tree};
@@ -133,35 +132,20 @@ fn display_path(p: &Path) -> String {
     s.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(s)
 }
 
-fn read_limited(path: &Path) -> Result<Vec<u8>, ToolError> {
-    let meta = std::fs::metadata(path)
-        .map_err(|e| ToolError::new("io", format!("{}: {e}", path.display())))?;
-    if meta.len() > MAX_FILE {
-        return Err(ToolError::new(
-            "io",
-            format!("{}: file too large", path.display()),
-        ));
-    }
-    std::fs::read(path).map_err(|e| ToolError::new("io", format!("{}: {e}", path.display())))
-}
-
 fn tree_open(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     let path = s.resolve(a.str("path")?)?;
     let raw = a.opt_bool("raw")?.unwrap_or(false);
+    // The tree names further files (its database, transfer-in trees); they
+    // must stay inside the root and under the size limit too.
+    let opts = LoadOptions {
+        root: s.root.clone(),
+        max_file_size: Some(MAX_FILE),
+    };
     let (tree, db) = if raw {
-        let tree = parse_fta(&read_limited(&path)?)?;
-        let mut db = PrimaryEventDb::default();
-        if let Some(name) = &tree.db_name {
-            let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
-            if let Some(p) = path.parent().map(|d| d.join(base)).filter(|p| p.is_file()) {
-                db = parse_ped(&read_limited(&p)?)?;
-            }
-        }
-        (tree, db)
+        let d = Document::load_with(&path, &opts)?;
+        (d.tree, d.db)
     } else {
-        // Project::load reads files itself, so enforce the size limit up front.
-        read_limited(&path)?;
-        let p = Project::load(&path)?;
+        let p = Project::load_with(&path, &opts)?;
         (p.tree, p.db)
     };
     let name = path

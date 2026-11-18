@@ -3,7 +3,9 @@
 `ftar mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server on stdio. It exposes every
 `ftar-automation` tool (open, inspect, edit, validate, analyse, report, save) to an agent. It is opt-in and
 confined: it refuses to start without `--root DIR`, and every file path a tool reads or writes must stay inside
-that directory (`..`, absolute paths outside it, and saving outside it are rejected).
+that directory (`..`, absolute paths outside it, and saving outside it are rejected). The same holds for files a
+tree names itself: a database (`.ped`) outside the root is ignored, and a transfer-in tree outside it is an error.
+Files over 64 MiB and trees nested more than 1000 levels deep are refused.
 
 ```
 ftar mcp --root path/to/trees          # confined (recommended)

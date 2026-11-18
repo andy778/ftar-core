@@ -5,7 +5,7 @@ members = ["crates/*", "apps/*", "xtask"]
 [workspace.package]
 edition = "2021"
 license = "GPL-2.0-or-later"
-rust-version = "1.85"
+rust-version = "1.95"
 repository = "https://github.com/andy778/ftar-core"
 
 [workspace.lints.rust]

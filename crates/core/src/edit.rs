@@ -22,7 +22,7 @@
 
 use std::fmt;
 
-use crate::model::{EventType, Node, Tree};
+use crate::model::{EventType, Node, Tree, MAX_DEPTH};
 
 /// Index path from the root to a node.
 pub type Path = Vec<usize>;
@@ -48,6 +48,8 @@ pub enum EditError {
     NotIntermediate,
     /// Id or text contains characters the file format cannot hold.
     InvalidText(&'static str),
+    /// The edit would nest the tree deeper than [`MAX_DEPTH`].
+    TooDeep,
 }
 
 impl fmt::Display for EditError {
@@ -67,6 +69,10 @@ impl fmt::Display for EditError {
             Self::TooManyChildren => write!(f, "the parent cannot have more children"),
             Self::NotIntermediate => write!(f, "only intermediate events have text"),
             Self::InvalidText(m) => write!(f, "{m}"),
+            Self::TooDeep => write!(
+                f,
+                "the tree would be nested more than {MAX_DEPTH} levels deep"
+            ),
         }
     }
 }
@@ -216,6 +222,9 @@ pub fn insert_child(
     index: usize,
     node: Node,
 ) -> EditResult<Path> {
+    if parent.len() + 1 + node.depth() > MAX_DEPTH {
+        return Err(EditError::TooDeep);
+    }
     check_subtree(&node, false)?;
     let p = node_at(tree, parent).ok_or(EditError::InvalidPath)?;
     check_child(p, parent.is_empty(), &p.children, index, &node)?;

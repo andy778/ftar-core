@@ -90,6 +90,31 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
+/// Deepest tree (counted in nodes from the top event) that ftar accepts.
+///
+/// Analysis, layout and drawing walk the tree recursively, so an unbounded
+/// depth from a crafted file would overflow the stack and abort the process.
+/// Real fault trees are a few dozen levels deep.
+///
+/// A tree this deep needs about 8 MiB of stack (the main thread's default on
+/// Linux and macOS; the ftar binaries ask for the same on Windows). Run the
+/// analyses on a thread with that much stack when embedding the library.
+pub const MAX_DEPTH: usize = 1000;
+
+impl Node {
+    /// Number of nodes on the longest path from this node down to a leaf
+    /// (a leaf has depth 1). Iterative, so it is safe on any input.
+    pub fn depth(&self) -> usize {
+        let mut max = 0;
+        let mut stack = vec![(self, 1)];
+        while let Some((n, d)) = stack.pop() {
+            max = max.max(d);
+            stack.extend(n.children.iter().map(|c| (c, d + 1)));
+        }
+        max
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tree {
     /// Name of the associated `.ped` database, if any.

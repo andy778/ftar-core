@@ -768,6 +768,107 @@ fn ped_type_overrides_tree_type() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `n` levels: alternating intermediate events and OR gates above one basic event.
+fn chain(n: usize, leaf: &str) -> String {
+    let mut s = String::from("NULL\nS NULL 0\n0\n");
+    for i in 0..n - 1 {
+        if i % 2 == 0 {
+            s.push_str(&format!("M G{i} 1\n1 x\n"));
+        } else {
+            s.push_str("O NULL 1\n");
+        }
+    }
+    s.push_str(leaf);
+    s.push('\n');
+    s
+}
+
+/// Trees near `MAX_DEPTH` need the 8 MiB stack the binaries run with
+/// (test threads get 2 MiB).
+#[test]
+fn nesting_depth_is_limited() {
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(nesting_depth_body)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn nesting_depth_body() {
+    use ftar_core::model::MAX_DEPTH;
+    let t = parse_fta(chain(MAX_DEPTH, "B L 0").as_bytes()).unwrap();
+    assert_eq!(t.root.depth(), MAX_DEPTH);
+    let e = parse_fta(chain(MAX_DEPTH + 1, "B L 0").as_bytes()).unwrap_err();
+    assert!(e.to_string().contains("levels deep"), "{e}");
+    // far beyond the limit: still an error, not a stack overflow
+    let e = parse_fta(chain(200_001, "B L 0").as_bytes()).unwrap_err();
+    assert!(e.to_string().contains("levels deep"), "{e}");
+
+    // Two files each within the limit, joined by a transfer-in, exceed it.
+    let dir = temp_dir("depth_transfer");
+    std::fs::write(dir.join("a.fta"), chain(MAX_DEPTH - 1, "I b.fta 0")).unwrap();
+    std::fs::write(dir.join("b.fta"), chain(MAX_DEPTH - 1, "B L 0")).unwrap();
+    let e = Project::load(dir.join("a.fta")).unwrap_err();
+    assert!(e.to_string().contains("levels deep"), "{e}");
+
+    // Edits cannot build a deeper tree either. The OR gate at level
+    // MAX_DEPTH - 2 sits at a path of MAX_DEPTH - 3 zeros.
+    use ftar_core::edit::{append_child, new_node, EditError};
+    let mut t = parse_fta(chain(MAX_DEPTH, "B L 0").as_bytes()).unwrap();
+    let gate = vec![0; MAX_DEPTH - 3];
+    assert_eq!(
+        ftar_core::edit::node_at(&t, &gate).unwrap().kind,
+        EventType::Or
+    );
+    let subtree = |levels: usize| {
+        // M -> B (2 levels) or M -> O -> B (3 levels)
+        let mut m = new_node(EventType::Intermediate, "N");
+        let leaf = new_node(EventType::Basic, "K");
+        if levels == 2 {
+            m.children.push(leaf);
+        } else {
+            let mut o = new_node(EventType::Or, "");
+            o.children.push(leaf);
+            m.children.push(o);
+        }
+        m
+    };
+    assert_eq!(
+        append_child(&mut t.clone(), &gate, subtree(3)),
+        Err(EditError::TooDeep)
+    );
+    assert!(append_child(&mut t, &gate, subtree(2)).is_ok());
+    assert_eq!(t.root.depth(), MAX_DEPTH);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn confined_load_ignores_files_outside_the_root() {
+    use ftar_core::project::LoadOptions;
+    let dir = temp_dir("confined_load");
+    let root = dir.join("root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(dir.join("out.ped"), "L;;B ;;0.9; ;\n").unwrap();
+    std::fs::write(
+        root.join("t.fta"),
+        chain(3, "B L 0").replace("NULL\nS", "../out.ped\nS"),
+    )
+    .unwrap();
+    let opts = LoadOptions::confined(&root).unwrap();
+    assert!(Project::load_with(root.join("t.fta"), &opts)
+        .unwrap()
+        .db
+        .events
+        .is_empty());
+    // unconfined, the database is found as before
+    assert_eq!(
+        Project::load(root.join("t.fta")).unwrap().db.events.len(),
+        1
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Neighbouring seeds used to collapse onto the same generator state (`seed | 1`).
 #[test]
 fn monte_carlo_neighbouring_seeds_differ() {

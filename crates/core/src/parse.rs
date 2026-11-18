@@ -9,7 +9,7 @@
 //! where the NUL byte stands for "no value".
 
 use crate::error::{Error, Result};
-use crate::model::{EventType, Node, PrimaryEvent, PrimaryEventDb, Tree};
+use crate::model::{EventType, Node, PrimaryEvent, PrimaryEventDb, Tree, MAX_DEPTH};
 
 struct Cursor<'a> {
     b: &'a [u8],
@@ -107,7 +107,7 @@ pub fn parse_fta(input: &[u8]) -> Result<Tree> {
         String::new()
     };
 
-    let root = parse_node(&mut c)?;
+    let root = parse_node(&mut c, 1)?;
     Ok(Tree {
         db_name,
         note,
@@ -115,7 +115,12 @@ pub fn parse_fta(input: &[u8]) -> Result<Tree> {
     })
 }
 
-fn parse_node(c: &mut Cursor) -> Result<Node> {
+fn parse_node(c: &mut Cursor, depth: usize) -> Result<Node> {
+    if depth > MAX_DEPTH {
+        return Err(Error::Parse(format!(
+            "tree is nested more than {MAX_DEPTH} levels deep"
+        )));
+    }
     let ty = c.token()?;
     let mut chars = ty.chars();
     let code = chars.next().unwrap();
@@ -141,7 +146,7 @@ fn parse_node(c: &mut Cursor) -> Result<Node> {
         EventType::Basic | EventType::TransferIn | EventType::TransferOut
     ) {
         for _ in 0..n {
-            children.push(parse_node(c)?);
+            children.push(parse_node(c, depth + 1)?);
         }
     }
     Ok(Node {

@@ -92,7 +92,7 @@ impl Doc {
 
 /// Open documents plus the file-system sandbox. One per script/agent.
 pub struct Session {
-    root: Option<PathBuf>,
+    pub(crate) root: Option<PathBuf>,
     pub(crate) docs: BTreeMap<String, Doc>,
     pub(crate) last: Option<String>,
     next: u32,
