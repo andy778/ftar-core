@@ -7,6 +7,7 @@ Modelled on the layered, headless-first layout of PdfCraft (storytold/pdfcraft):
 | Path | Role |
 |---|---|
 | `crates/core` (`ftar-core`) | Model, `.fta`/`.ped` parse + write, tree editing with undo, minimal cut sets, exact probability, importance, Monte Carlo, failure statistics, text reports |
+| `crates/render` (`ftar-render`) | Headless drawing of trees: SVG, PNG (resvg) and a printable HTML page; layout comes from `ftar-core::layout`, shared with the GUI canvas |
 | `crates/automation` (`ftar-automation`) | Headless JSON tool catalogue over the core: the one API for scripts, agents and (opt-in) MCP |
 | `crates/mcp` (`ftar-mcp`) | Model Context Protocol server (stdio JSON-RPC) over the automation tools; see `docs/mcp.md` |
 | `apps/ftar-cli` | `ftar` command line: analyses, `tools`/`call`/`run` for the automation tools, `mcp` for the MCP server |

@@ -13,6 +13,7 @@ use ftar_core::project::Document;
 use ftar_core::report::{self, ReportKind, ReportParams};
 use ftar_core::write::{write_fta_with, write_ped, LineEnding};
 use ftar_core::{EventType, PrimaryEvent, PrimaryEventDb, Tree};
+use ftar_render::{print_html, svg_to_png, tree_svg, PrintOptions, SvgOptions};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Tab {
@@ -73,6 +74,12 @@ pub struct App {
     pub trials: u64,
     pub seed: u64,
     pub mc_method: Method,
+    /// PNG export scale (1.0 = the drawing's natural size).
+    pub image_scale: f32,
+    /// Show event probabilities in image exports and prints.
+    pub image_probabilities: bool,
+    /// Append the selected text report to printouts.
+    pub print_report: bool,
     pub cut_sets: Option<Vec<CutSet>>,
     pub prob: Option<ProbabilityReport>,
     pub mc: Option<MonteCarloReport>,
@@ -106,6 +113,9 @@ impl Default for App {
             trials: 100_000,
             seed: 1,
             mc_method: Method::FirstFailure,
+            image_scale: 2.0,
+            image_probabilities: true,
+            print_report: true,
             cut_sets: None,
             prob: None,
             mc: None,
@@ -530,6 +540,95 @@ impl App {
             .as_ref()
             .map(|d| edit::validate(&d.tree))
             .unwrap_or_default()
+    }
+
+    // ------------------------------------------------- images and printing
+
+    fn svg_options(&self) -> SvgOptions {
+        SvgOptions {
+            title: self.tree_name(),
+            probabilities: self.image_probabilities,
+            background: true,
+        }
+    }
+
+    /// Draw the tree as shown in the editor (transfer gates stay as symbols) as SVG.
+    pub fn svg_text(&self) -> Result<String, String> {
+        let doc = self.doc.as_ref().ok_or("no tree open")?;
+        Ok(tree_svg(&doc.tree, &doc.db, &self.svg_options()))
+    }
+
+    pub fn default_image_name(&self) -> String {
+        format!("{}.png", self.tree_name())
+    }
+
+    /// Export the tree as an image; the format follows the extension (`.png` or `.svg`).
+    pub fn export_image(&mut self, path: &Path) -> Result<(), String> {
+        let res = (|| -> Result<(), String> {
+            let ext = path
+                .extension()
+                .map(|e| e.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            let svg = self.svg_text()?;
+            let bytes = match ext.as_str() {
+                "svg" => svg.into_bytes(),
+                "png" => svg_to_png(&svg, self.image_scale).map_err(|e| e.to_string())?,
+                _ => return Err("image files must end in .png or .svg".into()),
+            };
+            std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+        })();
+        match &res {
+            Ok(()) => {
+                self.error = None;
+                self.status = Some(format!("Exported {}", path.display()));
+            }
+            Err(e) => self.error = Some(e.clone()),
+        }
+        res
+    }
+
+    /// The printable page (tree, note and, optionally, the selected report).
+    pub fn print_page(&self, auto_print: bool) -> Result<String, String> {
+        let doc = self.doc.as_ref().ok_or("no tree open")?;
+        let report = if self.print_report {
+            // a failing analysis (e.g. an unfinished tree) must not stop the tree from printing
+            self.report_text(self.report_kind, &Self::now_text()).ok()
+        } else {
+            None
+        };
+        Ok(print_html(
+            &doc.tree,
+            &doc.db,
+            &PrintOptions {
+                title: self.tree_name(),
+                probabilities: self.image_probabilities,
+                report,
+                auto_print,
+            },
+        ))
+    }
+
+    /// Write the printable page to a temporary file that opens the print dialog
+    /// when loaded in a browser. The caller opens the returned path.
+    pub fn prepare_print(&mut self) -> Result<PathBuf, String> {
+        let res = self.print_page(true).and_then(|html| {
+            let path = std::env::temp_dir().join(format!(
+                "ftar_print_{}_{}.html",
+                std::process::id(),
+                self.version
+            ));
+            std::fs::write(&path, html)
+                .map(|_| path.clone())
+                .map_err(|e| format!("{}: {e}", path.display()))
+        });
+        match &res {
+            Ok(p) => {
+                self.error = None;
+                self.status = Some(format!("Print page written to {}", p.display()));
+            }
+            Err(e) => self.error = Some(e.clone()),
+        }
+        res
     }
 
     // ------------------------------------------------------------ reports

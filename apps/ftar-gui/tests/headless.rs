@@ -694,3 +694,124 @@ fn monte_carlo_seed_and_method_are_honoured() {
         "direct method has no such note"
     );
 }
+
+// ------------------------------------------------- image export and printing
+
+#[test]
+fn export_png_and_svg_from_the_edited_tree() {
+    let dir = scratch("images");
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.image_scale = 1.0;
+    let svg = dir.join("t.svg");
+    let png = dir.join("t.png");
+    app.export_image(&svg).unwrap();
+    app.export_image(&png).unwrap();
+    assert!(std::fs::read_to_string(&svg)
+        .unwrap()
+        .contains("MAINS_FAIL"));
+    let bytes = std::fs::read(&png).unwrap();
+    assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+    // the export follows edits: a renamed event shows up in the new drawing
+    app.select(Some(vec![0, 1]));
+    app.set_id("RENAMED_EVENT");
+    app.export_image(&svg).unwrap();
+    assert!(std::fs::read_to_string(&svg)
+        .unwrap()
+        .contains("RENAMED_EVENT"));
+    // a larger scale gives a larger file
+    app.image_scale = 3.0;
+    app.export_image(&png).unwrap();
+    assert!(std::fs::read(&png).unwrap().len() > bytes.len());
+    assert_eq!(app.default_image_name(), "theatre.png");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn image_export_reports_errors() {
+    let mut app = App::default();
+    assert!(app.export_image(std::path::Path::new("x.png")).is_err());
+    app.open(data("theatre.fta"));
+    assert!(app.export_image(std::path::Path::new("x.bmp")).is_err());
+    assert!(app.error.as_deref().unwrap().contains(".png or .svg"));
+    app.image_scale = 0.0;
+    assert!(app
+        .export_image(&std::env::temp_dir().join("ftar_zero_scale.png"))
+        .is_err());
+    app.image_scale = 1.0;
+    let bad = std::env::temp_dir()
+        .join("ftar_no_such_dir_abc")
+        .join("x.png");
+    assert!(app.export_image(&bad).is_err());
+}
+
+#[test]
+fn print_page_has_tree_note_and_the_selected_report() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.report_kind = ReportKind::CutSets;
+    let html = app.print_page(true).unwrap();
+    assert!(html.contains("<svg ") && html.contains("window.print()"));
+    assert!(html.contains("Failure Of An Electrical Supply"));
+    assert!(html.contains("Minimal Cut Sets"), "report appended");
+    assert!(html.contains("<title>theatre</title>"));
+    app.print_report = false;
+    assert!(!app.print_page(false).unwrap().contains("Minimal Cut Sets"));
+    app.image_probabilities = false;
+    assert!(!app.print_page(false).unwrap().contains("p = "));
+}
+
+#[test]
+fn printing_a_tree_whose_analysis_fails_still_prints_the_tree() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.report_kind = ReportKind::Probability;
+    // events without database entries make the probability analysis fail
+    app.doc.as_mut().unwrap().db.events.clear();
+    assert!(app.report_text(ReportKind::Probability, "").is_err());
+    let html = app.print_page(false).unwrap();
+    assert!(html.contains("<svg ") && html.contains("RELAY_FAIL"));
+    assert!(
+        !html.contains("class=\"report\""),
+        "no report when the analysis fails"
+    );
+}
+
+#[test]
+fn prepare_print_writes_a_page_that_opens_the_print_dialog() {
+    let mut app = App::default();
+    assert!(app.prepare_print().is_err());
+    app.open(data("lift.fta"));
+    let path = app.prepare_print().unwrap();
+    let html = std::fs::read_to_string(&path).unwrap();
+    assert!(html.contains("window.print()") && html.contains("DPD_1"));
+    assert!(path.extension().unwrap() == "html");
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn file_menu_lists_image_export_and_print() {
+    let mut h = harness();
+    h.run();
+    h.get_by_label("File").click();
+    h.run();
+    for item in [
+        "Export image...",
+        "Print...",
+        "Probabilities in images and prints",
+    ] {
+        h.get_by_label(item);
+    }
+    let mut empty = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(|_| App::default());
+    empty.run();
+    empty.get_by_label("File").click();
+    empty.run();
+    for item in ["Export image...", "Print..."] {
+        assert!(
+            empty.get_by_label(item).accesskit_node().is_disabled(),
+            "{item}"
+        );
+    }
+}

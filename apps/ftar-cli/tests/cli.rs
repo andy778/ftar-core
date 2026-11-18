@@ -184,3 +184,25 @@ mod mcp {
         assert!(child.wait().unwrap().success());
     }
 }
+
+#[test]
+fn draw_writes_png_svg_and_html() {
+    let dir = std::env::temp_dir().join(format!("ftar_draw_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let tree = format!("{DATA}/theatre.fta");
+    for (name, magic) in [
+        ("t.png", &b"\x89PNG"[..]),
+        ("t.svg", b"<svg"),
+        ("t.html", b"<!do"),
+    ] {
+        let out = dir.join(name);
+        let (ok, _) = ftar(&["draw", &tree, out.to_str().unwrap(), "--scale", "1"]);
+        assert!(ok, "{name}");
+        assert!(std::fs::read(&out).unwrap().starts_with(magic), "{name}");
+    }
+    let (ok, _) = ftar(&["draw", &tree, dir.join("t.bmp").to_str().unwrap()]);
+    assert!(!ok);
+    let (ok, _) = ftar(&["draw", &tree]);
+    assert!(!ok);
+    let _ = std::fs::remove_dir_all(dir);
+}

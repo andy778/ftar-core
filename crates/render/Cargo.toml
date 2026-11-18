@@ -1,0 +1,13 @@
+[package]
+name = "ftar-render"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Headless drawing of fault trees: SVG, PNG and printable HTML"
+
+[dependencies]
+ftar-core = { path = "../core" }
+resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }
+
+[lints]
+workspace = true

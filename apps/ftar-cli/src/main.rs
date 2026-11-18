@@ -14,6 +14,7 @@ commands:
   cutsets    minimal cut sets
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
+  draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S]   draw the tree
   tools      list the JSON automation tools (name, description, schema)
   call       ftar call <tool> [json-args]    run one tool, print the JSON result
   run        ftar run <script.json>          run a JSON script (steps of {tool, args})
@@ -44,6 +45,9 @@ fn run() -> Result<(), String> {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print!("{USAGE}");
         return Ok(());
+    }
+    if args[0] == "draw" {
+        return draw(&args[1..]);
     }
     if args[0] == "mcp" {
         return mcp(&args[1..]);
@@ -288,4 +292,63 @@ fn mcp(args: &[String]) -> Result<(), String> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     ftar_mcp::serve(&mut server, stdin.lock(), stdout.lock()).map_err(|e| e.to_string())
+}
+
+/// `ftar draw tree.fta out.png [--scale S]`: the tree as PNG, SVG or a printable HTML page.
+fn draw(args: &[String]) -> Result<(), String> {
+    use ftar_core::project::Document;
+    use ftar_render::{print_html, svg_to_png, tree_svg, PrintOptions, SvgOptions};
+
+    let (tree_path, out) = match args {
+        [t, o, ..] => (t, o),
+        _ => {
+            return Err("usage: ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S]".into())
+        }
+    };
+    let mut scale = 2.0f32;
+    let mut rest = args[2..].iter();
+    while let Some(a) = rest.next() {
+        match a.as_str() {
+            "--scale" => {
+                scale = rest
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--scale needs a number")?
+            }
+            other => return Err(format!("unknown option `{other}` for `ftar draw`")),
+        }
+    }
+    let doc = Document::load(tree_path).map_err(|e| e.to_string())?;
+    let name = std::path::Path::new(tree_path)
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let ext = std::path::Path::new(out)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let svg_opts = SvgOptions {
+        title: name.clone(),
+        ..Default::default()
+    };
+    let bytes = match ext.as_str() {
+        "svg" => tree_svg(&doc.tree, &doc.db, &svg_opts).into_bytes(),
+        "png" => svg_to_png(&tree_svg(&doc.tree, &doc.db, &svg_opts), scale)
+            .map_err(|e| e.to_string())?,
+        "html" => print_html(
+            &doc.tree,
+            &doc.db,
+            &PrintOptions {
+                title: name,
+                probabilities: true,
+                report: None,
+                auto_print: false,
+            },
+        )
+        .into_bytes(),
+        _ => return Err("output must end in .png, .svg or .html".into()),
+    };
+    std::fs::write(out, bytes).map_err(|e| format!("{out}: {e}"))?;
+    eprintln!("wrote {out}");
+    Ok(())
 }

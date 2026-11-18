@@ -1,0 +1,211 @@
+use ftar_core::project::Project;
+use ftar_core::{EventType, PrimaryEventDb, Tree};
+use ftar_render::svg::{wrap, xml_escape};
+use ftar_render::{print_html, svg_to_png, tree_svg, PrintOptions, SvgOptions};
+use resvg::tiny_skia::Pixmap;
+
+const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../core/tests/data");
+
+fn load(name: &str) -> Project {
+    Project::load(format!("{DATA}/{name}")).unwrap()
+}
+
+fn decode(png: &[u8]) -> Pixmap {
+    Pixmap::decode_png(png).expect("valid PNG")
+}
+
+#[test]
+fn svg_names_every_event_and_gate() {
+    let p = load("theatre.fta");
+    let svg = tree_svg(&p.tree, &p.db, &SvgOptions::default());
+    assert!(svg.starts_with("<svg "));
+    for id in ["RELAY_FAIL", "GEN_FAIL", "MAINS_FAIL", "Backup_Fail", "Top"] {
+        assert!(svg.contains(id), "{id}");
+    }
+    assert!(svg.contains(">AND<") && svg.contains(">OR<"));
+    // probabilities (GEN_FAIL is a failure rate)
+    assert!(svg.contains("p = 3.00E-2"), "{svg}");
+    assert!(svg.contains("rate 2.00E-2"), "{svg}");
+    let off = tree_svg(
+        &p.tree,
+        &p.db,
+        &SvgOptions {
+            probabilities: false,
+            ..Default::default()
+        },
+    );
+    assert!(!off.contains("p = "));
+}
+
+#[test]
+fn text_is_escaped_so_the_svg_stays_valid() {
+    let mut p = load("theatre.fta");
+    p.tree.root.text = "Fish & <chips> \"quoted\" 'x'".into();
+    p.tree.root.children[0].children[1].id = "A&B<C>".into();
+    let svg = tree_svg(
+        &p.tree,
+        &p.db,
+        &SvgOptions {
+            title: "T & <T>".into(),
+            ..Default::default()
+        },
+    );
+    assert!(svg.contains("A&amp;B&lt;C&gt;") && svg.contains("T &amp; &lt;T&gt;"));
+    assert!(!svg.contains("A&B<C>"));
+    svg_to_png(&svg, 1.0).expect("escaped SVG parses");
+    assert_eq!(
+        xml_escape("a\u{1}b"),
+        "ab",
+        "control characters are dropped"
+    );
+}
+
+#[test]
+fn wrapping_respects_width_and_line_limit() {
+    assert_eq!(wrap("one two three", 7, 5), ["one two", "three"]);
+    let w = wrap(
+        "a very long description of a failing component in the plant",
+        12,
+        2,
+    );
+    assert_eq!(w.len(), 2);
+    assert!(w.iter().all(|l| l.chars().count() <= 12));
+    assert!(w[1].ends_with('…'));
+    assert_eq!(wrap("", 10, 3), Vec::<String>::new());
+    assert!(
+        wrap("Supercalifragilisticexpialidocious", 10, 2)[0]
+            .chars()
+            .count()
+            <= 10
+    );
+}
+
+#[test]
+fn png_has_the_expected_size_and_real_content() {
+    let p = load("lift.fta");
+    let svg = tree_svg(&p.tree, &p.db, &SvgOptions::default());
+    let one = decode(&svg_to_png(&svg, 1.0).unwrap());
+    let two = decode(&svg_to_png(&svg, 2.0).unwrap());
+    assert_eq!(
+        (two.width(), two.height()),
+        (one.width() * 2, one.height() * 2)
+    );
+    assert!(one.width() > 1500, "lift is a wide tree: {}", one.width());
+    let px = one.pixels();
+    let non_white = px
+        .iter()
+        .filter(|c| !(c.red() > 250 && c.green() > 250 && c.blue() > 250))
+        .count();
+    assert!(
+        non_white > 3000,
+        "image looks empty: {non_white} drawn pixels"
+    );
+    // white background, opaque corners
+    let corner = px[0];
+    assert!(corner.red() == 255 && corner.alpha() == 255);
+}
+
+#[test]
+fn transparent_background_option() {
+    let p = load("theatre.fta");
+    let svg = tree_svg(
+        &p.tree,
+        &p.db,
+        &SvgOptions {
+            background: false,
+            ..Default::default()
+        },
+    );
+    let img = decode(&svg_to_png(&svg, 1.0).unwrap());
+    assert_eq!(img.pixels()[0].alpha(), 0);
+}
+
+#[test]
+fn every_example_tree_renders() {
+    for f in [
+        "theatre.fta",
+        "lift.fta",
+        "top.fta",
+        "threemotor/Three Motor Example (Motor 2 Only).fta",
+    ] {
+        let p = load(f);
+        let svg = tree_svg(&p.tree, &p.db, &SvgOptions::default());
+        let png = svg_to_png(&svg, 1.0).unwrap_or_else(|e| panic!("{f}: {e}"));
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n", "{f}");
+    }
+}
+
+#[test]
+fn bad_sizes_and_bad_svg_are_errors_not_panics() {
+    let svg = tree_svg(
+        &Tree::default(),
+        &PrimaryEventDb::default(),
+        &SvgOptions::default(),
+    );
+    for bad in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+        assert!(svg_to_png(&svg, bad).is_err(), "{bad}");
+    }
+    assert!(svg_to_png(&svg, 100_000.0).is_err());
+    assert!(svg_to_png("not svg at all", 1.0).is_err());
+    assert!(svg_to_png("", 1.0).is_err());
+}
+
+#[test]
+fn every_node_kind_can_be_drawn() {
+    use EventType::*;
+    let mut tree = Tree::default();
+    for (i, k) in [
+        Basic,
+        Undeveloped,
+        External,
+        Dormant,
+        ConditionAnalysed,
+        ConditionNotAnalysed,
+        TransferIn,
+        TransferOut,
+        Intermediate,
+        And,
+        Xor,
+        PriorityAnd,
+        Inhibit,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut n = ftar_core::edit::new_node(k, &format!("N{i}"));
+        if k == Intermediate {
+            n.text = "An intermediate event with a rather long description that must wrap".into();
+        }
+        tree.root.children[0].children.push(n);
+    }
+    let svg = tree_svg(&tree, &PrimaryEventDb::default(), &SvgOptions::default());
+    for shape in ["<circle", "<polygon", "<ellipse", "<rect", "<polyline"] {
+        assert!(svg.contains(shape), "{shape}");
+    }
+    svg_to_png(&svg, 0.5).unwrap();
+}
+
+#[test]
+fn print_page_contains_drawing_title_note_and_report() {
+    let p = load("theatre.fta");
+    let html = print_html(
+        &p.tree,
+        &p.db,
+        &PrintOptions {
+            title: "Plant <A> & B".into(),
+            probabilities: true,
+            report: Some("Cut sets: A < B & C".into()),
+            auto_print: true,
+        },
+    );
+    assert!(html.contains("<svg ") && html.contains("window.print()"));
+    assert!(html.contains("<title>Plant &lt;A&gt; &amp; B</title>"));
+    assert!(
+        html.contains("Failure Of An Electrical Supply"),
+        "note shown"
+    );
+    assert!(html.contains("Cut sets: A &lt; B &amp; C"));
+    assert!(html.contains("@page"));
+    let quiet = print_html(&p.tree, &p.db, &PrintOptions::default());
+    assert!(!quiet.contains("window.print()") && !quiet.contains("class=\"report\""));
+}

@@ -366,3 +366,49 @@ fn rejected_edits_do_not_pollute_history_or_database() {
     assert_eq!(event_ids(&mut s), base);
     assert_eq!(s.call("tree_info", &json!({})).unwrap()["can_undo"], false);
 }
+
+#[test]
+fn tree_export_writes_png_svg_and_html_inside_the_sandbox() {
+    let dir = std::env::temp_dir().join(format!("ftar_export_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_root(&dir).unwrap();
+    std::fs::copy(format!("{DATA}/theatre.fta"), dir.join("theatre.fta")).unwrap();
+    std::fs::copy(format!("{DATA}/theatre.ped"), dir.join("theatre.ped")).unwrap();
+    s.call("tree_open", &json!({ "path": "theatre.fta" }))
+        .unwrap();
+
+    let png = s
+        .call("tree_export", &json!({ "path": "t.png", "scale": 1 }))
+        .unwrap();
+    assert_eq!(png["format"], "png");
+    assert_eq!(&std::fs::read(dir.join("t.png")).unwrap()[..4], b"\x89PNG");
+    let svg = s.call("tree_export", &json!({ "path": "t.svg" })).unwrap();
+    assert!(svg["bytes"].as_u64().unwrap() > 500);
+    assert!(std::fs::read_to_string(dir.join("t.svg"))
+        .unwrap()
+        .contains("RELAY_FAIL"));
+    // explicit format overrides the extension
+    s.call(
+        "tree_export",
+        &json!({ "path": "page.dat", "format": "html" }),
+    )
+    .unwrap();
+    assert!(std::fs::read_to_string(dir.join("page.dat"))
+        .unwrap()
+        .contains("<!doctype html>"));
+
+    for (args, code) in [
+        (json!({ "path": "t.bmp" }), "invalid_args"),
+        (json!({ "path": "t.png", "scale": 0 }), "invalid_args"),
+        (json!({ "path": "../leak.png" }), "confinement"),
+        (json!({}), "invalid_args"),
+    ] {
+        assert_eq!(
+            s.call("tree_export", &args).unwrap_err().code,
+            code,
+            "{args}"
+        );
+    }
+    assert!(!dir.parent().unwrap().join("leak.png").exists());
+    let _ = std::fs::remove_dir_all(dir);
+}

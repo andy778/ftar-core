@@ -1,7 +1,7 @@
 //! Tidy top-down tree layout: leaves get consecutive columns, parents are
 //! centred over their children.
 
-use ftar_core::Node;
+use crate::model::Node;
 
 pub struct Placed<'a> {
     pub node: &'a Node,

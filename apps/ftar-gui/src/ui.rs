@@ -38,7 +38,7 @@ impl App {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         // keyboard shortcuts
-        let (save, undo, redo, del, new, open) = ctx.input_mut(|i| {
+        let (save, undo, redo, del, new, open, print) = ctx.input_mut(|i| {
             (
                 i.consume_key(Modifiers::COMMAND, Key::S),
                 i.consume_key(Modifiers::COMMAND, Key::Z),
@@ -46,6 +46,7 @@ impl App {
                 i.consume_key(Modifiers::NONE, Key::Delete),
                 i.consume_key(Modifiers::COMMAND, Key::N),
                 i.consume_key(Modifiers::COMMAND, Key::O),
+                i.consume_key(Modifiers::COMMAND, Key::P),
             )
         });
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
@@ -98,6 +99,25 @@ impl App {
                         ui.close();
                         self.export_modes_csv_dialog();
                     }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Export image..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.export_image_dialog();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Print..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.print_now();
+                    }
+                    ui.checkbox(
+                        &mut self.image_probabilities,
+                        "Probabilities in images and prints",
+                    );
+                    ui.checkbox(&mut self.print_report, "Include the report when printing");
                     ui.separator();
                     if ui.button("Quit").clicked() {
                         ui.close();
@@ -158,6 +178,9 @@ impl App {
                 if open {
                     self.open_dialog();
                 }
+                if print && has_doc {
+                    self.print_now();
+                }
                 if del && self.selected.as_ref().is_some_and(|p| !p.is_empty()) {
                     self.delete_selected();
                 }
@@ -172,6 +195,26 @@ impl App {
             .save_file()
         {
             let _ = self.export_report(&p);
+        }
+    }
+
+    fn export_image_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("PNG image", &["png"])
+            .add_filter("SVG drawing", &["svg"])
+            .set_file_name(self.default_image_name())
+            .save_file()
+        {
+            let _ = self.export_image(&p);
+        }
+    }
+
+    /// Open the browser's print dialog for the tree (and report).
+    fn print_now(&mut self) {
+        if let Ok(path) = self.prepare_print() {
+            if let Err(e) = open_with_default_app(&path) {
+                self.error = Some(format!("could not open the print page: {e}"));
+            }
         }
     }
 
@@ -910,4 +953,28 @@ fn node_style(n: &ftar_core::Node, dark: bool) -> (Color32, String) {
         n.id.clone()
     };
     (fill, label)
+}
+
+/// Open a file with the system's default application (the browser, for HTML).
+fn open_with_default_app(path: &std::path::Path) -> std::io::Result<()> {
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", ""]).arg(path);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = Command::new("open");
+        c.arg(path);
+        c
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut cmd = {
+        let mut c = Command::new("xdg-open");
+        c.arg(path);
+        c
+    };
+    cmd.spawn().map(|_| ())
 }

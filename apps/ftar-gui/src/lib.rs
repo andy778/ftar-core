@@ -1,10 +1,10 @@
 //! ftar-gui: egui front end for ftar-core.
 //!
 //! * [`App`] holds the state and every user operation (headless, testable)
-//! * `ui` draws it with egui; `layout` places the tree
+//! * `ui` draws it with egui; `layout` (from ftar-core) places the tree
 
 mod app;
-pub mod layout;
+pub use ftar_core::layout;
 mod ui;
 
 use std::path::PathBuf;

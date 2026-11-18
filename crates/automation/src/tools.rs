@@ -90,6 +90,7 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
             }
         }
         "tree_save" => tree_save(s, &a),
+        "tree_export" => tree_export(s, &a),
         "event_list" => {
             let (_, d) = s.doc_mut(args)?;
             let mut ev: Vec<_> = d.db.events.values().collect();
@@ -528,4 +529,60 @@ fn make_report(s: &mut Session, a: &Args, args: &Value) -> Result<Value, ToolErr
         &params,
     )?;
     Ok(json!({ "kind": name, "text": text }))
+}
+
+fn tree_export(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let path = s.resolve(a.str("path")?)?;
+    let (_, d) = s.doc_mut(a.0)?;
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let format = a
+        .opt_str("format")?
+        .map(str::to_ascii_lowercase)
+        .unwrap_or(ext);
+    let title = a
+        .opt_str("title")?
+        .map(str::to_string)
+        .unwrap_or_else(|| d.name.clone());
+    let probabilities = a.opt_bool("probabilities")?.unwrap_or(true);
+    let bytes: Vec<u8> = match format.as_str() {
+        "svg" | "png" => {
+            let svg = ftar_render::tree_svg(
+                &d.tree,
+                &d.db,
+                &ftar_render::SvgOptions {
+                    title,
+                    probabilities,
+                    background: true,
+                },
+            );
+            if format == "svg" {
+                svg.into_bytes()
+            } else {
+                let scale = a.opt_f64("scale")?.unwrap_or(2.0) as f32;
+                ftar_render::svg_to_png(&svg, scale).map_err(|e| ToolError::args(e.to_string()))?
+            }
+        }
+        "html" => ftar_render::print_html(
+            &d.tree,
+            &d.db,
+            &ftar_render::PrintOptions {
+                title,
+                probabilities,
+                report: None,
+                auto_print: false,
+            },
+        )
+        .into_bytes(),
+        other => {
+            return Err(ToolError::args(format!(
+                "unknown format `{other}` (png, svg, html; or use a matching file extension)"
+            )))
+        }
+    };
+    std::fs::write(&path, &bytes)
+        .map_err(|e| ToolError::new("io", format!("{}: {e}", path.display())))?;
+    Ok(json!({ "written": display_path(&path), "format": format, "bytes": bytes.len() }))
 }

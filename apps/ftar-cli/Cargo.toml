@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 ftar-core = { path = "../../crates/core" }
+ftar-render = { path = "../../crates/render" }
 ftar-automation = { path = "../../crates/automation" }
 ftar-mcp = { path = "../../crates/mcp" }
 serde_json = "1"

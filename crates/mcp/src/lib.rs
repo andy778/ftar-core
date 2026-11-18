@@ -187,8 +187,8 @@ fn tool_json(t: &ftar_automation::ToolInfo) -> Value {
         "annotations": {
             "title": t.name,
             "readOnlyHint": read_only,
-            // only these write outside memory
-            "destructiveHint": t.name == "tree_save",
+            // only these write files
+            "destructiveHint": matches!(t.name, "tree_save" | "tree_export"),
             "idempotentHint": read_only,
             "openWorldHint": false,
         },
