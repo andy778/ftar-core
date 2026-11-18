@@ -43,6 +43,15 @@ pub struct MonteCarloReport {
 
 struct Rng(u64);
 impl Rng {
+    /// Scramble the seed (splitmix64) so that neighbouring seeds give unrelated
+    /// streams; the xorshift state must be non-zero.
+    fn seeded(seed: u64) -> Self {
+        let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        Rng(if z == 0 { 0x9E37_79B9_7F4A_7C15 } else { z })
+    }
     fn next_f64(&mut self) -> f64 {
         // xorshift64*
         let mut x = self.0;
@@ -82,7 +91,7 @@ pub fn simulate(
         })
         .collect();
 
-    let mut rng = Rng(opts.seed | 1);
+    let mut rng = Rng::seeded(opts.seed);
     let mut failed = vec![false; ids.len()];
     let mut event_failures = vec![0u64; ids.len()];
     let mut hits = vec![0u64; sets.len()];

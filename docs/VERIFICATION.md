@@ -1,0 +1,127 @@
+# Verification of the Rust analysis against OpenFTA
+
+Reference: OpenFTA `dev` branch, `src/lib/Analysis/*.c`, `src/lib/Appn/{treeUtil,item,event_list}.c`.
+There is no C toolchain here, so the comparison is by reading the C plus an independent
+brute-force oracle (`tests/verify.rs`). No numbers from a native OpenFTA build were available.
+
+## The oracle (`tests/verify.rs`)
+
+The oracle evaluates the boolean function of the fault tree by truth table over all primary events.
+It mirrors `eval_tree` (`treeUtil.c:1828-1895`) on the "process tree" built by
+`generate_processing_pointers` (`item.c:190-233`): intermediate events and transfer-outs are transparent,
+AND/INHIBIT/PRIORITY-AND are conjunctions, OR/XOR disjunctions, an analysed condition as first child of an OR/XOR
+must hold, a not-analysed first child is ignored, a transfer-in evaluates the head of the transferred tree.
+From the truth table it derives and compares with the library:
+
+* (a) minimal cut sets = minimal true points (also for order limits 1..4),
+* (b) exact top probability = sum over the truth table (also with order limits, and "L" events at several unit times),
+  plus the alternating upper/lower bound property of the inclusion-exclusion partial sums,
+* (c) importance contribution = sum of the probabilities of the cut sets containing the event, importance = 100 * contribution / top,
+* Monte Carlo estimates (top probability and per-event joint failure frequency) against the exact values (6 sigma).
+
+Inputs: 300 seeded random trees (own PRNG; shared events, nested intermediates/gates of all five kinds,
+analysed and not-analysed conditions, transfer-in files with transfer-out markers, `L` events, `.fta`/`.ped`
+written to disk and loaded through `Project::load`), plus every example tree: `theatre`, `lift`, `three_levels`
+(top/middle/bottom), `Three Motor Example (Motor 2 Only)` + `T.fta` (54 cut sets), `transTest*`.
+Mutation check: treating XOR as AND makes the random test fail.
+
+Result: the cut sets, exact probabilities and importances agree with the oracle on all of them.
+`Three Motor` has 54 cut sets, so only the order-limited probabilities (<= 16 sets) are compared there.
+
+## Confirmed equal
+
+| Item | C | Rust |
+|---|---|---|
+| XOR analysed as OR | `CutSetsByAlgebraicMethod.c:104-105` | `analysis.rs` `Or \| Xor` |
+| INHIBIT and PRIORITY_AND are plain AND | `…Algebraic…c:154-156` | `And \| Inhibit \| PriorityAnd` |
+| Analysed condition first in OR/XOR is ANDed with the OR of the rest; not-analysed first child ignored | `…c:113-125, 144-150` | `analysis.rs` Or branch |
+| In AND, a not-analysed first child is skipped; NULL children skipped | `…c:162-181` | `None` results skipped |
+| Transfer-out contributes nothing, transfer-in is the transferred tree | `…c:185-192`, `item.c:214-216` | `strip_transfer_out`, `inline_transfers` |
+| Absorption law / duplicates removed | `ExprORGroup` `NormalisedBooleanExpressions.c:385-455` | `minimise` |
+| Order limit prunes products with more than `limit` events (monotone, so equal to filtering the full set) | `ExprAND` `…c:494` | `and()` |
+| Combo method result = minimal true points of `eval_tree` = algebraic result | `CutSetsByComboMethod.c:229-241, 298, 331` | (same function; verified by oracle) |
+| `L` events: `p = 1 - exp(-lambda * unit_time)`, only when the lambda marker is exactly `'L'` | `event_list.c:543-548` | `effective_probability` |
+| Cut set probability = product over events | `calc_sub_term` `…c:921-952` | `combos`, `cut_set_probability` |
+| k-th inclusion-exclusion term = sum over k-combinations of P(union), sign `(-1)^(k+1)`; terms clamped to the number of cut sets | `ExprProb` `…c:1094-1117`, `ProbabilityAnalysis.c:165-169, 261-276` | `probability_report` |
+| "Exact" only when all terms are used | `ProbabilityAnalysis.c:274` | `exact` |
+| Importance: `imp[j] = sum of P(cut set) over cut sets containing event j`; percentage `100*imp/p` with p the (possibly partial) sum | `ProbabilityAnalysis.c:291-303, 325` | `events` |
+| Monte Carlo: P(at least one component fails) | `calc_bas_parms` `event_list.c:679-694` | `any_component_failure` |
+| Event identity is the id only (one global list; shared across transferred trees) | `event_list.c:159-169` | `ids` dedup |
+| COND_ANAL events are primary events with a probability | `event_list.c:151-155`, `set_bas_prob` | `ids` includes `ConditionAnalysed` |
+
+## Discrepancies
+
+### Fixed (definite bugs, regression tests added)
+
+1. **Event type from the PED overrides the tree file** (`item.c:457-467`: `ip->type = primary_event_item_type(component->type)`
+   for every primary item found in the tree's own database; PED types are `B E U C N`). Rust used the type letter in the
+   `.fta`, so an event whose database type is `N`/`C` (condition) but is stored as `B` in the tree was analysed as a plain event.
+   Fix: `project.rs` `apply_ped_types`, applied per file with that file's own `.ped`. Test: `ped_type_overrides_tree_type`.
+2. **Monte Carlo seed aliasing** (`montecarlo.rs`, `Rng(opts.seed | 1)`): seeds `2k` and `2k+1` produced identical runs,
+   and small seeds gave a poor start for xorshift. Fix: splitmix64 scrambling in `Rng::seeded`.
+   Test: `monte_carlo_neighbouring_seeds_differ`. (Run output for a given seed changes.)
+
+### Not changed (design differences or edge cases; proposed fixes)
+
+3. **Order 0 means "unlimited" in C** (`ExprAND`: `(limit > 0) && …`, `NormalisedBooleanExpressions.c:494`); in Rust
+   `max_order = 0` gives no cut sets (`analysis.rs:34`, `and`). The GUI never passes 0, so low impact.
+   Proposal: map 0 to `usize::MAX` in `minimal_cut_sets_limited`/`probability_report` (and say so in the CLI help).
+4. **Missing primary event in the PED**: C silently uses probability 0.0 (`event_list.c:552-553`, `set_bas_prob`);
+   Rust returns `Error::MissingEvent`. Rust's behaviour is arguably better (a typo does not silently drop a cut set);
+   proposal: keep the error, optionally add a `--missing-as-zero` switch for bit-for-bit parity.
+5. **Importance and cut-set list use all generated cut sets in C, only `<= max_order` in Rust.** C generates cut sets once
+   (`tree->max_order`) and `calculate_probs` uses *all* of them for the per-cut-set table and importance
+   (`ProbabilityAnalysis.c:207, 291-303`) but only those `<= max_order` for the top probability (`ExprProb`, `…c:1061-1062`).
+   Rust uses a single order for both. They differ only when the probability order is lower than the cut-set order.
+   Proposal: separate `cutset_order` from `prob_order` in `ProbabilityOptions` if exact report parity is wanted.
+6. **No cut sets**: C returns FALSE without a report (`ProbabilityAnalysis.c:165-167`); Rust returns top 0, exact.
+7. **Probability precision**: C stores probabilities, cut-set terms and sums as `float` (`primary_event.h`, `ProbabilityAnalysis.c:95-96`,
+   `NormalisedBooleanExpressions.c:877-878`); Rust uses `f64`. Expect ~1e-7 relative differences versus a native OpenFTA
+   report, larger for many-term sums. Rust is the more accurate one.
+8. **Monte Carlo estimator.** C simulates only runs with at least one failure: it picks the first failed event with the
+   conditional distribution `rel[]` and fails the later events independently (`MonteCarloSimulation.c:536-575`,
+   `calc_bas_parms`), and reports `P = P(any failure) * failures / tests` with error `P/sqrt(failures)` (`…c:312, 342-344`).
+   Rust draws every event independently on every trial and reports `failures / trials` with error `sqrt(p(1-p)/n)`.
+   Both are unbiased for the top probability; the C scheme has much lower variance for rare events (at 1e-6 event
+   probabilities Rust needs ~1e6 times more trials to see a failure). Rust also reports per-event and per-cut-set counts
+   instead of C's failure-mode ranking (`MonteFileWriteFailures`, compressed failure modes, `other`) and importance
+   `imp[j] = P(any) * (failures with event j) / tests` (`…c:244`). Proposal: port the first-failure scheme
+   (`calc_bas_parms` + `rand_disc`) and the failure-mode table; `event_failures` counts already match the C
+   importance numerator. The C uses `frand() <= p`, Rust `< p` (measure-zero difference). Rust evaluates the minimal cut
+   sets, C evaluates the tree (`eval_tree`); these agree for the monotone trees OpenFTA produces.
+9. **Basic event order** in C reports is alphabetical (`strcmp` insertion, `event_list.c:159-196`), Rust uses tree order. Cosmetic.
+10. **Event database lookup**: C looks an event up in the PED of the *file in which it is first met* during traversal and uses
+    probability 0.0 if that PED lacks it (`event_list.c:171-175, 539-554`). Rust merges all PEDs, main file first, first definition wins.
+    Differs only when the same id has different values in different PEDs or is defined only in another file's PED.
+11. **Transfer-in path**: nested transfer-ins are resolved relative to the *top* tree's directory in C
+    (`event_list.c:225, 262-263`); Rust resolves relative to the directory of the file containing the transfer-in.
+    Identical when all files share a directory. C has no cycle detection (infinite recursion); Rust reports an error.
+12. **Non-first not-analysed conditions**: algebraic method returns NULL (ignored, with an error print, `…Algebraic…c:99-102`),
+    but `eval_tree` returns TRUE (`treeUtil.c:1859-1863` handles only the first child; a later `N` evaluates TRUE and makes an
+    OR true). So in C the combo method and Monte Carlo can disagree with the algebraic method for such trees. Rust follows
+    the algebraic method everywhere. The GUI normally only allows the condition as first child.
+13. **Degenerate gates**: an OR whose only child is an analysed condition, or an OR whose other children all vanish, dereferences
+    NULL in C (`…Algebraic…c:113-123, 145`); Rust returns the condition's cut sets.
+14. **Intermediate with several children**: C splices an intermediate's children into the parent's child list
+    (`item.c:208-212`); Rust treats an `M` with several children as an OR (`analysis.rs`). Real files have exactly one gate under an `M`.
+15. **`'D'` as a type letter** is accepted by Rust (`EventType::Dormant`); in C `D` is only the dormant *modifier* (second
+    character), and a leading `D` is an invalid item type (`…Algebraic…c:194-196`). Harmless.
+16. **`top_probability`** (fast bounds) ignores unit time (uses 1.0), `probability_report` honours it.
+17. **PED lambda marker written by the Java GUI** is `(char)TRUE` = `\x01`, not `'L'` (`NativePEDFrame.c:120`), while the analysis
+    tests for `'L'` (`event_list.c:543`) and `count_lambda_events` for any non-NUL (`treeUtil.c:1802`). Files saved by that GUI
+    therefore contain rate events that no analysis treats as rates, in C and in Rust alike. Likely a bug in the `dev` branch of OpenFTA.
+
+### Notes on the C snapshot
+
+* `generate_processing_pointers` (`item.c:190-233`) only links `process_sibling` for gates through the intermediate-event branch
+  (`item.c:212`) and the leaf branch (`item.c:226`). That is correct only because every gate is the single child of an
+  intermediate event, which holds for all example files. A gate directly under a gate would lose its right siblings.
+* `TRANSOUT` handling recurses on `ip->right_sib` and would dereference NULL if a transfer-out is the last child (`item.c:214-216`).
+  In all files the marker comes first under an intermediate event.
+
+## Proposed follow-ups (priority order)
+
+1. Port the first-failure Monte Carlo scheme and the failure-mode report (item 8).
+2. Treat order 0 as unlimited (item 3); decide on missing-event policy (item 4).
+3. Split cut-set order from probability order if byte-compatible reports are required (item 5).
+4. Once a native OpenFTA build is available, compare reports for the examples; expect agreement to float precision (item 7).

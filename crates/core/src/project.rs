@@ -45,20 +45,45 @@ fn load_tree(path: &Path, db: &mut PrimaryEventDb, stack: &mut Vec<PathBuf>) -> 
     let mut tree = parse_fta(&read(path)?)?;
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
 
+    let mut own_ped = None;
     if let Some(name) = &tree.db_name {
         // Old files may store an absolute (Windows) path; fall back to the file name.
         let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
         let candidates = [dir.join(name), dir.join(base)];
         if let Some(p) = candidates.iter().find(|p| p.is_file()) {
-            for (k, v) in parse_ped(&read(p)?)?.events {
-                db.events.entry(k).or_insert(v);
+            let ped = parse_ped(&read(p)?)?;
+            for (k, v) in &ped.events {
+                db.events.entry(k.clone()).or_insert_with(|| v.clone());
             }
+            own_ped = Some(ped);
         }
+    }
+    // As in OpenFTA's `load_item`, the event type recorded in the tree's own
+    // database overrides the type letter stored in the `.fta` file.
+    if let Some(ped) = &own_ped {
+        apply_ped_types(&mut tree.root, ped);
     }
 
     inline_transfers(&mut tree.root, dir, db, stack)?;
     stack.pop();
     Ok(tree)
+}
+
+fn apply_ped_types(n: &mut Node, ped: &PrimaryEventDb) {
+    use EventType::*;
+    if n.kind.is_primary() || matches!(n.kind, ConditionAnalysed | ConditionNotAnalysed) {
+        if let Some(e) = ped.events.get(&n.id) {
+            if matches!(
+                e.kind,
+                Basic | External | Undeveloped | ConditionAnalysed | ConditionNotAnalysed
+            ) {
+                n.kind = e.kind;
+            }
+        }
+    }
+    for c in &mut n.children {
+        apply_ped_types(c, ped);
+    }
 }
 
 fn inline_transfers(
