@@ -11,6 +11,11 @@ path = "src/main.rs"
 
 [dependencies]
 ftar-core = { path = "../../crates/core" }
+ftar-automation = { path = "../../crates/automation" }
+serde_json = "1"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+serde_json = "1"

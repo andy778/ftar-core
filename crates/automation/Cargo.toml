@@ -1,0 +1,13 @@
+[package]
+name = "ftar-automation"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Headless JSON tool catalogue over ftar-core, for scripts, agents and MCP"
+
+[dependencies]
+ftar-core = { path = "../core" }
+serde_json = "1"
+
+[lints]
+workspace = true

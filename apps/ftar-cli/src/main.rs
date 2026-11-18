@@ -14,6 +14,9 @@ commands:
   cutsets    minimal cut sets
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
+  tools      list the JSON automation tools (name, description, schema)
+  call       ftar call <tool> [json-args]    run one tool, print the JSON result
+  run        ftar run <script.json>          run a JSON script (steps of {tool, args})
 
 options:
   --order N    use cut sets up to order N (default: all)
@@ -21,6 +24,7 @@ options:
   --time T     unit time for failure-rate events (default: 1)
   --trials N   Monte Carlo trials (default: 100000)
   --seed N     Monte Carlo seed
+  --root DIR   (call/run) confine all file access to DIR
 ";
 
 fn main() -> ExitCode {
@@ -38,6 +42,9 @@ fn run() -> Result<(), String> {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print!("{USAGE}");
         return Ok(());
+    }
+    if matches!(args[0].as_str(), "tools" | "call" | "run") {
+        return automation(&args);
     }
     if args.len() < 2 {
         print!("{USAGE}");
@@ -192,6 +199,58 @@ fn run() -> Result<(), String> {
             }
         }
         c => return Err(format!("unknown command `{c}`\n\n{USAGE}")),
+    }
+    Ok(())
+}
+
+fn automation(args: &[String]) -> Result<(), String> {
+    use ftar_automation::{run_script, tools, Session};
+    use serde_json::Value;
+
+    let mut root = None;
+    let mut rest = Vec::new();
+    let mut it = args[1..].iter();
+    while let Some(a) = it.next() {
+        if a == "--root" {
+            root = Some(it.next().ok_or("--root needs a directory")?.clone());
+        } else {
+            rest.push(a.clone());
+        }
+    }
+    let mut session = match &root {
+        Some(r) => Session::with_root(r).map_err(|e| e.to_string())?,
+        None => Session::new(),
+    };
+    let print = |v: &Value| println!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
+    match args[0].as_str() {
+        "tools" => print(&Value::Array(tools().iter().map(|t| t.to_json()).collect())),
+        "call" => {
+            let tool = rest.first().ok_or("usage: ftar call <tool> [json-args]")?;
+            let a: Value = match rest.get(1) {
+                Some(j) => serde_json::from_str(j).map_err(|e| format!("bad JSON args: {e}"))?,
+                None => Value::Null,
+            };
+            match session.call(tool, &a) {
+                Ok(v) => print(&v),
+                Err(e) => {
+                    print(&e.to_json());
+                    return Err(e.to_string());
+                }
+            }
+        }
+        _ => {
+            let file = rest
+                .first()
+                .ok_or("usage: ftar run <script.json> [--root DIR]")?;
+            let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+            let script: Value = serde_json::from_str(&text).map_err(|e| format!("{file}: {e}"))?;
+            let results = run_script(&mut session, &script);
+            let failed = results.iter().any(|r| r.outcome.is_err());
+            print(&Value::Array(results.iter().map(|r| r.to_json()).collect()));
+            if failed {
+                return Err("script failed".into());
+            }
+        }
     }
     Ok(())
 }
