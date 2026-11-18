@@ -38,9 +38,10 @@ fn eval(n: &Node, limit: usize) -> Result<Option<Vec<CutSet>>> {
                 .or(Some(vec![])))
         }
         ConditionNotAnalysed | TransferOut => Ok(None),
-        TransferIn => Err(Error::Unsupported(
-            "unresolved transfer-in: load the tree with Project::load".into(),
-        )),
+        TransferIn => Err(Error::Unsupported(format!(
+            "transfer-in `{}` is not inlined; analyse the tree with its transfers loaded",
+            n.id
+        ))),
         Unknown => Err(Error::Parse("event of unknown type".into())),
         Or | Xor | Intermediate => {
             let mut kids = n.children.iter().peekable();

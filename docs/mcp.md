@@ -43,11 +43,14 @@ During development use `cargo run -q -p ftar-cli -- mcp --root DIR` as the comma
 
 ## Typical agent flow
 
-1. `tree_open {"path":"plant.fta"}` (use `"raw": true` if you will edit a tree with transfer gates)
+1. `tree_open {"path":"plant.fta"}` (use `"raw": true` if you will edit a tree with transfer gates; a raw tree with
+   transfer-ins cannot be analysed, and `tree_validate` reports `"analysable": false`)
 2. `tree_validate`, `tree_get`
 3. `tree_edit` / `event_set`, undo with `tree_undo`
-4. `analysis_cutsets`, `analysis_probability`, `analysis_montecarlo` (seeded), or `report {"kind":"probability"}`
-5. `tree_save {"ped": true}`
+4. `analysis_cutsets`, `analysis_probability`, `analysis_montecarlo` (seeded), or `report {"kind":"probability"}`.
+   When a Monte Carlo run sees no failures, `std_error` is `null` and `upper_bound_95` gives the 95% upper bound.
+5. `tree_save` writes the `.fta` and, when there are events, the `.ped` (a new tree gets `<name>.ped`)
+6. `tree_close` refuses a document with unsaved changes unless you pass `"discard": true`
 
 ## Testing
 

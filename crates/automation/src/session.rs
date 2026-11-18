@@ -42,7 +42,8 @@ impl From<ftar_core::Error> for ToolError {
             ftar_core::Error::Io(_) => "io",
             _ => "analysis",
         };
-        Self::new(code, e.to_string())
+        // Windows canonical paths carry a `\\?\` prefix that is noise in messages.
+        Self::new(code, e.to_string().replace(r"\\?\", ""))
     }
 }
 impl From<ftar_core::edit::EditError> for ToolError {
@@ -96,6 +97,22 @@ pub struct Session {
     pub(crate) docs: BTreeMap<String, Doc>,
     pub(crate) last: Option<String>,
     next: u32,
+}
+
+/// Does `p` start with `root`, comparing the text of the paths (no file
+/// system access; the `\\?\` prefix of canonical Windows paths is ignored,
+/// and case too on Windows)?
+fn lexically_inside(p: &Path, root: &Path) -> bool {
+    let norm = |p: &Path| {
+        let s = p.to_string_lossy().replace('/', "\\");
+        let s = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
+        if cfg!(windows) {
+            s.to_lowercase()
+        } else {
+            s.replace('\\', "/")
+        }
+    };
+    Path::new(&norm(p)).starts_with(norm(root))
 }
 
 impl Default for Session {
@@ -182,7 +199,13 @@ impl Session {
                     .parent()
                     .and_then(|d| d.canonicalize().ok())
                     .ok_or_else(|| {
-                        ToolError::new("io", format!("`{p}`: parent directory not found"))
+                        // A path that names a place outside the root is a
+                        // confinement error, whether or not that place exists.
+                        if raw.has_root() && !lexically_inside(&full, root) {
+                            ToolError::new("confinement", format!("`{p}` is outside the root"))
+                        } else {
+                            ToolError::new("io", format!("`{p}`: parent directory not found"))
+                        }
                     })?;
                 parent.join(full.file_name().unwrap_or_default())
             }

@@ -713,10 +713,15 @@ impl eframe::App for App {
                         if let Some(r) = &self.mc {
                             ui.monospace(format!("tests           {}", r.trials));
                             ui.monospace(format!("system failures {}", r.system_failures));
-                            ui.monospace(format!(
-                                "P(top)          {:.4E} +/- {:.2E}",
-                                r.probability, r.std_error
-                            ));
+                            ui.monospace(match r.upper_bound_95() {
+                                Some(b) => format!(
+                                    "P(top)          < {b:.2E} (95%, no failures simulated)"
+                                ),
+                                None => format!(
+                                    "P(top)          {:.4E} +/- {:.2E}",
+                                    r.probability, r.std_error
+                                ),
+                            });
                             ui.monospace(format!(
                                 "P(any failure)  {:.4E}",
                                 r.any_component_failure

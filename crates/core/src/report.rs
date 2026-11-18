@@ -477,12 +477,20 @@ pub fn monte_carlo_report_text(
     out.push_str("one component failure\n\n");
     let p = report.probability;
     let err = report.std_error;
-    let _ = write!(
-        out,
-        "Probability of top event  = {}  ( +/- {} )\n\n",
-        fmt_e(p),
-        fmt_e(err)
-    );
+    let _ = match report.upper_bound_95() {
+        Some(b) => write!(
+            out,
+            "Probability of top event  = {}  ( no failures simulated; below {} at 95% )\n\n",
+            fmt_e(p),
+            fmt_e(b)
+        ),
+        None => write!(
+            out,
+            "Probability of top event  = {}  ( +/- {} )\n\n",
+            fmt_e(p),
+            fmt_e(err)
+        ),
+    };
 
     out.push_str(
         "Rank   Failure mode         Failures  Estimated Probability         Importance\n\n",

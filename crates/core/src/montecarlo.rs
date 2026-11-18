@@ -49,6 +49,18 @@ impl Default for MonteCarloOptions {
     }
 }
 
+impl MonteCarloReport {
+    /// When no simulated run failed, `std_error` is 0 and says nothing; this
+    /// is the one-sided 95% upper bound on the top-event probability instead
+    /// (about `3 / trials`, scaled by `bas_prob`). `None` once failures were seen.
+    pub fn upper_bound_95(&self) -> Option<f64> {
+        (self.system_failures == 0).then(|| {
+            let n = self.trials.max(1) as f64;
+            self.bas_prob * (1.0 - 0.05f64.powf(1.0 / n))
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MonteCarloReport {
     pub method: Method,

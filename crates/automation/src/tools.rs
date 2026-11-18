@@ -27,7 +27,13 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         "tree_open" => tree_open(s, &a),
         "tree_new" => tree_new(s, &a),
         "tree_close" => {
-            let (id, _) = s.doc_mut(args)?;
+            let (id, d) = s.doc_mut(args)?;
+            if d.dirty && !a.opt_bool("discard")?.unwrap_or(false) {
+                return Err(ToolError::new(
+                    "unsaved",
+                    format!("`{id}` has unsaved changes: save it with tree_save, or pass `discard: true`"),
+                ));
+            }
             s.docs.remove(&id);
             if s.last.as_deref() == Some(&id) {
                 s.last = s.docs.keys().next_back().cloned();
@@ -55,13 +61,23 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         "tree_validate" => {
             let (_, d) = s.doc_mut(args)?;
             let issues = edit::validate(&d.tree);
+            let mut list: Vec<Value> = issues.iter().map(|i| json!({
+                "path": i.path,
+                "severity": if i.severity == edit::Severity::Error { "error" } else { "warning" },
+                "message": i.message,
+            })).collect();
+            let transfers = raw_transfers(&d.tree);
+            for (path, id) in &transfers {
+                list.push(json!({
+                    "path": path,
+                    "severity": "warning",
+                    "message": format!("transfer-in `{id}` is not inlined (opened with raw=true): reopen without raw to analyse"),
+                }));
+            }
             Ok(json!({
                 "ok": !issues.iter().any(|i| i.severity == edit::Severity::Error),
-                "issues": issues.iter().map(|i| json!({
-                    "path": i.path,
-                    "severity": if i.severity == edit::Severity::Error { "error" } else { "warning" },
-                    "message": i.message,
-                })).collect::<Vec<_>>()
+                "analysable": transfers.is_empty(),
+                "issues": list,
             }))
         }
         "tree_edit" => tree_edit(s, &a),
@@ -99,6 +115,7 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         "event_set" => event_set(s, &a),
         "analysis_cutsets" => {
             let (_, d) = s.doc_mut(args)?;
+            ensure_analysable(d)?;
             let sets =
                 minimal_cut_sets_limited(&d.tree, a.opt_usize("max_order")?.unwrap_or(usize::MAX))?;
             Ok(
@@ -107,12 +124,14 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         }
         "analysis_probability" => {
             let (_, d) = s.doc_mut(args)?;
+            ensure_analysable(d)?;
             let opts = prob_opts(&a)?;
             let r = probability_report(&d.tree, &d.db, &opts)?;
             Ok(prob_json(&r))
         }
         "analysis_montecarlo" => {
             let (_, d) = s.doc_mut(args)?;
+            ensure_analysable(d)?;
             let r = simulate(&d.tree, &d.db, &mc_opts(&a)?)?;
             Ok(mc_json(&r))
         }
@@ -187,7 +206,8 @@ fn tree_new(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             tree,
             db: PrimaryEventDb::default(),
             history: History::new(),
-            dirty: true,
+            // nothing to lose until the first edit
+            dirty: false,
         },
     );
     s.last = Some(id.clone());
@@ -394,28 +414,58 @@ fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         Some(p) => Some(s.resolve(p)?),
         None => None,
     };
+    let ped_arg = a.opt_bool("ped")?;
     let (_, d) = s.doc_mut(a.0)?;
     let path = target
         .or_else(|| d.path.clone())
         .ok_or_else(|| ToolError::args("document has no path; pass `path`"))?;
+    // By default the database is written whenever there is one to write, so
+    // event probabilities are never silently left unsaved.
+    let has_events = !d.db.events.is_empty();
+    let write_db = ped_arg.unwrap_or(has_events || d.tree.db_name.is_some());
+    // As in the GUI, a tree without a database name gets `<stem>.ped`.
+    let db_name = match (&d.tree.db_name, write_db) {
+        (Some(n), _) => Some(n.clone()),
+        (None, true) => Some(format!(
+            "{}.ped",
+            path.file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "tree".into())
+        )),
+        (None, false) => None,
+    };
+    // The .ped goes next to the tree under its plain file name, checked like any other path.
+    let ped_path = match (&db_name, write_db) {
+        (Some(name), true) => {
+            let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+            if matches!(base, "" | "." | "..") {
+                return Err(ToolError::args(format!(
+                    "database name `{name}` is not a file name"
+                )));
+            }
+            let p = path.parent().unwrap_or_else(|| Path::new(".")).join(base);
+            Some(s.resolve(&p.to_string_lossy())?)
+        }
+        _ => None,
+    };
+
+    let (_, d) = s.doc_mut(a.0)?;
+    d.tree.db_name = db_name;
     std::fs::write(&path, write_fta(&d.tree))
-        .map_err(|e| ToolError::new("io", format!("{}: {e}", path.display())))?;
-    let mut written = vec![path.display().to_string()];
-    if a.opt_bool("ped")?.unwrap_or(false) {
-        let name = d
-            .tree
-            .db_name
-            .clone()
-            .ok_or_else(|| ToolError::args("tree has no database name (set one first)"))?;
-        let base = name.rsplit(['/', '\\']).next().unwrap_or(&name).to_string();
-        let ped = path.parent().unwrap_or_else(|| Path::new(".")).join(base);
-        std::fs::write(&ped, write_ped(&d.db))
-            .map_err(|e| ToolError::new("io", format!("{}: {e}", ped.display())))?;
-        written.push(ped.display().to_string());
+        .map_err(|e| ToolError::new("io", format!("{}: {e}", display_path(&path))))?;
+    let mut written = vec![display_path(&path)];
+    if let Some(ped) = &ped_path {
+        std::fs::write(ped, write_ped(&d.db))
+            .map_err(|e| ToolError::new("io", format!("{}: {e}", display_path(ped))))?;
+        written.push(display_path(ped));
     }
     d.path = Some(path);
     d.dirty = false;
-    Ok(json!({ "written": written }))
+    let mut out = json!({ "written": written });
+    if has_events && ped_path.is_none() {
+        out["warning"] = json!("the event database was not written (`ped: false`)");
+    }
+    Ok(out)
 }
 
 // ------------------------------------------------------------- analysis
@@ -475,13 +525,16 @@ fn prob_json(r: &ftar_core::analysis::ProbabilityReport) -> Value {
 }
 
 fn mc_json(r: &ftar_core::montecarlo::MonteCarloReport) -> Value {
+    let bound = r.upper_bound_95();
     json!({
+        // With no failures there is no standard error, only an upper bound.
+        "std_error": if bound.is_some() { Value::Null } else { json!(r.std_error) },
+        "upper_bound_95": bound,
         "method": if r.method == Method::Direct { "direct" } else { "first_failure" },
         "trials": r.trials,
         "system_failures": r.system_failures,
         "bas_prob": r.bas_prob,
         "probability": r.probability,
-        "std_error": r.std_error,
         "any_component_failure": r.any_component_failure,
         "cut_set_hits": r.cut_set_hits.iter().map(|(c, n)| json!({ "events": cs_json(c), "hits": n })).collect::<Vec<_>>(),
         "modes": r.modes.iter().map(|(c, n)| json!({ "events": cs_json(c), "count": n })).collect::<Vec<_>>(),
@@ -489,8 +542,33 @@ fn mc_json(r: &ftar_core::montecarlo::MonteCarloReport) -> Value {
     })
 }
 
+/// Transfer-in nodes left in a tree opened with `raw: true`, with their paths.
+fn raw_transfers(tree: &Tree) -> Vec<(Vec<usize>, String)> {
+    edit::all_paths(tree)
+        .into_iter()
+        .filter_map(|p| {
+            let n = edit::node_at(tree, &p)?;
+            (n.kind == EventType::TransferIn).then(|| (p, n.id.clone()))
+        })
+        .collect()
+}
+
+fn ensure_analysable(d: &Doc) -> Result<(), ToolError> {
+    match raw_transfers(&d.tree).first() {
+        None => Ok(()),
+        Some((_, id)) => Err(ToolError::new(
+            "raw_transfer",
+            format!(
+                "transfer-in `{id}` is not inlined because the tree was opened with raw=true; \
+                 reopen it without raw to analyse it"
+            ),
+        )),
+    }
+}
+
 fn make_report(s: &mut Session, a: &Args, args: &Value) -> Result<Value, ToolError> {
     let (_, d) = s.doc_mut(args)?;
+    ensure_analysable(d)?;
     let name = a.str("kind")?;
     let kind = report::ReportKind::from_slug(name)
         .or(if name == "montecarlo" {

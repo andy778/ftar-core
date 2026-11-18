@@ -178,14 +178,139 @@ fn build_a_tree_by_edits_then_undo_and_save() {
     // save + reopen round trip
     s.call("tree_edit", &json!({ "op": "set_note", "note": "hello" }))
         .unwrap();
+    // A new tree has no database name: saving names it t.ped and writes it,
+    // so the event probabilities survive (this was silently lost before).
     let w = s.call("tree_save", &json!({ "path": "t.fta" })).unwrap();
-    assert_eq!(w["written"].as_array().unwrap().len(), 1);
+    let written = w["written"].as_array().unwrap();
+    assert_eq!(written.len(), 2, "{w}");
+    assert!(written[1].as_str().unwrap().ends_with("t.ped"));
+    assert!(!w.to_string().contains(r"\\\\?\\"), "{w}");
+    assert!(w.get("warning").is_none());
     let re = s
         .call("tree_open", &json!({ "path": "t.fta", "raw": true }))
         .unwrap();
     assert_eq!(re["note"], "hello");
     assert_eq!(re["primary_events"], 2);
+    assert_eq!(re["database"], "t.ped");
+    assert_eq!(re["database_events"], 2);
+    let p = s.call("analysis_probability", &json!({})).unwrap();
+    assert!((p["top"].as_f64().unwrap() - 0.28).abs() < 1e-12);
+
+    // ped=false writes only the tree, and says so
+    let w = s
+        .call("tree_save", &json!({ "path": "u.fta", "ped": false }))
+        .unwrap();
+    assert_eq!(w["written"].as_array().unwrap().len(), 1);
+    assert!(w["warning"].is_string());
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn closing_unsaved_work_needs_discard() {
+    let mut s = session();
+    s.call("tree_new", &json!({})).unwrap();
+    // a fresh tree has nothing to lose
+    let id = s.call("tree_new", &json!({})).unwrap()["doc"].clone();
+    s.call(
+        "tree_edit",
+        &json!({ "doc": id, "op": "set_note", "note": "x" }),
+    )
+    .unwrap();
+    let e = s.call("tree_close", &json!({ "doc": id })).unwrap_err();
+    assert_eq!(e.code, "unsaved");
+    assert_eq!(
+        s.call("tree_list", &json!({})).unwrap()["documents"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    s.call("tree_close", &json!({ "doc": id, "discard": true }))
+        .unwrap();
+    s.call("tree_close", &json!({})).unwrap();
+}
+
+#[test]
+fn raw_trees_with_transfers_explain_why_they_cannot_be_analysed() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "top.fta", "raw": true }))
+        .unwrap();
+    let v = s.call("tree_validate", &json!({})).unwrap();
+    assert_eq!(v["analysable"], false, "{v}");
+    assert!(v.to_string().contains("not inlined"), "{v}");
+    for tool in [
+        "analysis_cutsets",
+        "analysis_probability",
+        "analysis_montecarlo",
+    ] {
+        let e = s.call(tool, &json!({})).unwrap_err();
+        assert_eq!(e.code, "raw_transfer", "{tool}: {e}");
+        assert!(e.message.contains("without raw"), "{e}");
+    }
+    s.call("tree_open", &json!({ "path": "top.fta" })).unwrap();
+    let v = s.call("tree_validate", &json!({})).unwrap();
+    assert_eq!(v["analysable"], true);
+    assert!(s.call("analysis_cutsets", &json!({})).is_ok());
+}
+
+#[test]
+fn paths_outside_the_root_are_confinement_errors_even_if_missing() {
+    let mut s = session();
+    for bad in [
+        "/etc/passwd",
+        "/no/such/dir/x.fta",
+        "C:\\no_such_dir_ftar\\x.fta",
+    ] {
+        let e = s.call("tree_open", &json!({ "path": bad })).unwrap_err();
+        assert_eq!(e.code, "confinement", "{bad}: {e}");
+    }
+    // a missing folder inside the root is still an i/o error
+    let e = s
+        .call("tree_open", &json!({ "path": "no_such_dir/x.fta" }))
+        .unwrap_err();
+    assert_eq!(e.code, "io", "{e}");
+    assert!(!e.message.contains(r"\\?\"), "{e}");
+}
+
+#[test]
+fn montecarlo_without_failures_reports_a_bound_not_a_zero_error() {
+    let mut s = session();
+    s.call("tree_new", &json!({})).unwrap();
+    for id in ["a", "b"] {
+        s.call(
+            "tree_edit",
+            &json!({ "op": "insert_child", "parent": [0], "kind": "basic", "id": id }),
+        )
+        .unwrap();
+        s.call("event_set", &json!({ "id": id, "probability": 1e-9 }))
+            .unwrap();
+    }
+    s.call(
+        "tree_edit",
+        &json!({ "op": "change_type", "path": [0], "kind": "and" }),
+    )
+    .unwrap();
+    let r = s
+        .call(
+            "analysis_montecarlo",
+            &json!({ "trials": 1000, "seed": 1, "method": "direct" }),
+        )
+        .unwrap();
+    assert_eq!(r["system_failures"], 0, "{r}");
+    assert!(r["std_error"].is_null(), "{r}");
+    let b = r["upper_bound_95"].as_f64().unwrap();
+    assert!((b - 3.0 / 1000.0).abs() < 1e-4, "{b}");
+    let t = s
+        .call(
+            "report",
+            &json!({ "kind": "montecarlo", "trials": 1000, "seed": 1, "method": "direct" }),
+        )
+        .unwrap();
+    assert!(t["text"]
+        .as_str()
+        .unwrap()
+        .contains("no failures simulated"));
+    s.call("tree_close", &json!({ "discard": true })).unwrap();
 }
 
 #[test]
