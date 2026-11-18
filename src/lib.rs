@@ -7,11 +7,13 @@
 //! * [`montecarlo`] – Monte Carlo simulation
 
 pub mod analysis;
+pub mod edit;
 pub mod error;
 pub mod model;
 pub mod montecarlo;
 pub mod parse;
 pub mod project;
+pub mod write;
 
 pub use error::{Error, Result};
 pub use model::{EventType, Node, PrimaryEvent, PrimaryEventDb, Tree};
