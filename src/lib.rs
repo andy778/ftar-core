@@ -12,6 +12,7 @@ pub mod model;
 pub mod montecarlo;
 pub mod parse;
 pub mod project;
+pub mod report;
 
 pub use error::{Error, Result};
 pub use model::{EventType, Node, PrimaryEvent, PrimaryEventDb, Tree};
