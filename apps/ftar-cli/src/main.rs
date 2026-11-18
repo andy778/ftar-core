@@ -17,6 +17,7 @@ commands:
   tools      list the JSON automation tools (name, description, schema)
   call       ftar call <tool> [json-args]    run one tool, print the JSON result
   run        ftar run <script.json>          run a JSON script (steps of {tool, args})
+  mcp        ftar mcp --root DIR             MCP server on stdio (opt-in); --unrestricted allows any path
 
 options:
   --order N    use cut sets up to order N (default: all)
@@ -43,6 +44,9 @@ fn run() -> Result<(), String> {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print!("{USAGE}");
         return Ok(());
+    }
+    if args[0] == "mcp" {
+        return mcp(&args[1..]);
     }
     if matches!(args[0].as_str(), "tools" | "call" | "run") {
         return automation(&args);
@@ -252,4 +256,36 @@ fn automation(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// `ftar mcp`: the MCP server on stdin/stdout. Opt-in, and file access must be
+/// confined with `--root` unless `--unrestricted` is given explicitly.
+fn mcp(args: &[String]) -> Result<(), String> {
+    use ftar_automation::Session;
+
+    let mut root = None;
+    let mut unrestricted = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--root" => root = Some(it.next().ok_or("--root needs a directory")?.clone()),
+            "--unrestricted" => unrestricted = true,
+            other => return Err(format!("unknown option `{other}` for `ftar mcp`")),
+        }
+    }
+    let session = match (root, unrestricted) {
+        (Some(_), true) => return Err("use either --root or --unrestricted, not both".into()),
+        (Some(r), false) => Session::with_root(&r).map_err(|e| e.to_string())?,
+        (None, true) => Session::new(),
+        (None, false) => {
+            return Err(
+                "`ftar mcp` needs --root DIR (confines file access) or --unrestricted".into(),
+            )
+        }
+    };
+    eprintln!("ftar mcp: serving on stdio (JSON-RPC, one message per line)");
+    let mut server = ftar_mcp::Server::new(session);
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    ftar_mcp::serve(&mut server, stdin.lock(), stdout.lock()).map_err(|e| e.to_string())
 }

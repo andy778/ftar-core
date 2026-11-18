@@ -1200,6 +1200,7 @@ version = "0.1.0"
 dependencies = [
  "ftar-automation",
  "ftar-core",
+ "ftar-mcp",
  "serde_json",
 ]
 
@@ -1216,6 +1217,14 @@ dependencies = [
  "egui_kittest",
  "ftar-core",
  "rfd",
+]
+
+[[package]]
+name = "ftar-mcp"
+version = "0.1.0"
+dependencies = [
+ "ftar-automation",
+ "serde_json",
 ]
 
 [[package]]

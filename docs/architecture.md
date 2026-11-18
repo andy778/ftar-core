@@ -8,13 +8,14 @@ Modelled on the layered, headless-first layout of PdfCraft (storytold/pdfcraft):
 |---|---|
 | `crates/core` (`ftar-core`) | Model, `.fta`/`.ped` parse + write, tree editing with undo, minimal cut sets, exact probability, importance, Monte Carlo, failure statistics, text reports |
 | `crates/automation` (`ftar-automation`) | Headless JSON tool catalogue over the core: the one API for scripts, agents and (opt-in) MCP |
-| `apps/ftar-cli` | `ftar` command line; subcommands call automation tools; `run --script steps.json` |
+| `crates/mcp` (`ftar-mcp`) | Model Context Protocol server (stdio JSON-RPC) over the automation tools; see `docs/mcp.md` |
+| `apps/ftar-cli` | `ftar` command line: analyses, `tools`/`call`/`run` for the automation tools, `mcp` for the MCP server |
 | `apps/ftar-gui` | egui desktop app; testable headless with `egui_kittest` |
 | `xtask` | `cargo xtask ci|fmt|clippy|test|layers` |
 
 ## Layers (enforced by `cargo xtask layers`)
 
-L0 model/parse/write -> L1 analysis (cut sets, probability, Monte Carlo, reports) -> L2 automation tools -> L3 frontends (CLI, GUI). Nothing below L3 may depend on egui, eframe, winit or rfd.
+L0 model/parse/write -> L1 analysis (cut sets, probability, Monte Carlo, reports) -> L2 automation tools -> L3 MCP server -> L4 frontends (CLI, GUI). Nothing below L3 may depend on egui, eframe, winit or rfd.
 
 ## Agentic workflow
 

@@ -75,3 +75,112 @@ fn run_script_file() {
     assert_eq!(v[1]["result"]["count"], 12);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+// ------------------------------------------------------------------- mcp
+
+mod mcp {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+
+    use serde_json::{json, Value};
+
+    use super::DATA;
+
+    fn spawn(args: &[&str]) -> std::process::Child {
+        Command::new(env!("CARGO_BIN_EXE_ftar"))
+            .arg("mcp")
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn ftar mcp")
+    }
+
+    #[test]
+    fn refuses_to_start_without_a_root() {
+        let o = Command::new(env!("CARGO_BIN_EXE_ftar"))
+            .arg("mcp")
+            .output()
+            .unwrap();
+        assert!(!o.status.success());
+        assert!(String::from_utf8_lossy(&o.stderr).contains("--root"));
+        assert!(
+            o.stdout.is_empty(),
+            "nothing on stdout but protocol messages"
+        );
+        let o = Command::new(env!("CARGO_BIN_EXE_ftar"))
+            .args(["mcp", "--root", DATA, "--unrestricted"])
+            .output()
+            .unwrap();
+        assert!(!o.status.success());
+    }
+
+    fn ask(
+        stdin: &mut std::process::ChildStdin,
+        out: &mut BufReader<std::process::ChildStdout>,
+        msg: Value,
+    ) -> Value {
+        writeln!(stdin, "{msg}").unwrap();
+        let mut line = String::new();
+        out.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap_or_else(|e| panic!("bad line {line:?}: {e}"))
+    }
+
+    #[test]
+    fn full_conversation_over_real_stdio() {
+        let mut child = spawn(&["--root", DATA]);
+        let mut stdin = child.stdin.take().unwrap();
+        let mut out = BufReader::new(child.stdout.take().unwrap());
+
+        let init = ask(
+            &mut stdin,
+            &mut out,
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize",
+            "params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}),
+        );
+        assert_eq!(init["result"]["serverInfo"]["name"], "ftar");
+        writeln!(
+            stdin,
+            r#"{{"jsonrpc":"2.0","method":"notifications/initialized"}}"#
+        )
+        .unwrap();
+
+        let tools = ask(
+            &mut stdin,
+            &mut out,
+            json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+        );
+        assert!(tools["result"]["tools"].as_array().unwrap().len() >= 15);
+
+        ask(
+            &mut stdin,
+            &mut out,
+            json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+            "params":{"name":"tree_open","arguments":{"path":"theatre.fta"}}}),
+        );
+        let p = ask(
+            &mut stdin,
+            &mut out,
+            json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
+            "params":{"name":"analysis_probability","arguments":{}}}),
+        );
+        assert_eq!(p["id"], 4);
+        assert!(
+            (p["result"]["structuredContent"]["top"].as_f64().unwrap() - 2.0643378107574753e-3)
+                .abs()
+                < 1e-12
+        );
+
+        let escape = ask(
+            &mut stdin,
+            &mut out,
+            json!({"jsonrpc":"2.0","id":5,"method":"tools/call",
+            "params":{"name":"tree_open","arguments":{"path":"../x.fta"}}}),
+        );
+        assert_eq!(escape["result"]["structuredContent"]["code"], "confinement");
+
+        drop(stdin); // EOF ends the server
+        assert!(child.wait().unwrap().success());
+    }
+}

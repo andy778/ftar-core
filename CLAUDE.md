@@ -10,6 +10,7 @@ ftar is a Rust port of OpenFTA, an unmaintained fault tree analysis tool (Java G
 - Headless CLI: `cargo run -p ftar-cli -- prob tests/data/theatre.fta` (also `cutsets`, `mc`, `info`, `run` for JSON scripts).
 - GUI: `cargo run -p ftar-gui -- tests/data/theatre.fta`.
 - Headless GUI test: `cargo test -p ftar-gui` (egui_kittest, no window or GPU).
+- MCP server: `cargo run -q -p ftar-cli -- mcp --root DIR` (docs/mcp.md); register it in `.mcp.json` to let an agent drive ftar.
 - All gates: `cargo xtask ci`.
 
 ## Conventions

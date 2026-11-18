@@ -20,7 +20,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] Minimal cut sets with OpenFTA semantics (XOR analysed as OR, analysed/not-analysed conditions, order limit)
 - [x] Exact top-event probability by inclusion-exclusion with per-term bounds, failure-rate (`L`) events via unit time, event importance
 - [x] Monte Carlo simulation (reproducible per seed)
-- [x] `ftar` CLI
+- [x] `ftar` CLI, JSON automation tools (`ftar tools|call|run`) and an MCP server (`ftar mcp --root DIR`, see docs/mcp.md)
 - [ ] Compare numbers with reports from the original engine (needs a native OpenFTA build)
 - [ ] Failure statistics report, text report files compatible with OpenFTA
 - [x] Writing `.fta`/`.ped`, tree editing (GUI: add/delete/move/retype/rename, event database, undo/redo, save, unsaved-changes prompt)
