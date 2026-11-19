@@ -256,11 +256,12 @@ fn raw_trees_with_transfers_explain_why_they_cannot_be_analysed() {
 #[test]
 fn paths_outside_the_root_are_confinement_errors_even_if_missing() {
     let mut s = session();
-    for bad in [
-        "/etc/passwd",
-        "/no/such/dir/x.fta",
-        "C:\\no_such_dir_ftar\\x.fta",
-    ] {
+    let mut bad = vec!["/etc/passwd", "/no/such/dir/x.fta"];
+    // elsewhere this is a relative file name inside the root
+    if cfg!(windows) {
+        bad.push("C:\\no_such_dir_ftar\\x.fta");
+    }
+    for bad in bad {
         let e = s.call("tree_open", &json!({ "path": bad })).unwrap_err();
         assert_eq!(e.code, "confinement", "{bad}: {e}");
     }
