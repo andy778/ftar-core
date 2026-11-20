@@ -262,6 +262,10 @@ fn event_json(e: &PrimaryEvent) -> Value {
 // ------------------------------------------------------------- editing
 
 fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let load_opts = LoadOptions {
+        root: s.root.clone(),
+        max_file_size: Some(MAX_FILE),
+    };
     let (_, d) = s.doc_mut(a.0)?;
     let op = a.str("op")?;
     // Parse arguments first so a bad request never touches the tree or the history.
@@ -337,6 +341,26 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             let (path, text) = (a.path("path")?, a.str("text")?);
             d.edit_tree(|t| edit::set_text(t, &path, text))?;
             json!({ "path": path })
+        }
+        "set_database" => {
+            let name = a.opt_str("name")?;
+            // An existing database file is read in, so its events are used
+            // and a later save does not overwrite it with only this tree's.
+            let dir = d
+                .path
+                .as_deref()
+                .and_then(Path::parent)
+                .map(Path::to_path_buf);
+            let loaded = d.edit_both(|t, db| -> Result<usize, ToolError> {
+                edit::set_db_name(t, name)?;
+                match &dir {
+                    Some(dir) => Ok(ftar_core::project::load_database_events(
+                        t, db, dir, &load_opts,
+                    )?),
+                    None => Ok(0),
+                }
+            })?;
+            json!({ "database": d.tree.db_name, "events_loaded": loaded })
         }
         "set_note" => {
             let note = a.str("note")?;
@@ -449,7 +473,8 @@ fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         )),
         (None, false) => None,
     };
-    // The .ped goes next to the tree under its plain file name, checked like any other path.
+    // The .ped goes where it is read from (relative to the tree), checked like
+    // any other path, so it cannot escape the server's root.
     let ped_path = match (&db_name, write_db) {
         (Some(name), true) => {
             let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
@@ -458,7 +483,10 @@ fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                     "database name `{name}` is not a file name"
                 )));
             }
-            let p = path.parent().unwrap_or_else(|| Path::new(".")).join(base);
+            let p = ftar_core::project::ped_save_path(
+                path.parent().unwrap_or_else(|| Path::new(".")),
+                name,
+            );
             Some(s.resolve(&p.to_string_lossy())?)
         }
         _ => None,
@@ -601,7 +629,12 @@ fn make_report(s: &mut Session, a: &Args, args: &Value) -> Result<Value, ToolErr
         kind,
         &d.tree,
         &d.db,
-        &d.name,
+        // OpenFTA prints the file name, extension included.
+        &d.path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| d.name.clone()),
         a.opt_str("time")?.unwrap_or(""),
         &params,
     )?;

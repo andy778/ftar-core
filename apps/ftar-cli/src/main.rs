@@ -22,7 +22,7 @@ commands:
 
 options:
   --order N    use cut sets up to order N (default: all)
-  --terms N    inclusion-exclusion terms for `prob` (default: 5)
+  --terms N    inclusion-exclusion terms for `prob` (default: 16)
   --time T     unit time for failure-rate events (default: 1)
   --trials N   Monte Carlo trials (default: 100000)
   --seed N     Monte Carlo seed
@@ -61,7 +61,7 @@ fn run() -> Result<(), String> {
     }
     let (cmd, file) = (&args[0], &args[1]);
     let mut order = usize::MAX;
-    let mut terms = 5usize;
+    let mut terms = ftar_core::analysis::DEFAULT_TERMS;
     let mut time = 1.0f64;
     let mut trials = 100_000u64;
     let mut seed = MonteCarloOptions::default().seed;
@@ -196,8 +196,9 @@ fn run() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let stats = ftar_core::report::failure_statistics_from_modes(&r);
+            // OpenFTA prints the file name, extension included.
             let name = std::path::Path::new(file)
-                .file_stem()
+                .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             print!(

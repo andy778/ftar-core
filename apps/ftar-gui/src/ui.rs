@@ -177,6 +177,25 @@ impl App {
                     self.fit_next = true;
                 }
                 ui.label(self.title());
+                if has_doc {
+                    let l = ui.label("database");
+                    let r = ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.buf.database)
+                                .hint_text("none")
+                                .desired_width(110.0),
+                        )
+                        .labelled_by(l.id);
+                    let current = self
+                        .doc
+                        .as_ref()
+                        .and_then(|d| d.tree.db_name.clone())
+                        .unwrap_or_default();
+                    if r.lost_focus() && self.buf.database.trim() != current {
+                        let name = self.buf.database.clone();
+                        self.set_database(&name);
+                    }
+                }
                 if save && has_doc {
                     self.save_or_save_as();
                 }
@@ -450,6 +469,11 @@ impl App {
             .map(|e| e.description.clone())
             .unwrap_or_default();
         self.buf.rate = ev.as_ref().is_some_and(|e| e.lambda == Some('L'));
+        self.buf.database = self
+            .doc
+            .as_ref()
+            .and_then(|d| d.tree.db_name.clone())
+            .unwrap_or_default();
     }
 
     fn details_panel(&mut self, ui: &mut egui::Ui) {
@@ -519,13 +543,7 @@ impl App {
                 && !node.id.is_empty()
             {
                 ui.horizontal_wrapped(|ui| {
-                    let in_db = self
-                        .doc
-                        .as_ref()
-                        .is_some_and(|d| d.db.events.contains_key(&node.id));
-                    if !in_db {
-                        ui.label("Not in the database yet - edit a value to add it.");
-                    }
+                    ui.label(self.event_origin(&node.id));
                     let l = ui.label("probability");
                     let pr = ui
                         .add(egui::TextEdit::singleline(&mut self.buf.prob).desired_width(90.0))
@@ -673,7 +691,7 @@ impl eframe::App for App {
                     Tab::Probability => {
                         ui.horizontal(|ui| {
                             let l = ui.label("terms");
-                            ui.add(egui::DragValue::new(&mut self.terms).range(1..=12))
+                            ui.add(egui::DragValue::new(&mut self.terms).range(1..=16))
                                 .labelled_by(l.id);
                             let l = ui.label("unit time");
                             ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
