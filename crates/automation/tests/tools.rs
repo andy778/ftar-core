@@ -602,3 +602,15 @@ fn tree_export_writes_png_svg_and_html_inside_the_sandbox() {
     assert!(!dir.parent().unwrap().join("leak.png").exists());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// OpenFTA prints `Tree   : lift.fta` (file name with extension) in report headers.
+#[test]
+fn report_header_names_the_tree_file_with_extension() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "lift.fta" })).unwrap();
+    let r = s.call("report", &json!({ "kind": "probability" })).unwrap();
+    assert!(
+        r["text"].as_str().unwrap().contains("\nTree   : lift.fta\n"),
+        "{r}"
+    );
+}
