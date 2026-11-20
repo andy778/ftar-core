@@ -183,3 +183,18 @@ fn top_with_transfers_reports() {
     let r = cut_sets_report("top.fta", TIME, &primary_event_order(&p.tree), &cs);
     assert!(r.contains("  ALL          2\n"));
 }
+
+/// Reported by a tester: OpenFTA prints every term and `Exact value : 1.199993E-05`
+/// for lift.fta (12 cut sets); the default options must do the same.
+#[test]
+fn default_probability_report_has_exact_value_for_lift() {
+    let p = Project::load(data("lift.fta")).unwrap();
+    let opts = ProbabilityOptions::default();
+    let rep = probability_report(&p.tree, &p.db, &opts).unwrap();
+    assert!(rep.exact);
+    assert_eq!(rep.terms.len(), 12);
+    let ev = primary_event_order(&p.tree);
+    let r = probability_report_text("lift.fta", TIME, &ev, 1, &opts, &rep);
+    assert!(r.contains("\nExact value : 1.199993E-05\n"), "{r}");
+    assert!(r.contains("12 terms"), "{r}");
+}

@@ -149,11 +149,15 @@ pub struct ProbabilityOptions {
     pub unit_time: f64,
 }
 
+/// Default number of inclusion-exclusion terms: enough for the exact value on
+/// trees with up to this many cut sets (cost grows as 2^n).
+pub const DEFAULT_TERMS: usize = 16;
+
 impl Default for ProbabilityOptions {
     fn default() -> Self {
         Self {
             max_order: usize::MAX,
-            terms: 5,
+            terms: DEFAULT_TERMS,
             unit_time: 1.0,
         }
     }
