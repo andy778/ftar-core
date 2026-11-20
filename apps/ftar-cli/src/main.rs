@@ -196,8 +196,9 @@ fn run() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let stats = ftar_core::report::failure_statistics_from_modes(&r);
+            // OpenFTA prints the file name, extension included.
             let name = std::path::Path::new(file)
-                .file_stem()
+                .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             print!(

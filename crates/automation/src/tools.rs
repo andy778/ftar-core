@@ -586,7 +586,12 @@ fn make_report(s: &mut Session, a: &Args, args: &Value) -> Result<Value, ToolErr
         kind,
         &d.tree,
         &d.db,
-        &d.name,
+        // OpenFTA prints the file name, extension included.
+        &d.path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| d.name.clone()),
         a.opt_str("time")?.unwrap_or(""),
         &params,
     )?;

@@ -111,6 +111,11 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
     tests for `'L'` (`event_list.c:543`) and `count_lambda_events` for any non-NUL (`treeUtil.c:1802`). Files saved by that GUI
     therefore contain rate events that no analysis treats as rates, in C and in Rust alike. Likely a bug in the `dev` branch of OpenFTA.
 
+18. **Monte Carlo random numbers**: ftar uses a 64-bit generator, OpenFTA's C code a 32-bit one, so the same seed or trial count
+    gives different counts. On `lift.fta` (100000 trials) top-event estimates were 1.198924E-05 (ftar) and 1.199722E-05
+    (OpenFTA), both within one standard error (4.1E-08) of the exact 1.199993E-05. Expected, not a bug; compare Monte Carlo runs
+    statistically, never digit by digit.
+
 ### Notes on the C snapshot
 
 * `generate_processing_pointers` (`item.c:190-233`) only links `process_sibling` for gates through the intermediate-event branch
