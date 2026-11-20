@@ -279,7 +279,9 @@ pub fn event_contributions(
                 .iter()
                 .filter(|m| m.events.contains(e))
                 .map(|m| scale * m.count as f64 / trials as f64)
-                .sum();
+                .sum::<f64>()
+                // An empty float sum is -0.0, which would print as "-0.000000E+00".
+                + 0.0;
             (e.clone(), c, 100.0 * c / top_probability)
         })
         .collect()
@@ -335,8 +337,10 @@ pub fn cut_sets_report(
 
 /// `Probabilities Analysis` report (`calculate_probs`).
 ///
-/// `tree_max_order` is the largest cut set order of the full analysis; `report`
-/// must come from [`crate::analysis::probability_report`] with `opts`.
+/// `tree_max_order` is the order limit the cut sets were generated with (the C
+/// `tree->max_order`: the number of primary events when all cut sets are
+/// generated); `report` must come from [`crate::analysis::probability_report`]
+/// with `opts`.
 pub fn probability_report_text(
     tree_name: &str,
     time: &str,
@@ -643,10 +647,12 @@ pub fn generate(
                 terms: params.terms,
                 unit_time: params.monte_carlo.unit_time,
             };
-            let all = crate::analysis::minimal_cut_sets_limited(tree, usize::MAX)?;
-            let max = all.iter().map(|c| c.len()).max().unwrap_or(0);
             let r = crate::analysis::probability_report(tree, db, &opts)?;
-            probability_report_text(tree_name, time, &events, max, &opts, &r)
+            // OpenFTA prints the order limit the cut sets were generated with
+            // (`tree->max_order`), not the largest order found: "generate all"
+            // is the number of primary events, and a limit is at most that.
+            let order = params.max_order.min(r.events.len());
+            probability_report_text(tree_name, time, &events, order, &opts, &r)
         }
         ReportKind::MonteCarlo | ReportKind::FailureStatistics => {
             let r = crate::montecarlo::simulate(tree, db, &params.monte_carlo)?;

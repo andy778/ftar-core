@@ -166,6 +166,31 @@ fn monte_carlo_report_layout() {
     )));
 }
 
+/// An event in no failure mode contributes 0, printed like OpenFTA as
+/// `0.000000E+00` / `0.00%`, never `-0.000000E+00` / `-0.00%`.
+#[test]
+fn unused_event_contributes_positive_zero() {
+    let p = Project::load(data("lift.fta")).unwrap();
+    let mc = simulate(
+        &p.tree,
+        &p.db,
+        &MonteCarloOptions {
+            trials: 2_000,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let fs = failure_statistics_from_hits(&mc, 0);
+    let r = monte_carlo_report_text("lift.fta", TIME, 1.0, &mc, &fs);
+    assert!(!r.contains("-0.0"), "{r}");
+    assert!(
+        r.contains(" W_1            0.000000E+00             0.00%\n"),
+        "{r}"
+    );
+    let c = event_contributions(&["W_1".to_string()], &[], 1, 1.0, 1.0);
+    assert!(c[0].1.is_sign_positive() && c[0].2.is_sign_positive());
+}
+
 #[test]
 fn failure_statistics_report_lists_modes() {
     let mut fs = FailureStatistics::new(0);
@@ -182,4 +207,61 @@ fn top_with_transfers_reports() {
     let cs = minimal_cut_sets(&p.tree).unwrap();
     let r = cut_sets_report("top.fta", TIME, &primary_event_order(&p.tree), &cs);
     assert!(r.contains("  ALL          2\n"));
+}
+
+/// Reported by a tester: OpenFTA prints every term and `Exact value : 1.199993E-05`
+/// for lift.fta (12 cut sets); the default options must do the same.
+#[test]
+fn default_probability_report_has_exact_value_for_lift() {
+    let p = Project::load(data("lift.fta")).unwrap();
+    let opts = ProbabilityOptions::default();
+    let rep = probability_report(&p.tree, &p.db, &opts).unwrap();
+    assert!(rep.exact);
+    assert_eq!(rep.terms.len(), 12);
+    let ev = primary_event_order(&p.tree);
+    let r = probability_report_text("lift.fta", TIME, &ev, 1, &opts, &rep);
+    assert!(r.contains("\nExact value : 1.199993E-05\n"), "{r}");
+    assert!(r.contains("12 terms"), "{r}");
+}
+
+/// Reported by a tester: for lift.fta (14 primary events, all cut sets of
+/// order 1) OpenFTA prints the order limit, 14, not the largest order found.
+#[test]
+fn probability_report_prints_the_order_limit_like_openfta() {
+    let p = Project::load(data("lift.fta")).unwrap();
+    let r = generate(
+        ReportKind::Probability,
+        &p.tree,
+        &p.db,
+        "lift.fta",
+        TIME,
+        &ReportParams::default(),
+    )
+    .unwrap();
+    assert!(r.contains("Number of primary events   = 14\n"), "{r}");
+    assert!(
+        r.contains("\nOrder of minimal cut sets  = 14\n\nUnit time"),
+        "{r}"
+    );
+    assert!(r.contains("(minimal cut sets up to order 14 used):"), "{r}");
+
+    // a chosen limit is printed as is
+    let params = ReportParams {
+        max_order: 2,
+        ..ReportParams::default()
+    };
+    let r = generate(
+        ReportKind::Probability,
+        &p.tree,
+        &p.db,
+        "lift.fta",
+        TIME,
+        &params,
+    )
+    .unwrap();
+    assert!(
+        r.contains("\nOrder of minimal cut sets  = 2\n\nUnit time"),
+        "{r}"
+    );
+    assert!(r.contains("(minimal cut sets up to order 2 used):"), "{r}");
 }
