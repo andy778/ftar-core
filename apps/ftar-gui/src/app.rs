@@ -260,8 +260,10 @@ impl App {
             std::fs::write(&path, write_fta_with(&doc.tree, LineEnding::CrLf))
                 .map_err(|e| format!("{}: {e}", path.display()))?;
             if let Some(name) = &doc.tree.db_name {
-                let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
-                let ped = path.parent().unwrap_or_else(|| Path::new(".")).join(base);
+                let ped = ftar_core::project::ped_save_path(
+                    path.parent().unwrap_or_else(|| Path::new(".")),
+                    name,
+                );
                 std::fs::write(&ped, write_ped(&doc.db))
                     .map_err(|e| format!("{}: {e}", ped.display()))?;
                 written.push(ped);
@@ -443,10 +445,28 @@ impl App {
         });
     }
 
-    /// Attach the tree to the primary event database file `name` (empty detaches).
+    /// Attach the tree to the primary event database file `name` (empty
+    /// detaches). It may be a path relative to the tree, e.g.
+    /// `../library/sensors.ped`, so several trees share one database. When the
+    /// file exists its events are read in, so a later save keeps them.
     pub fn set_database(&mut self, name: &str) {
         let name = name.to_string();
-        self.edit(|doc| edit::set_db_name(&mut doc.tree, Some(&name)).map_err(|e| e.to_string()));
+        let loaded = self.edit(|doc| {
+            edit::set_db_name(&mut doc.tree, Some(&name)).map_err(|e| e.to_string())?;
+            let Some(dir) = doc.path.as_deref().and_then(Path::parent) else {
+                return Ok(0);
+            };
+            ftar_core::project::load_database_events(
+                &mut doc.tree,
+                &mut doc.db,
+                dir,
+                &ftar_core::project::LoadOptions::default(),
+            )
+            .map_err(|e| e.to_string())
+        });
+        if let Some(n) = loaded.filter(|n| *n > 0) {
+            self.status = Some(format!("Read {n} events from {name}"));
+        }
     }
 
     /// Text shown next to an event: where its data comes from.

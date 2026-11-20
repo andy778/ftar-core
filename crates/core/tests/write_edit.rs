@@ -199,3 +199,48 @@ fn history_undo_redo() {
     h.edit(&mut t, |t| set_id(t, &[], "Y")).unwrap();
     assert!(!h.can_redo());
 }
+
+/// Where a tree's database is written matches where it is read from, so one
+/// `.ped` can be shared by trees in several folders.
+#[test]
+fn database_path_is_relative_to_the_tree_and_folds_parent_dirs() {
+    use ftar_core::project::ped_save_path;
+    use std::path::{Path, PathBuf};
+    let dir = Path::new("projects").join("lift");
+    assert_eq!(ped_save_path(&dir, "lift.ped"), dir.join("lift.ped"));
+    assert_eq!(
+        ped_save_path(&dir, "../library/sensors.ped"),
+        Path::new("projects").join("library").join("sensors.ped")
+    );
+    // climbing above the start of `dir` is kept, so a sandbox can refuse it
+    assert_eq!(
+        ped_save_path(Path::new("a"), "../../x.ped"),
+        PathBuf::from("..").join("x.ped")
+    );
+    // an absolute path from another machine falls back to the file name
+    let missing = if cfg!(windows) {
+        r"Z:\no\such\dir\old.ped"
+    } else {
+        "/no/such/dir/old.ped"
+    };
+    assert_eq!(ped_save_path(&dir, missing), dir.join("old.ped"));
+}
+
+#[test]
+fn database_names_may_be_relative_paths_but_must_name_a_file() {
+    use ftar_core::edit::set_db_name;
+    let mut t = ftar_core::project::Project::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/lift.fta"
+    ))
+    .unwrap()
+    .tree;
+    set_db_name(&mut t, Some("../library/sensors.ped")).unwrap();
+    assert_eq!(t.db_name.as_deref(), Some("../library/sensors.ped"));
+    for bad in ["library/", "..", "a/..", "x\u{7}.ped"] {
+        assert!(set_db_name(&mut t, Some(bad)).is_err(), "{bad}");
+    }
+    assert_eq!(t.db_name.as_deref(), Some("../library/sensors.ped"));
+    set_db_name(&mut t, Some("  ")).unwrap();
+    assert_eq!(t.db_name, None);
+}
