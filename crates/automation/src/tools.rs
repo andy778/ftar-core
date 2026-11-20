@@ -113,6 +113,7 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
             Ok(json!({ "events": ev.iter().map(|e| event_json(e)).collect::<Vec<_>>() }))
         }
         "event_set" => event_set(s, &a),
+        "event_delete" => event_delete(s, &a),
         "analysis_cutsets" => {
             let (_, d) = s.doc_mut(args)?;
             ensure_analysable(d)?;
@@ -253,7 +254,8 @@ fn node_json(n: &Node, depth: usize) -> Value {
 fn event_json(e: &PrimaryEvent) -> Value {
     json!({
         "id": e.id, "kind": kind_name(e.kind), "description": e.description,
-        "probability": e.probability, "rate": e.lambda == Some('L'), "group": e.group,
+        "probability": e.probability, "rate": e.lambda == Some('L'), "dormant": e.modifier == Some('D'),
+        "group": e.group,
     })
 }
 
@@ -402,15 +404,17 @@ fn event_set(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                 .unwrap_or(EventType::Basic)
         }
     };
-    if !kind.is_primary() {
-        return Err(ToolError::args("kind must be a primary event kind"));
-    }
     let old = d.db.events.get(id).cloned();
+    let dormant = a.opt_bool("dormant")?;
     let ev = PrimaryEvent {
         id: id.to_string(),
         group: old.as_ref().map(|e| e.group.clone()).unwrap_or_default(),
         kind,
-        modifier: old.as_ref().and_then(|e| e.modifier),
+        modifier: match dormant {
+            Some(true) => Some('D'),
+            Some(false) => None,
+            None => old.as_ref().and_then(|e| e.modifier),
+        },
         description: a
             .opt_str("description")?
             .map(str::to_string)
@@ -425,12 +429,23 @@ fn event_set(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     };
     let out = event_json(&ev);
     // recorded for undo, like tree edits (a failure can't happen here, but stay uniform)
-    d.edit_both(|_, db| {
-        db.events.insert(ev.id.clone(), ev);
-        Ok::<(), ToolError>(())
-    })?;
+    d.edit_both(|tree, db| ftar_core::database::upsert_event(tree, db, ev))?;
     d.dirty = true;
     Ok(out)
+}
+
+fn event_delete(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    let id = a.str("id")?;
+    if !d.db.events.contains_key(id) {
+        return Err(ToolError::args(format!("no event `{id}` in the database")));
+    }
+    let used = d.edit_both(|tree, db| {
+        ftar_core::database::remove_event(tree, db, id)
+            .ok_or_else(|| ToolError::args("no such event"))
+    })?;
+    d.dirty = true;
+    Ok(json!({ "deleted": id, "still_used_by_nodes": used }))
 }
 
 fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {

@@ -45,7 +45,38 @@ pub struct Buffers {
     pub database: String,
 }
 
+/// The form of the primary event editor (modelled on OpenPED).
+#[derive(Clone)]
+pub struct EventForm {
+    /// Id of the database entry the form was loaded from, if any.
+    pub original: Option<String>,
+    pub id: String,
+    pub prob: String,
+    /// The probability field holds a failure rate per unit time.
+    pub rate: bool,
+    pub kind: EventType,
+    pub dormant: bool,
+    pub desc: String,
+}
+
+impl Default for EventForm {
+    fn default() -> Self {
+        Self {
+            original: None,
+            id: String::new(),
+            prob: String::new(),
+            rate: false,
+            kind: EventType::Basic,
+            dormant: false,
+            desc: String::new(),
+        }
+    }
+}
+
 pub struct App {
+    /// The primary event editor window is shown.
+    pub events_open: bool,
+    pub event_form: EventForm,
     pub doc: Option<Document>,
     pub history: History<Snapshot>,
     pub dirty: bool,
@@ -102,6 +133,8 @@ impl Default for App {
             add_kind: EventType::Basic,
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
+            events_open: false,
+            event_form: EventForm::default(),
             zoom: 1.0,
             pan: Vec2::ZERO,
             fit_next: true,
@@ -443,6 +476,94 @@ impl App {
             }
             Ok(())
         });
+    }
+
+    /// Ids of the events in the database, sorted.
+    pub fn event_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .doc
+            .as_ref()
+            .map(|d| d.db.events.keys().cloned().collect())
+            .unwrap_or_default();
+        ids.sort();
+        ids
+    }
+
+    /// Fill the editor form from database event `id`.
+    pub fn event_form_load(&mut self, id: &str) {
+        let Some(e) = self.doc.as_ref().and_then(|d| d.db.events.get(id)).cloned() else {
+            return;
+        };
+        self.event_form = EventForm {
+            original: Some(e.id.clone()),
+            id: e.id,
+            prob: format!("{:E}", e.probability),
+            rate: e.lambda == Some('L'),
+            kind: e.kind,
+            dormant: e.modifier == Some('D'),
+            desc: e.description,
+        };
+    }
+
+    /// Empty the editor form (OpenPED's Clear).
+    pub fn event_form_clear(&mut self) {
+        self.event_form = EventForm::default();
+    }
+
+    /// Add the event in the form to the database, or replace the one with the
+    /// same id (OpenPED's Apply). Returns false and sets `error` when refused.
+    pub fn event_form_apply(&mut self) -> bool {
+        let f = self.event_form.clone();
+        let Ok(probability) = f.prob.trim().parse::<f64>() else {
+            self.error = Some("probability is not a number".into());
+            return false;
+        };
+        let id = f.id.trim().to_string();
+        let ok = self
+            .edit(|doc| {
+                let group = doc
+                    .db
+                    .events
+                    .get(&id)
+                    .map(|e| e.group.clone())
+                    .unwrap_or_default();
+                let ev = PrimaryEvent {
+                    id: id.clone(),
+                    group,
+                    kind: f.kind,
+                    modifier: f.dormant.then_some('D'),
+                    description: f.desc.clone(),
+                    probability,
+                    lambda: f.rate.then_some('L'),
+                };
+                ftar_core::database::upsert_event(&mut doc.tree, &mut doc.db, ev)
+                    .map_err(|e| e.to_string())
+            })
+            .is_some();
+        if ok {
+            self.event_form.original = Some(id.clone());
+            self.event_form.id = id;
+        }
+        ok
+    }
+
+    /// Remove the event the form was loaded from (or whose id is in it).
+    pub fn event_form_delete(&mut self) -> bool {
+        let id = self
+            .event_form
+            .original
+            .clone()
+            .unwrap_or_else(|| self.event_form.id.trim().to_string());
+        let removed = self
+            .edit(|doc| {
+                ftar_core::database::remove_event(&doc.tree, &mut doc.db, &id)
+                    .ok_or_else(|| format!("no event `{id}` in the database"))
+            })
+            .is_some();
+        if removed {
+            self.event_form_clear();
+        }
+        removed
     }
 
     /// Attach the tree to the primary event database file `name` (empty

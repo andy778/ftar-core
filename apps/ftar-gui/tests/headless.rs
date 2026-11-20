@@ -816,6 +816,74 @@ fn file_menu_lists_image_export_and_print() {
     }
 }
 
+// ------------------------------------------------ primary event editor
+
+#[test]
+fn event_editor_applies_clears_and_deletes_like_openped() {
+    let mut app = App::default();
+    app.open(data("lift.fta"));
+    app.event_form_load("DOD_1");
+    assert_eq!(app.event_form.id, "DOD_1");
+    assert_eq!(app.event_form.desc, "Door obsticle detector fails - Off");
+
+    app.event_form.prob = "2.5E-6".into();
+    app.event_form.dormant = true;
+    app.event_form.desc = "Door obstacle detector fails".into();
+    assert!(app.event_form_apply());
+    let e = &app.doc.as_ref().unwrap().db.events["DOD_1"];
+    assert_eq!((e.probability, e.modifier), (2.5e-6, Some('D')));
+    assert!(app.dirty);
+
+    // bad input is refused with a message and leaves the database alone
+    app.event_form.prob = "lots".into();
+    assert!(!app.event_form_apply());
+    assert!(app.error.is_some());
+    app.event_form.prob = "0.1".into();
+    app.event_form.id = "a;b".into();
+    assert!(!app.event_form_apply());
+
+    // a new id adds an event
+    app.event_form_clear();
+    app.event_form.id = "PRESSURE_1".into();
+    app.event_form.prob = "1E-4".into();
+    assert!(app.event_form_apply());
+    assert!(app.event_ids().contains(&"PRESSURE_1".to_string()));
+    assert!(app.event_form_delete());
+    assert!(!app.event_ids().contains(&"PRESSURE_1".to_string()));
+    app.undo();
+    assert!(app.event_ids().contains(&"PRESSURE_1".to_string()));
+}
+
+#[test]
+fn event_editor_window_has_the_openped_controls() {
+    let mut app = App::default();
+    app.open(data("lift.fta"));
+    app.events_open = true;
+    let mut h = harness_for(app);
+    h.run();
+    for label in [
+        "Id",
+        "Probability",
+        "Description",
+        "Basic",
+        "External",
+        "Undeveloped",
+        "Conditional (not analysed)",
+        "Conditional (analysed)",
+        "Dormant",
+        "Constant Failure Rate/Unit Time",
+        "Apply",
+        "Clear",
+        "DOD_1",
+    ] {
+        // some names also exist elsewhere in the window (analysis tabs)
+        assert!(h.get_all_by_label(label).count() >= 1, "{label}");
+    }
+    h.get_by_label("DOD_1").click();
+    h.run();
+    assert_eq!(h.state().event_form.id, "DOD_1");
+}
+
 // ------------------------------------------------- primary event database
 
 #[test]
