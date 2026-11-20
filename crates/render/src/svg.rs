@@ -181,6 +181,18 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
             &opts.title,
             true,
         );
+        // The primary event database the tree takes its events from, as in OpenFTA's printout.
+        if let Some(db) = tree.db_name.as_deref().filter(|n| !n.is_empty()) {
+            text(
+                &mut o,
+                MARGIN,
+                MARGIN + 44.0,
+                14.0,
+                "start",
+                &format!("Database: {db}"),
+                false,
+            );
+        }
     }
 
     // connectors first, so shapes sit on top

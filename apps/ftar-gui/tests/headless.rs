@@ -815,3 +815,68 @@ fn file_menu_lists_image_export_and_print() {
         );
     }
 }
+
+// ------------------------------------------------- primary event database
+
+#[test]
+fn events_show_which_database_they_come_from_and_it_can_be_changed() {
+    let mut app = App::default();
+    app.open(data("lift.fta"));
+    assert_eq!(app.event_origin("DOD_1"), "Data from database lift.ped");
+    assert!(app
+        .event_origin("NO_SUCH")
+        .contains("Not in database lift.ped"));
+
+    app.set_database("other.ped");
+    assert_eq!(
+        app.doc.as_ref().unwrap().tree.db_name.as_deref(),
+        Some("other.ped")
+    );
+    assert!(app.dirty);
+    // a name that does not end in a file name is refused and changes nothing
+    app.set_database("library/");
+    assert!(app.error.is_some());
+    assert_eq!(
+        app.doc.as_ref().unwrap().tree.db_name.as_deref(),
+        Some("other.ped")
+    );
+    app.undo();
+    assert_eq!(
+        app.doc.as_ref().unwrap().tree.db_name.as_deref(),
+        Some("lift.ped")
+    );
+
+    // the toolbar has a labelled field for it
+    let mut h = harness_for(app);
+    h.run();
+    h.get_by_label("database");
+}
+
+/// A shared database in another folder: attaching reads its events, saving
+/// writes back to it rather than to a copy next to the tree.
+#[test]
+fn a_tree_can_use_a_shared_database_in_another_folder() {
+    let base = std::env::temp_dir().join(format!("ftar_gui_shared_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(base.join("a")).unwrap();
+    std::fs::create_dir_all(base.join("library")).unwrap();
+    std::fs::copy(data("lift.ped"), base.join("library/shared.ped")).unwrap();
+    std::fs::copy(data("lift.fta"), base.join("a/lift.fta")).unwrap();
+
+    let mut app = App::default();
+    app.open(base.join("a/lift.fta"));
+    assert!(app.doc.as_ref().unwrap().db.events.is_empty());
+    app.set_database("../library/shared.ped");
+    assert!(app.error.is_none(), "{:?}", app.error);
+    assert!(app.doc.as_ref().unwrap().db.events.contains_key("DOD_1"));
+    assert_eq!(
+        app.event_origin("DOD_1"),
+        "Data from database ../library/shared.ped"
+    );
+    app.save_as(base.join("a/lift.fta")).unwrap();
+    assert!(!base.join("a/shared.ped").exists());
+    assert!(!base.join("a/lift.ped").exists());
+    let shared = std::fs::read_to_string(base.join("library/shared.ped")).unwrap();
+    assert!(shared.contains("DOD_1;"));
+    let _ = std::fs::remove_dir_all(base);
+}

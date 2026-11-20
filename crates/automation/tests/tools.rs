@@ -603,6 +603,105 @@ fn tree_export_writes_png_svg_and_html_inside_the_sandbox() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Trees in different folders share one `.ped` (the tester's pressure sensor
+/// reused across projects): attaching reads the shared events in, saving
+/// writes them back to the shared file, and nothing leaves the root.
+#[test]
+fn trees_in_different_folders_share_one_database() {
+    let base = std::env::temp_dir().join(format!("ftar_shared_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = base.join("root");
+    for sub in ["a", "b", "library"] {
+        std::fs::create_dir_all(root.join(sub)).unwrap();
+    }
+    std::fs::copy(format!("{DATA}/lift.ped"), root.join("library/shared.ped")).unwrap();
+    std::fs::copy(format!("{DATA}/lift.fta"), root.join("a/lift.fta")).unwrap();
+    std::fs::copy(format!("{DATA}/lift.fta"), root.join("b/lift.fta")).unwrap();
+
+    let mut s = Session::with_root(&root).unwrap();
+    s.call("tree_open", &json!({ "path": "a/lift.fta" }))
+        .unwrap();
+    // a/ has no lift.ped, so the tree starts without event data
+    let r = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "set_database", "name": "../library/shared.ped" }),
+        )
+        .unwrap();
+    assert_eq!(r["database"], "../library/shared.ped");
+    assert!(r["events_loaded"].as_u64().unwrap() >= 12, "{r}");
+    s.call("event_set", &json!({ "id": "DOD_1", "probability": 0.25 }))
+        .unwrap();
+    let w = s.call("tree_save", &json!({})).unwrap();
+    assert!(!root.join("a/shared.ped").exists(), "{w}");
+    let shared = std::fs::read_to_string(root.join("library/shared.ped")).unwrap();
+    assert!(shared.contains("DOD_1;"), "{shared}");
+    assert!(shared.contains("CP_1;"), "other events kept: {shared}");
+
+    // the other tree picks up the edited value from the shared file
+    s.call("tree_open", &json!({ "path": "b/lift.fta" }))
+        .unwrap();
+    s.call(
+        "tree_edit",
+        &json!({ "op": "set_database", "name": "../library/shared.ped" }),
+    )
+    .unwrap();
+    let list = s.call("event_list", &json!({})).unwrap();
+    let dod = list["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == "DOD_1")
+        .cloned()
+        .unwrap();
+    assert_eq!(dod["probability"], 0.25, "{dod}");
+
+    // a database outside the root is neither read nor written
+    s.call(
+        "tree_edit",
+        &json!({ "op": "set_database", "name": "../../outside.ped" }),
+    )
+    .unwrap();
+    let e = s.call("tree_save", &json!({})).unwrap_err();
+    assert_eq!(e.code, "confinement");
+    assert!(!base.join("outside.ped").exists());
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn set_database_attaches_detaches_and_refuses_paths() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "lift.fta" })).unwrap();
+    let r = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "set_database", "name": "sensors.ped" }),
+        )
+        .unwrap();
+    assert_eq!(r["database"], "sensors.ped");
+    assert_eq!(
+        s.call("tree_info", &json!({})).unwrap()["database"],
+        "sensors.ped"
+    );
+    // a name has to end in a file name
+    let e = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "set_database", "name": "library/" }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "edit_rejected");
+    s.call("tree_undo", &json!({})).unwrap();
+    assert_eq!(
+        s.call("tree_info", &json!({})).unwrap()["database"],
+        "lift.ped"
+    );
+    let r = s
+        .call("tree_edit", &json!({ "op": "set_database" }))
+        .unwrap();
+    assert!(r["database"].is_null());
+}
+
 /// OpenFTA prints `Tree   : lift.fta` (file name with extension) in report headers.
 #[test]
 fn report_header_names_the_tree_file_with_extension() {

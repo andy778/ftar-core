@@ -209,3 +209,19 @@ fn print_page_contains_drawing_title_note_and_report() {
     let quiet = print_html(&p.tree, &p.db, &PrintOptions::default());
     assert!(!quiet.contains("window.print()") && !quiet.contains("class=\"report\""));
 }
+
+#[test]
+fn header_names_the_database_the_events_come_from() {
+    let p = ftar_core::project::Project::load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../core/tests/data/lift.fta"
+    ))
+    .unwrap();
+    let titled = SvgOptions {
+        title: "lift.fta".into(),
+        ..SvgOptions::default()
+    };
+    let svg = tree_svg(&p.tree, &p.db, &titled);
+    assert!(svg.contains("Database: lift.ped"));
+    assert!(!tree_svg(&p.tree, &p.db, &SvgOptions::default()).contains("Database:"));
+}

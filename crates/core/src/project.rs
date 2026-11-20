@@ -69,11 +69,71 @@ impl LoadOptions {
     /// The `.ped` file a tree in `dir` refers to by `name`, if it exists and may be read.
     fn find_ped(&self, dir: &Path, name: &str) -> Option<PathBuf> {
         // Old files may store an absolute (Windows) path; fall back to the file name.
-        let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
-        [dir.join(name), dir.join(base)]
+        [dir.join(name), dir.join(ped_file_name(name))]
             .into_iter()
             .find(|p| self.allows(p))
     }
+}
+
+fn ped_file_name(name: &str) -> &str {
+    name.rsplit(['/', '\\']).next().unwrap_or(name)
+}
+
+/// Where the database `name` of a tree saved in `dir` is written, matching
+/// where it is read from: a relative name (`lift.ped`, `../library/sensors.ped`)
+/// is relative to the tree, so one `.ped` can be shared by trees in several
+/// folders. An absolute name is used when that file exists; otherwise (an old
+/// file from another machine) the file name next to the tree.
+/// After the tree's database name changed: when that file exists for a tree
+/// in `dir`, read its events into `db` (they replace events with the same id)
+/// and give the tree's nodes their database types, as on load. This keeps a
+/// shared database's data, and stops the next save from overwriting it with
+/// only this tree's events. Returns how many events were read (0 when the
+/// file does not exist yet; it is created on save).
+pub fn load_database_events(
+    tree: &mut Tree,
+    db: &mut PrimaryEventDb,
+    dir: &Path,
+    opts: &LoadOptions,
+) -> Result<usize> {
+    let Some(name) = tree.db_name.as_deref() else {
+        return Ok(0);
+    };
+    let p = ped_save_path(dir, name);
+    if !opts.allows(&p) {
+        return Ok(0);
+    }
+    let ped = parse_ped(&opts.read(&p)?)?;
+    for (k, v) in &ped.events {
+        db.events.insert(k.clone(), v.clone());
+    }
+    apply_ped_types(&mut tree.root, &ped);
+    Ok(ped.events.len())
+}
+
+/// `..` is folded into the folder it leaves (`trees/../lib/x.ped` becomes
+/// `lib/x.ped`); one that climbs above `dir`'s start is kept.
+pub fn ped_save_path(dir: &Path, name: &str) -> PathBuf {
+    use std::path::Component;
+    let p = Path::new(name);
+    let joined = if p.is_relative() || p.is_file() {
+        dir.join(name)
+    } else {
+        dir.join(ped_file_name(name))
+    };
+    let mut out = PathBuf::new();
+    for c in joined.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir
+                if matches!(out.components().next_back(), Some(Component::Normal(_))) =>
+            {
+                out.pop();
+            }
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone)]
