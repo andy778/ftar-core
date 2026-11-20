@@ -572,7 +572,7 @@ impl eframe::App for App {
                     Tab::Probability => {
                         ui.horizontal(|ui| {
                             let l = ui.label("terms");
-                            ui.add(egui::DragValue::new(&mut self.terms).range(1..=12))
+                            ui.add(egui::DragValue::new(&mut self.terms).range(1..=16))
                                 .labelled_by(l.id);
                             let l = ui.label("unit time");
                             ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))

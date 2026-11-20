@@ -108,7 +108,7 @@ impl Default for App {
             canvas: eframe::egui::Rect::ZERO,
             tab: Tab::CutSets,
             order: 0,
-            terms: 5,
+            terms: ftar_core::analysis::DEFAULT_TERMS,
             unit_time: 1.0,
             trials: 100_000,
             seed: 1,
