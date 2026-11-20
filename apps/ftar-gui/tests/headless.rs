@@ -815,3 +815,39 @@ fn file_menu_lists_image_export_and_print() {
         );
     }
 }
+
+// ------------------------------------------------- primary event database
+
+#[test]
+fn events_show_which_database_they_come_from_and_it_can_be_changed() {
+    let mut app = App::default();
+    app.open(data("lift.fta"));
+    assert_eq!(app.event_origin("DOD_1"), "Data from database lift.ped");
+    assert!(app
+        .event_origin("NO_SUCH")
+        .contains("Not in database lift.ped"));
+
+    app.set_database("other.ped");
+    assert_eq!(
+        app.doc.as_ref().unwrap().tree.db_name.as_deref(),
+        Some("other.ped")
+    );
+    assert!(app.dirty);
+    // a name with a directory is refused and changes nothing
+    app.set_database("../x.ped");
+    assert!(app.error.is_some());
+    assert_eq!(
+        app.doc.as_ref().unwrap().tree.db_name.as_deref(),
+        Some("other.ped")
+    );
+    app.undo();
+    assert_eq!(
+        app.doc.as_ref().unwrap().tree.db_name.as_deref(),
+        Some("lift.ped")
+    );
+
+    // the toolbar has a labelled field for it
+    let mut h = harness_for(app);
+    h.run();
+    h.get_by_label("database");
+}

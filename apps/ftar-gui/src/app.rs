@@ -41,6 +41,8 @@ pub struct Buffers {
     pub prob: String,
     pub desc: String,
     pub rate: bool,
+    /// Name of the primary event database the tree refers to.
+    pub database: String,
 }
 
 pub struct App {
@@ -439,6 +441,26 @@ impl App {
             }
             Ok(())
         });
+    }
+
+    /// Attach the tree to the primary event database file `name` (empty detaches).
+    pub fn set_database(&mut self, name: &str) {
+        let name = name.to_string();
+        self.edit(|doc| edit::set_db_name(&mut doc.tree, Some(&name)).map_err(|e| e.to_string()));
+    }
+
+    /// Text shown next to an event: where its data comes from.
+    pub fn event_origin(&self, id: &str) -> String {
+        let Some(doc) = self.doc.as_ref() else {
+            return String::new();
+        };
+        let db = doc.tree.db_name.as_deref().filter(|n| !n.is_empty());
+        match (doc.db.events.contains_key(id), db) {
+            (true, Some(n)) => format!("Data from database {n}"),
+            (true, None) => "Data from the primary event database (not saved yet)".into(),
+            (false, Some(n)) => format!("Not in database {n} yet - edit a value to add it"),
+            (false, None) => "Not in a database yet - edit a value to add it".into(),
+        }
     }
 
     pub fn set_text(&mut self, text: &str) {

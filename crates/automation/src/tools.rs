@@ -336,6 +336,11 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             d.edit_tree(|t| edit::set_text(t, &path, text))?;
             json!({ "path": path })
         }
+        "set_database" => {
+            let name = a.opt_str("name")?;
+            d.edit_tree(|t| edit::set_db_name(t, name))?;
+            json!({ "database": d.tree.db_name })
+        }
         "set_note" => {
             let note = a.str("note")?;
             d.edit_tree(|t| -> Result<(), edit::EditError> {

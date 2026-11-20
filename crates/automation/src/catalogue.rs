@@ -44,12 +44,12 @@ pub fn tools() -> Vec<ToolInfo> {
           obj(json!({ "doc": doc, "path": path, "depth": {"type":"integer","minimum":0} }), &[])),
         t("tree_validate", "Structural problems that would stop an analysis (child counts, missing ids).",
           obj(json!({ "doc": doc }), &[])),
-        t("tree_edit", "Edit the tree. `op` is one of insert_child, delete, move, reorder, change_type, set_id, set_text, set_note. Each edit is undoable.",
+        t("tree_edit", "Edit the tree. `op` is one of insert_child, delete, move, reorder, change_type, set_id, set_text, set_note, set_database (`name`: the .ped file the tree takes its events from; empty detaches). Each edit is undoable.",
           obj(json!({
             "doc": doc,
-            "op": {"type":"string","enum":["insert_child","delete","move","reorder","change_type","set_id","set_text","set_note"]},
+            "op": {"type":"string","enum":["insert_child","delete","move","reorder","change_type","set_id","set_text","set_note","set_database"]},
             "parent": path, "index": {"type":"integer","minimum":0}, "path": path, "new_parent": path,
-            "kind": kind, "id": {"type":"string"}, "text": {"type":"string"}, "note": {"type":"string"}
+            "kind": kind, "id": {"type":"string"}, "text": {"type":"string"}, "note": {"type":"string"}, "name": {"type":"string"}
           }), &["op"])),
         t("tree_undo", "Undo the last edit.", obj(json!({ "doc": doc }), &[])),
         t("tree_redo", "Redo the last undone edit.", obj(json!({ "doc": doc }), &[])),

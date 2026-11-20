@@ -369,6 +369,27 @@ pub fn set_text(tree: &mut Tree, path: &[usize], text: &str) -> EditResult<()> {
     Ok(())
 }
 
+/// Set the primary event database a tree refers to. `None` or an empty name
+/// detaches it. The name is a plain file name (no directories), as the
+/// loader looks the file up next to the tree.
+pub fn set_db_name(tree: &mut Tree, name: Option<&str>) -> EditResult<()> {
+    let name = name.map(str::trim).filter(|n| !n.is_empty());
+    if let Some(n) = name {
+        let backslash = char::from(92u8);
+        if n.chars()
+            .any(|c| c == '/' || c == backslash || c.is_control())
+            || n == "."
+            || n == ".."
+        {
+            return Err(EditError::InvalidText(
+                "a database name is a plain file name, without directories",
+            ));
+        }
+    }
+    tree.db_name = name.map(str::to_string);
+    Ok(())
+}
+
 /// Set the free-text note of the tree.
 pub fn set_note(tree: &mut Tree, note: &str) {
     tree.note = note.to_string();

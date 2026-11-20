@@ -602,3 +602,36 @@ fn tree_export_writes_png_svg_and_html_inside_the_sandbox() {
     assert!(!dir.parent().unwrap().join("leak.png").exists());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn set_database_attaches_detaches_and_refuses_paths() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "lift.fta" })).unwrap();
+    let r = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "set_database", "name": "sensors.ped" }),
+        )
+        .unwrap();
+    assert_eq!(r["database"], "sensors.ped");
+    assert_eq!(
+        s.call("tree_info", &json!({})).unwrap()["database"],
+        "sensors.ped"
+    );
+    let e = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "set_database", "name": "../x.ped" }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "edit_rejected");
+    s.call("tree_undo", &json!({})).unwrap();
+    assert_eq!(
+        s.call("tree_info", &json!({})).unwrap()["database"],
+        "lift.ped"
+    );
+    let r = s
+        .call("tree_edit", &json!({ "op": "set_database" }))
+        .unwrap();
+    assert!(r["database"].is_null());
+}
