@@ -157,7 +157,7 @@ fn load_tree(
     Ok(tree)
 }
 
-fn apply_ped_types(n: &mut Node, ped: &PrimaryEventDb) {
+pub(crate) fn apply_ped_types(n: &mut Node, ped: &PrimaryEventDb) {
     use EventType::*;
     if n.kind.is_primary() || matches!(n.kind, ConditionAnalysed | ConditionNotAnalysed) {
         if let Some(e) = ped.events.get(&n.id) {

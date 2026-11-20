@@ -602,3 +602,34 @@ fn tree_export_writes_png_svg_and_html_inside_the_sandbox() {
     assert!(!dir.parent().unwrap().join("leak.png").exists());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn event_set_validates_sets_dormant_and_event_delete_undoes() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "lift.fta" })).unwrap();
+    let r = s
+        .call(
+            "event_set",
+            &json!({ "id": "DOD_1", "probability": 0.25, "dormant": true, "description": "Door sensor" }),
+        )
+        .unwrap();
+    assert_eq!(r["dormant"], true);
+    // a description with `;` would corrupt the .ped file
+    let e = s
+        .call(
+            "event_set",
+            &json!({ "id": "DOD_1", "probability": 0.25, "description": "a;b" }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "edit_rejected");
+    let d = s.call("event_delete", &json!({ "id": "DOD_1" })).unwrap();
+    assert!(d["still_used_by_nodes"].as_u64().unwrap() >= 1);
+    assert!(s.call("event_delete", &json!({ "id": "DOD_1" })).is_err());
+    s.call("tree_undo", &json!({})).unwrap();
+    let list = s.call("event_list", &json!({})).unwrap();
+    assert!(list["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["id"] == "DOD_1"));
+}

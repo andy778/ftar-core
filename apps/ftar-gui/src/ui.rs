@@ -140,6 +140,14 @@ impl App {
                         self.redo();
                     }
                     ui.separator();
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Primary events..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.events_open = true;
+                    }
+                    ui.separator();
                     let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
                     if ui
                         .add_enabled(can_delete, egui::Button::new("Delete selected"))
@@ -262,6 +270,99 @@ impl App {
             Some(p) => self.save_as(p).is_ok(),
             None => false,
         }
+    }
+
+    /// The primary event editor, laid out like OpenPED: the events on the left,
+    /// the selected event's fields on the right, Apply / Clear / Delete below.
+    fn events_window(&mut self, ctx: &egui::Context) {
+        if !self.events_open {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("Primary events")
+            .open(&mut open)
+            .default_size([620.0, 380.0])
+            .show(ctx, |ui| {
+                if self.doc.is_none() {
+                    ui.label("Open or create a tree first.");
+                    return;
+                }
+                let name = self
+                    .doc
+                    .as_ref()
+                    .and_then(|d| d.tree.db_name.clone())
+                    .unwrap_or_else(|| "(not named yet)".into());
+                ui.label(format!("Database: {name}"));
+                ui.horizontal_top(|ui| {
+                    ui.vertical(|ui| {
+                        ui.strong("Primary Events");
+                        egui::ScrollArea::vertical()
+                            .id_salt("event_list")
+                            .max_height(300.0)
+                            .show(ui, |ui| {
+                                for id in self.event_ids() {
+                                    let sel = self.event_form.original.as_deref() == Some(&id);
+                                    if ui.selectable_label(sel, &id).clicked() {
+                                        self.event_form_load(&id);
+                                    }
+                                }
+                            });
+                    });
+                    ui.separator();
+                    ui.vertical(|ui| {
+                        let l = ui.label("Id");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.event_form.id)
+                                .desired_width(200.0),
+                        )
+                        .labelled_by(l.id);
+                        let l = ui.label("Probability");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.event_form.prob)
+                                .desired_width(120.0),
+                        )
+                        .labelled_by(l.id);
+                        ui.checkbox(&mut self.event_form.rate, "Constant Failure Rate/Unit Time");
+                        ui.add_space(4.0);
+                        ui.strong("Type");
+                        for (k, label) in [
+                            (EventType::Basic, "Basic"),
+                            (EventType::External, "External"),
+                            (EventType::Undeveloped, "Undeveloped"),
+                            (
+                                EventType::ConditionNotAnalysed,
+                                "Conditional (not analysed)",
+                            ),
+                            (EventType::ConditionAnalysed, "Conditional (analysed)"),
+                        ] {
+                            ui.radio_value(&mut self.event_form.kind, k, label);
+                        }
+                        ui.checkbox(&mut self.event_form.dormant, "Dormant");
+                        let l = ui.label("Description");
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.event_form.desc)
+                                .desired_rows(3)
+                                .desired_width(280.0),
+                        )
+                        .labelled_by(l.id);
+                        ui.horizontal(|ui| {
+                            if ui.button("Apply").clicked() {
+                                self.event_form_apply();
+                            }
+                            if ui.button("Clear").clicked() {
+                                self.event_form_clear();
+                            }
+                            if ui.button("Delete").clicked() {
+                                self.event_form_delete();
+                            }
+                        });
+                    });
+                });
+                if let Some(e) = &self.error {
+                    ui.colored_label(Color32::LIGHT_RED, e);
+                }
+            });
+        self.events_open = open;
     }
 
     fn unsaved_prompt(&mut self, ctx: &egui::Context) {
@@ -749,6 +850,7 @@ impl eframe::App for App {
 
         self.status_bar(ui);
         self.details_panel(ui);
+        self.events_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(doc) = &self.doc else {

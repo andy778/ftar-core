@@ -7,6 +7,7 @@
 //! * [`montecarlo`] – Monte Carlo simulation
 
 pub mod analysis;
+pub mod database;
 pub mod edit;
 pub mod error;
 pub mod layout;
