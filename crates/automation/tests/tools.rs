@@ -610,7 +610,10 @@ fn report_header_names_the_tree_file_with_extension() {
     s.call("tree_open", &json!({ "path": "lift.fta" })).unwrap();
     let r = s.call("report", &json!({ "kind": "probability" })).unwrap();
     assert!(
-        r["text"].as_str().unwrap().contains("\nTree   : lift.fta\n"),
+        r["text"]
+            .as_str()
+            .unwrap()
+            .contains("\nTree   : lift.fta\n"),
         "{r}"
     );
 }
