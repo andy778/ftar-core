@@ -691,7 +691,17 @@ impl App {
         format!("{}_failure_modes.csv", self.tree_name())
     }
 
-    /// Name used in report headers and default file names.
+    /// File name with extension, as OpenFTA prints it in report headers.
+    pub fn file_name(&self) -> String {
+        self.doc
+            .as_ref()
+            .and_then(|d| d.path.as_ref())
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "untitled".into())
+    }
+
+    /// Name used in default file names.
     pub fn tree_name(&self) -> String {
         self.doc
             .as_ref()
@@ -715,7 +725,7 @@ impl App {
             terms: self.terms,
             monte_carlo: self.mc_options(),
         };
-        report::generate(kind, &p.tree, &p.db, &self.tree_name(), time, &params)
+        report::generate(kind, &p.tree, &p.db, &self.file_name(), time, &params)
             .map_err(|e| e.to_string())
     }
 

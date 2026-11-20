@@ -279,7 +279,9 @@ pub fn event_contributions(
                 .iter()
                 .filter(|m| m.events.contains(e))
                 .map(|m| scale * m.count as f64 / trials as f64)
-                .sum();
+                .sum::<f64>()
+                // An empty float sum is -0.0, which would print as "-0.000000E+00".
+                + 0.0;
             (e.clone(), c, 100.0 * c / top_probability)
         })
         .collect()

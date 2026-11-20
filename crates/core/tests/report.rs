@@ -166,6 +166,31 @@ fn monte_carlo_report_layout() {
     )));
 }
 
+/// An event in no failure mode contributes 0, printed like OpenFTA as
+/// `0.000000E+00` / `0.00%`, never `-0.000000E+00` / `-0.00%`.
+#[test]
+fn unused_event_contributes_positive_zero() {
+    let p = Project::load(data("lift.fta")).unwrap();
+    let mc = simulate(
+        &p.tree,
+        &p.db,
+        &MonteCarloOptions {
+            trials: 2_000,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let fs = failure_statistics_from_hits(&mc, 0);
+    let r = monte_carlo_report_text("lift.fta", TIME, 1.0, &mc, &fs);
+    assert!(!r.contains("-0.0"), "{r}");
+    assert!(
+        r.contains(" W_1            0.000000E+00             0.00%\n"),
+        "{r}"
+    );
+    let c = event_contributions(&["W_1".to_string()], &[], 1, 1.0, 1.0);
+    assert!(c[0].1.is_sign_positive() && c[0].2.is_sign_positive());
+}
+
 #[test]
 fn failure_statistics_report_lists_modes() {
     let mut fs = FailureStatistics::new(0);
