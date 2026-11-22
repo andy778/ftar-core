@@ -118,6 +118,12 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
     gives different counts. On `lift.fta` (100000 trials) top-event estimates were 1.198924E-05 (ftar) and 1.199722E-05
     (OpenFTA), both within one standard error (4.1E-08) of the exact 1.199993E-05. Expected, not a bug; compare Monte Carlo runs
     statistically, never digit by digit.
+19. **Long lines in reports** (issue #9). Event lists wrap as in C (`BitPara`/`ParaGrow`, `event_list.c`, `util.c`): at 50 bytes
+    for cut sets, 30 for probabilities and 20 for Monte Carlo failure modes, with the same continuation formats
+    (`tests/report.rs` pins all three). Columns are padded in bytes like C's `%-Ns`, so non-ASCII ids line up as in
+    OpenFTA's files (before #9 ftar padded in characters). One difference is kept: an id longer than the line width is
+    dropped from the line by `ParaGrow` ("string too long") and makes `ParaCreate` return NULL, which `BitPara`'s caller then
+    dereferences when it is the first id. ftar prints the id on its own line instead.
 
 ### Notes on the C snapshot
 
