@@ -1008,3 +1008,57 @@ fn event_editor_lists_other_trees_that_use_the_event() {
     assert!(fresh.other_trees_using("X").starts_with("Save the tree"));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+// ------------------------------------------- canvas drawn like OpenFTA (#52)
+
+#[test]
+fn canvas_draws_openfta_labels_and_clicking_a_symbol_selects_it() {
+    use eframe::egui::{Event, Modifiers, PointerButton, Pos2};
+    let mut h = harness();
+    h.run();
+    let scene = h.state().scene().expect("scene");
+    // gate ids, probabilities and database descriptions, as OpenFTA shows them
+    let texts: Vec<String> = scene
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            ftar_render::scene::Prim::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    for want in ["AND1", "Or1", "0.03", "Mains Power", "Tree: theatre"] {
+        assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+    }
+    // click the middle of MAINS_FAIL's circle on screen
+    let it = scene.items.iter().find(|i| i.path == [0, 1]).unwrap();
+    let b = it.bbox;
+    let (z, origin) = (h.state().zoom, h.state().canvas.min + h.state().pan);
+    let pos = Pos2::new(
+        origin.x + (b[0] + b[2]) / 2.0 * z,
+        origin.y + (b[1] + b[3]) / 2.0 * z,
+    );
+    h.event(Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert_eq!(h.state().selected.as_deref(), Some(&[0usize, 1][..]));
+    // clicking empty paper clears the selection
+    let empty = h.state().canvas.min + vec2(2.0, 2.0);
+    h.event(Event::PointerMoved(empty));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos: empty,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert!(h.state().selected.is_none());
+}

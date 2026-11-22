@@ -1,7 +1,7 @@
 //! ftar-gui: egui front end for ftar-core.
 //!
 //! * [`App`] holds the state and every user operation (headless, testable)
-//! * `ui` draws it with egui; `layout` (from ftar-core) places the tree
+//! * `ui` draws it with egui; the tree drawing comes from `ftar_render::scene`
 
 mod app;
 pub use ftar_core::layout;

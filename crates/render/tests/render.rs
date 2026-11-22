@@ -22,10 +22,11 @@ fn svg_names_every_event_and_gate() {
     for id in ["RELAY_FAIL", "GEN_FAIL", "MAINS_FAIL", "Backup_Fail", "Top"] {
         assert!(svg.contains(id), "{id}");
     }
-    assert!(svg.contains(">AND<") && svg.contains(">OR<"));
-    // probabilities (GEN_FAIL is a failure rate)
-    assert!(svg.contains("p = 3.00E-2"), "{svg}");
-    assert!(svg.contains("rate 2.00E-2"), "{svg}");
+    // gates show their ids, as in OpenFTA
+    assert!(svg.contains(">AND1<") && svg.contains(">Or1<"), "{svg}");
+    // probabilities as OpenFTA prints them (%g), descriptions from the database
+    assert!(svg.contains(">0.03<") && svg.contains(">0.02<"), "{svg}");
+    assert!(svg.contains(">Mains Power<"), "{svg}");
     let off = tree_svg(
         &p.tree,
         &p.db,
@@ -34,7 +35,7 @@ fn svg_names_every_event_and_gate() {
             ..Default::default()
         },
     );
-    assert!(!off.contains("p = "));
+    assert!(!off.contains(">0.03<"));
 }
 
 #[test]
@@ -70,7 +71,7 @@ fn wrapping_respects_width_and_line_limit() {
     );
     assert_eq!(w.len(), 2);
     assert!(w.iter().all(|l| l.chars().count() <= 12));
-    assert!(w[1].ends_with('…'));
+    assert!(w[1].ends_with("..."));
     assert_eq!(wrap("", 10, 3), Vec::<String>::new());
     assert!(
         wrap("Supercalifragilisticexpialidocious", 10, 2)[0]
@@ -179,7 +180,7 @@ fn every_node_kind_can_be_drawn() {
         tree.root.children[0].children.push(n);
     }
     let svg = tree_svg(&tree, &PrimaryEventDb::default(), &SvgOptions::default());
-    for shape in ["<circle", "<polygon", "<ellipse", "<rect", "<polyline"] {
+    for shape in ["<polygon", "<polyline", "stroke-dasharray"] {
         assert!(svg.contains(shape), "{shape}");
     }
     svg_to_png(&svg, 0.5).unwrap();

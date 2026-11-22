@@ -26,7 +26,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] Compare numbers with reports from the original engine: a native build of OpenFTA's C core (`tools/openfta-native/`) made the fixtures in `crates/core/tests/data/openfta/`; cut sets reports are identical, probability reports agree to float precision (docs/VERIFICATION.md)
 - [x] Failure statistics report, text report files compatible with OpenFTA
 - [x] Writing `.fta`/`.ped`, tree editing (GUI: add/delete/move/retype/rename, event database, OpenPED-style primary event editor (Edit > Primary events) that also lists the other trees in the folder using an event (an ftar addition; MCP/automation `event_usage`), undo/redo, save, unsaved-changes prompt)
-- [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
+- [x] GUI (egui): tree canvas drawn as OpenFTA draws it (standard gate and event symbols, ids, probabilities, descriptions, tree/database header; shared with image export and print), editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 - [x] Fuzzing: cargo-fuzz targets for the `.fta`/`.ped` parsers, analysis and the MCP server, run on every PR by ClusterFuzzLite (fuzz/README.md)
 

@@ -9,7 +9,9 @@ use ftar_core::report::ReportKind;
 use ftar_core::EventType;
 
 use crate::app::{App, Pending, Tab};
-use crate::layout;
+use ftar_render::scene::{
+    tree_scene, triangulate, Anchor, Prim, Rgb, Scene, SceneOptions, HIGHLIGHT, PAPER, PEN,
+};
 
 const GATES: &[EventType] = &[
     EventType::And,
@@ -611,38 +613,12 @@ fn kind_name(k: EventType) -> &'static str {
     }
 }
 
-fn gate_label(k: EventType) -> &'static str {
-    use EventType::*;
-    match k {
-        And => "AND",
-        Or => "OR",
-        Xor => "XOR",
-        PriorityAnd => "PAND",
-        Inhibit => "INH",
-        _ => "",
-    }
-}
-
-const NODE_W: f32 = 96.0;
-const NODE_H: f32 = 56.0;
-const GAP_X: f32 = 104.0;
-const GAP_Y: f32 = 96.0;
-/// Room under a node for its caption, in tree units.
-const CAPTION: f32 = 24.0;
 /// Empty border around the fitted tree, in screen pixels.
 const MARGIN: f32 = 12.0;
 
-/// Size of the whole drawing (nodes and captions) in tree units.
-fn content_size(max_x: f32, max_y: f32) -> Vec2 {
-    Vec2::new(
-        (max_x * GAP_X + NODE_W).max(1.0),
-        (max_y * GAP_Y + NODE_H + CAPTION).max(1.0),
-    )
-}
-
-/// Zoom and pan that centre the whole tree in a canvas of `size`, with a margin.
-pub(crate) fn fit(size: Vec2, max_x: f32, max_y: f32) -> (f32, Vec2) {
-    let c = content_size(max_x, max_y);
+/// Zoom and pan that centre a drawing of `content` size in a canvas of `size`, with a margin.
+pub(crate) fn fit(size: Vec2, content: Vec2) -> (f32, Vec2) {
+    let c = content.max(Vec2::splat(1.0));
     let avail = (size - Vec2::splat(2.0 * MARGIN)).max(Vec2::splat(1.0));
     let z = (avail.x / c.x).min(avail.y / c.y).clamp(0.02, 1.5);
     (
@@ -654,15 +630,115 @@ pub(crate) fn fit(size: Vec2, max_x: f32, max_y: f32) -> (f32, Vec2) {
     )
 }
 
+fn rgb(c: Rgb) -> Color32 {
+    Color32::from_rgb(c.0, c.1, c.2)
+}
+
+/// Paint `scene` on white paper with its origin at `origin` and scale `z`;
+/// the selected item is outlined in OpenFTA's highlight colour.
+fn paint_scene(
+    painter: &egui::Painter,
+    scene: &Scene,
+    origin: Pos2,
+    z: f32,
+    selected: Option<&[usize]>,
+) {
+    let to = |p: [f32; 2]| origin + Vec2::new(p[0], p[1]) * z;
+    painter.rect_filled(
+        Rect::from_min_size(origin, Vec2::new(scene.width, scene.height) * z),
+        0.0,
+        rgb(PAPER),
+    );
+    let pen = Stroke::new((1.2 * z).max(0.6), rgb(PEN));
+    let highlight = selected
+        .and_then(|path| scene.items.iter().find(|it| it.path == path))
+        .map(|it| it.prims.clone());
+    let clip = painter.clip_rect();
+    for (i, prim) in scene.prims.iter().enumerate() {
+        match prim {
+            Prim::Path {
+                pts,
+                closed,
+                fill,
+                dashed,
+            } => {
+                let pts: Vec<Pos2> = pts.iter().map(|&p| to(p)).collect();
+                if !Rect::from_points(&pts).expand(4.0).intersects(clip) {
+                    continue;
+                }
+                if let Some(f) = fill {
+                    let mut mesh = egui::Mesh::default();
+                    for &p in &pts {
+                        mesh.colored_vertex(p, rgb(*f));
+                    }
+                    let flat: Vec<[f32; 2]> = pts.iter().map(|p| [p.x, p.y]).collect();
+                    for [a, b, c] in triangulate(&flat) {
+                        mesh.add_triangle(a as u32, b as u32, c as u32);
+                    }
+                    painter.add(Shape::mesh(mesh));
+                }
+                let stroke = if highlight.as_ref().is_some_and(|r| r.contains(&i)) {
+                    Stroke::new((2.5 * z).max(2.0), rgb(HIGHLIGHT))
+                } else {
+                    pen
+                };
+                let mut line = pts;
+                if *closed {
+                    line.push(line[0]);
+                }
+                if *dashed {
+                    painter.extend(Shape::dashed_line(&line, stroke, 5.0 * z, 3.0 * z));
+                } else {
+                    painter.add(Shape::line(line, stroke));
+                }
+            }
+            Prim::Text {
+                pos,
+                size,
+                anchor,
+                bold: _,
+                text,
+            } => {
+                let px = size * z;
+                if px < 5.0 {
+                    continue; // too small to read, as OpenFTA hides text when zoomed out
+                }
+                let p = to(*pos);
+                if !clip.expand(300.0).contains(p) {
+                    continue;
+                }
+                let align = match anchor {
+                    Anchor::Start => Align2::LEFT_CENTER,
+                    Anchor::Middle => Align2::CENTER_CENTER,
+                };
+                painter.text(p, align, text, FontId::proportional(px), rgb(PEN));
+            }
+        }
+    }
+}
+
 impl App {
-    /// Where the whole drawing (nodes and captions) currently is on screen.
-    pub fn content_bounds(&self) -> Option<Rect> {
+    /// The tree as the canvas draws it.
+    pub fn scene(&self) -> Option<Scene> {
         let doc = self.doc.as_ref()?;
-        let (mx, my) = layout::layout(&doc.tree.root)
-            .iter()
-            .fold((0.0f32, 0.0f32), |a, p| (a.0.max(p.x), a.1.max(p.y)));
+        Some(tree_scene(
+            &doc.tree,
+            &doc.db,
+            &SceneOptions {
+                title: self.tree_name(),
+                probabilities: true,
+            },
+        ))
+    }
+
+    /// Where the whole drawing currently is on screen.
+    pub fn content_bounds(&self) -> Option<Rect> {
+        let scene = self.scene()?;
         let min = self.canvas.min + self.pan;
-        Some(Rect::from_min_size(min, content_size(mx, my) * self.zoom))
+        Some(Rect::from_min_size(
+            min,
+            Vec2::new(scene.width, scene.height) * self.zoom,
+        ))
     }
 }
 
@@ -876,23 +952,18 @@ impl eframe::App for App {
         self.events_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
-            let Some(doc) = &self.doc else {
+            let Some(scene) = self.scene() else {
                 ui.centered_and_justified(|ui| {
                     ui.label("Open a .fta file (Open...), or start a New tree.")
                 });
                 return;
             };
-            let placed = layout::layout(&doc.tree.root);
             let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
             let rect = resp.rect;
 
-            // world -> screen
-            let (max_x, max_y) = placed
-                .iter()
-                .fold((0.0f32, 0.0f32), |a, p| (a.0.max(p.x), a.1.max(p.y)));
-            let key = (rect.size(), max_x, max_y);
+            let key = (rect.size(), scene.width, scene.height);
             if self.fit_next || (self.auto_fit && self.fit_key != Some(key)) {
-                let (z, pan) = fit(rect.size(), max_x, max_y);
+                let (z, pan) = fit(rect.size(), Vec2::new(scene.width, scene.height));
                 self.zoom = z;
                 self.pan = pan;
                 self.fit_next = false;
@@ -919,170 +990,24 @@ impl eframe::App for App {
             }
             let origin = rect.min + self.pan;
             let z = self.zoom;
-            let centre = |p: &layout::Placed| {
-                origin + Vec2::new(p.x * GAP_X + NODE_W / 2.0, p.y * GAP_Y + NODE_H / 2.0) * z
-            };
-
-            let dark = ctx.global_style().visuals.dark_mode;
-            let line = Stroke::new(
-                1.5 * z.max(0.5),
-                if dark {
-                    Color32::GRAY
-                } else {
-                    Color32::DARK_GRAY
-                },
+            paint_scene(
+                &painter.with_clip_rect(rect),
+                &scene,
+                origin,
+                z,
+                self.selected.as_deref(),
             );
-            let text_col = if dark { Color32::WHITE } else { Color32::BLACK };
 
-            // edges (elbow connectors)
-            for p in &placed {
-                if let Some(pi) = p.parent {
-                    let a = centre(&placed[pi]) + Vec2::new(0.0, NODE_H / 2.0 * z);
-                    let b = centre(p) - Vec2::new(0.0, NODE_H / 2.0 * z);
-                    let mid = (a.y + b.y) / 2.0;
-                    painter.add(Shape::line(
-                        vec![a, Pos2::new(a.x, mid), Pos2::new(b.x, mid), b],
-                        line,
-                    ));
-                }
-            }
-
-            // nodes
-            let mut clicked: Option<Vec<usize>> = None;
-            let mut hit_any = false;
-            for p in placed.iter() {
-                let c = centre(p);
-                let r = Rect::from_center_size(c, Vec2::new(NODE_W, NODE_H) * z);
-                if !r.intersects(rect) {
-                    continue;
-                }
-                let sel = self.selected.as_ref() == Some(&p.path);
-                let (fill, label) = node_style(p.node, dark);
-                let stroke = if sel {
-                    Stroke::new(3.0, Color32::from_rgb(255, 170, 0))
-                } else {
-                    line
-                };
-                let n = p.node;
-                match n.kind {
-                    EventType::Basic | EventType::Dormant => {
-                        let rad = (NODE_H / 2.0 - 6.0) * z;
-                        painter.circle(c + Vec2::new(0.0, 0.0), rad, fill, stroke);
-                    }
-                    EventType::Undeveloped => {
-                        let (w, h) = (NODE_H * 0.6 * z, NODE_H * 0.45 * z);
-                        painter.add(Shape::convex_polygon(
-                            vec![
-                                c + Vec2::new(0.0, -h),
-                                c + Vec2::new(w, 0.0),
-                                c + Vec2::new(0.0, h),
-                                c + Vec2::new(-w, 0.0),
-                            ],
-                            fill,
-                            stroke,
-                        ));
-                    }
-                    EventType::External => {
-                        let (w, h) = (NODE_H * 0.5 * z, NODE_H * 0.45 * z);
-                        painter.add(Shape::convex_polygon(
-                            vec![
-                                c + Vec2::new(0.0, -h),
-                                c + Vec2::new(w, 0.0),
-                                c + Vec2::new(w, h),
-                                c + Vec2::new(-w, h),
-                                c + Vec2::new(-w, 0.0),
-                            ],
-                            fill,
-                            stroke,
-                        ));
-                    }
-                    k if k.is_gate() => {
-                        let rr =
-                            Rect::from_center_size(c, Vec2::new(NODE_H * 0.9, NODE_H * 0.55) * z);
-                        painter.rect(rr, 14.0 * z, fill, stroke, egui::StrokeKind::Middle);
-                    }
-                    _ => {
-                        let rr = Rect::from_center_size(c, Vec2::new(NODE_W, NODE_H * 0.8) * z);
-                        painter.rect(rr, 3.0 * z, fill, stroke, egui::StrokeKind::Middle);
-                    }
-                }
-                if z > 0.22 {
-                    let fs = (12.0 * z).clamp(7.0, 22.0);
-                    painter.text(
-                        c,
-                        Align2::CENTER_CENTER,
-                        label,
-                        FontId::proportional(fs),
-                        text_col,
-                    );
-                    // text for intermediate events / ids under basic events
-                    let cap = match n.kind {
-                        EventType::Intermediate => n.text.as_str(),
-                        _ => "",
-                    };
-                    if !cap.is_empty() {
-                        let fs = (10.0 * z).clamp(7.0, 16.0);
-                        // keep captions inside their column so neighbours don't overlap
-                        let max = ((GAP_X * z - 4.0) / (fs * 0.5)).floor().max(4.0) as usize;
-                        let short: String = if cap.chars().count() > max {
-                            cap.chars()
-                                .take(max - 1)
-                                .chain(std::iter::once('…'))
-                                .collect()
-                        } else {
-                            cap.to_string()
-                        };
-                        painter.text(
-                            c + Vec2::new(0.0, NODE_H * 0.5 * z + 2.0),
-                            Align2::CENTER_TOP,
-                            short,
-                            FontId::proportional((10.0 * z).clamp(7.0, 16.0)),
-                            text_col,
-                        );
-                    }
-                }
-                if resp.clicked() {
-                    if let Some(pos) = resp.interact_pointer_pos() {
-                        if r.contains(pos) {
-                            clicked = Some(p.path.clone());
-                            hit_any = true;
-                        }
-                    }
-                }
-            }
             if resp.clicked() {
-                let _ = hit_any;
-                self.selected = clicked;
+                let hit = resp.interact_pointer_pos().and_then(|pos| {
+                    let w = (pos - origin) / z;
+                    scene.item_at([w.x, w.y]).map(|it| it.path.clone())
+                });
+                self.selected = hit;
                 self.version += 1;
             }
         });
     }
-}
-
-fn node_style(n: &ftar_core::Node, dark: bool) -> (Color32, String) {
-    use EventType::*;
-    let (r, g, b) = match n.kind {
-        Basic => (70, 130, 200),
-        Dormant => (110, 110, 200),
-        Undeveloped => (200, 160, 60),
-        External => (90, 170, 120),
-        And => (200, 90, 90),
-        Or => (90, 150, 90),
-        Xor | PriorityAnd | Inhibit => (170, 100, 170),
-        Intermediate => (120, 120, 120),
-        _ => (150, 150, 150),
-    };
-    let fill = if dark {
-        Color32::from_rgb(r / 2, g / 2, b / 2)
-    } else {
-        Color32::from_rgb(r / 2 + 128, g / 2 + 128, b / 2 + 128)
-    };
-    let label = if n.kind.is_gate() {
-        gate_label(n.kind).to_string()
-    } else {
-        n.id.clone()
-    };
-    (fill, label)
 }
 
 /// Open a file with the system's default application (the browser, for HTML).
