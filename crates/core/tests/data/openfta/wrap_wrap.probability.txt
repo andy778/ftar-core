@@ -1,0 +1,84 @@
+Probabilities Analysis
+======================
+
+Tree   : wrap.fta
+Time   : 
+
+Number of primary events   = 43
+Number of minimal cut sets = 6
+Order of minimal cut sets  = 43
+
+Unit time span         = 1.000000
+
+Minimal cut set probabilities :
+
+  1    M_EZMFJLC Ventil_ö             3.000000E-02
+  2    AFI7B5 EF L OGHD OGZ5X8X RT     1.575000E-03
+  3    EB07T667E HE_1J8YKR4WG KU MM    9.922500E-04
+       RVCMA_D U X XRILAV52
+  4    BMNXIFV1Y BYVA0HNO1RUF D        1.530900E-05
+       FPAQ6MA1QBG FV8CYK10KK G5Z
+       GB26MX R _DQ3UODRI 
+  5    CLWZA DHI5 EB EYGSNO_FRN        3.307500E-05
+       GBU1P JR9CHZPK5 NEOAUCFJV
+       SG6DB SKQ          
+  6    DBXP2OX9 FUA21J ILFKOAML3       4.822335E-03
+       J38RI JADD1NYSAW Pump_på QKH
+       U49WZ0N Ärende_ä 
+
+
+Probability of top level event (minimal cut sets up to order 43 used):
+
+ 1 term    +3.743797E-02   = 3.743797E-02 (upper bound)
+ 2 terms   -2.374401E-04   = 3.720053E-02 (lower bound)
+ 3 terms   +4.372440E-07   = 3.720097E-02 (upper bound)
+ 4 terms   -2.468119E-10   = 3.720097E-02 (lower bound)
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ AFI7B5         1.575000E-03             4.23%
+ BMNXIFV1Y      1.530900E-05             0.04%
+ BYVA0HNO1RUF   1.530900E-05             0.04%
+ CLWZA          3.307500E-05             0.09%
+ D              1.530900E-05             0.04%
+ DBXP2OX9       4.822335E-03            12.96%
+ DHI5           3.307500E-05             0.09%
+ EB             3.307500E-05             0.09%
+ EB07T667E      9.922500E-04             2.67%
+ EF             1.575000E-03             4.23%
+ EYGSNO_FRN     3.307500E-05             0.09%
+ FPAQ6MA1QBG    1.530900E-05             0.04%
+ FUA21J         4.822335E-03            12.96%
+ FV8CYK10KK     1.530900E-05             0.04%
+ G5Z            1.530900E-05             0.04%
+ GB26MX         1.530900E-05             0.04%
+ GBU1P          3.307500E-05             0.09%
+ HE_1J8YKR4WG   9.922500E-04             2.67%
+ ILFKOAML3      4.822335E-03            12.96%
+ J38RI          4.822335E-03            12.96%
+ JADD1NYSAW     4.822335E-03            12.96%
+ JR9CHZPK5      3.307500E-05             0.09%
+ KU             9.922500E-04             2.67%
+ L              1.575000E-03             4.23%
+ MM             9.922500E-04             2.67%
+ M_EZMFJLC      3.000000E-02            80.64%
+ NEOAUCFJV      3.307500E-05             0.09%
+ OGHD           1.575000E-03             4.23%
+ OGZ5X8X        1.575000E-03             4.23%
+ Pump_på       4.822335E-03            12.96%
+ QKH            4.822335E-03            12.96%
+ R              1.530900E-05             0.04%
+ RT             1.575000E-03             4.23%
+ RVCMA_D        9.922500E-04             2.67%
+ SG6DB          3.307500E-05             0.09%
+ SKQ            3.307500E-05             0.09%
+ U              9.922500E-04             2.67%
+ U49WZ0N        4.822335E-03            12.96%
+ Ventil_ö      3.000000E-02            80.64%
+ X              9.922500E-04             2.67%
+ XRILAV52       9.922500E-04             2.67%
+ _DQ3UODRI      1.530900E-05             0.04%
+ Ärende_ä     4.822335E-03            12.96%

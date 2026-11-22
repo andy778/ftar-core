@@ -11,7 +11,7 @@ with the Java GUI's callbacks replaced by a small C driver, and `generate.sh` wr
 reports for every example tree in `tests/data` to `tests/data/openfta/`. `tests/openfta_reports.rs` checks ftar
 against them:
 
-- **Cut sets reports: identical** for all 10 trees (after #41: the order limit and empty orders are printed as in C).
+- **Cut sets reports: identical** for all 11 trees (after #41: the order limit and empty orders are printed as in C).
 - **Probability reports: identical layout**; numbers agree to float precision (item 7). Single inclusion-exclusion
   term values differ by up to 2.4e-5 relative where C sums C(54,4) = 316251 products in `float`; running totals and
   everything else within 1e-5.
@@ -138,7 +138,10 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
 19. **Long lines in reports** (issue #9). Event lists wrap as in C (`BitPara`/`ParaGrow`, `event_list.c`, `util.c`): at 50 bytes
     for cut sets, 30 for probabilities and 20 for Monte Carlo failure modes, with the same continuation formats
     (`tests/report.rs` pins all three). Columns are padded in bytes like C's `%-Ns`, so non-ASCII ids line up as in
-    OpenFTA's files (before #9 ftar padded in characters). One difference is kept: an id longer than the line width is
+    OpenFTA's files (before #9 ftar padded in characters). `tests/data/wrap` (43 events, six cut sets of 4 to 9 events,
+    ids of 1 to 12 bytes including `å`, `ä`, `ö`) makes every cut set wrap at 50 and 30 bytes; its reports from the native build are
+    byte-identical to ftar's, and fail with character padding. OpenFTA limits ids to 13 bytes (`MAX_SYMBOL_ID_LENGTH`), so the
+    ids-longer-than-the-line case below cannot arise from a loaded file. One difference is kept: an id longer than the line width is
     dropped from the line by `ParaGrow` ("string too long") and makes `ParaCreate` return NULL, which `BitPara`'s caller then
     dereferences when it is the first id. ftar prints the id on its own line instead.
 20. **`.ped` with CRLF line ends**: OpenFTA built for Linux fails to open them ("error opening file") and then crashes
