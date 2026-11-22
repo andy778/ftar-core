@@ -65,7 +65,7 @@ fn preview_window_opens_from_the_file_menu_and_pages_through_sheets() {
     h.get_by_label("Page setup and print preview");
     h.get_by_label(&format!("Page 1 of {n}"));
     for name in ["Next page", "Previous page", "Print..."] {
-        h.get_by_label(name);
+        h.get_all_by_label(name).last().unwrap(); // "Print..." is also on the toolbar
     }
     h.get_by_label("Next page").click();
     h.run();
