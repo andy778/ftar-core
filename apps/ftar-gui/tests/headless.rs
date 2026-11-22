@@ -1009,6 +1009,162 @@ fn event_editor_lists_other_trees_that_use_the_event() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// ------------------------------------------- canvas drawn like OpenFTA (#52)
+
+#[test]
+fn canvas_draws_openfta_labels_and_clicking_a_symbol_selects_it() {
+    use eframe::egui::{Event, Modifiers, PointerButton, Pos2};
+    let mut h = harness();
+    h.run();
+    let scene = h.state().scene().expect("scene");
+    // gate ids, probabilities and database descriptions, as OpenFTA shows them
+    let texts: Vec<String> = scene
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            ftar_render::scene::Prim::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    for want in ["AND1", "Or1", "0.03", "Mains Power", "Tree: theatre"] {
+        assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+    }
+    // click the middle of MAINS_FAIL's circle on screen
+    let it = scene.items.iter().find(|i| i.path == [0, 1]).unwrap();
+    let b = it.bbox;
+    let (z, origin) = (h.state().zoom, h.state().canvas.min + h.state().pan);
+    let pos = Pos2::new(
+        origin.x + (b[0] + b[2]) / 2.0 * z,
+        origin.y + (b[1] + b[3]) / 2.0 * z,
+    );
+    h.event(Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert_eq!(h.state().selected.as_deref(), Some(&[0usize, 1][..]));
+    // clicking empty paper clears the selection
+    let empty = h.state().canvas.min + vec2(2.0, 2.0);
+    h.event(Event::PointerMoved(empty));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos: empty,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert!(h.state().selected.is_none());
+}
+
+// ------------------------------------------- zoom and tree overview (#54)
+
+#[test]
+fn zoom_in_out_and_set_zoom_keep_the_centre_and_stop_auto_fit() {
+    let mut h = tree_with("lift.fta");
+    h.run();
+    let centre_world = |a: &App| a.visible_world().center();
+    let before = centre_world(h.state());
+    let z0 = h.state().zoom;
+    h.state_mut().zoom_in();
+    let a = h.state();
+    assert!((a.zoom - z0 * App::ZOOM_STEP).abs() < 1e-4);
+    assert!(!a.auto_fit, "a manual zoom is kept");
+    assert!(
+        (centre_world(a) - before).length() < 0.5,
+        "centre stays put"
+    );
+    h.state_mut().zoom_out();
+    assert!((h.state().zoom - z0).abs() < 1e-4);
+    h.state_mut().set_zoom(1.5);
+    assert_eq!(h.state().zoom_percent(), 150);
+    assert!((centre_world(h.state()) - before).length() < 0.5);
+    // limits and nonsense
+    h.state_mut().set_zoom(100.0);
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.1);
+    h.state_mut().set_zoom(0.0);
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.0);
+    h.state_mut().set_zoom(f32::NAN);
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.0);
+    h.run();
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.0, "not refitted");
+}
+
+#[test]
+fn keyboard_and_view_menu_zoom() {
+    use eframe::egui::{Key, Modifiers};
+    let mut h = tree_with("theatre.fta");
+    h.run();
+    let z0 = h.state().zoom;
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Plus);
+    h.run();
+    assert!(h.state().zoom > z0, "Ctrl++ zooms in");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Minus);
+    h.run();
+    assert!((h.state().zoom - z0).abs() < 1e-4, "Ctrl+- zooms out");
+    h.get_by_label("View").click();
+    h.run();
+    h.get_by_label("Set Zoom...").click();
+    h.run();
+    assert!(h.state().set_zoom_open);
+    h.get_by_label("25%").click();
+    h.run();
+    assert_eq!(h.state().zoom_percent(), 25);
+    // the preset and the zoom shown next to Fit
+    assert_eq!(h.query_all_by_label("25%").count(), 2);
+    h.get_by_label("Fit").click();
+    h.run();
+    assert!(h.state().auto_fit);
+    assert_fully_visible(h.state(), "after Fit");
+}
+
+#[test]
+fn overview_shows_the_whole_tree_and_clicking_moves_the_view() {
+    let mut h = tree_with("lift.fta");
+    h.run();
+    h.state_mut().set_zoom(2.0);
+    h.state_mut().centre_on(eframe::egui::vec2(0.0, 0.0));
+    h.get_by_label("View").click();
+    h.run();
+    h.get_by_label("Tree Overview").click();
+    h.run();
+    assert!(h.state().overview_open);
+    h.get_by_label("Tree Overview"); // the window title
+                                     // click near the right edge of the overview: the view moves to the right side of the tree
+    use eframe::egui::{Event, Modifiers, PointerButton, Pos2};
+    let before = h.state().visible_world().center().x;
+    let win = h
+        .query_all_by_label("Tree Overview")
+        .map(|n| n.rect())
+        .reduce(|a, b| if a.area() > b.area() { a } else { b })
+        .unwrap();
+    let pos = Pos2::new(win.right() - 20.0, win.center().y + 10.0);
+    h.event(Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    let after = h.state().visible_world().center().x;
+    let scene = h.state().scene().unwrap();
+    assert!(
+        after > scene.width * 0.6,
+        "{before} -> {after} of {}",
+        scene.width
+    );
+    assert!(!h.state().auto_fit);
+}
+
 // ------------------------------------------------- cut, copy and paste (#53)
 
 #[test]

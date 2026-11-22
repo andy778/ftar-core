@@ -99,6 +99,11 @@ pub struct App {
     pub(crate) fit_key: Option<(Vec2, f32, f32)>,
     /// Canvas rectangle of the last frame.
     pub canvas: eframe::egui::Rect,
+    /// View > Tree Overview window is shown.
+    pub overview_open: bool,
+    /// View > Set Zoom window is shown, with the percentage being edited.
+    pub set_zoom_open: bool,
+    pub set_zoom_percent: f32,
     // analysis
     pub tab: Tab,
     pub order: usize,
@@ -155,6 +160,9 @@ impl Default for App {
             auto_fit: true,
             fit_key: None,
             canvas: eframe::egui::Rect::ZERO,
+            overview_open: false,
+            set_zoom_open: false,
+            set_zoom_percent: 100.0,
             tab: Tab::CutSets,
             order: 0,
             terms: ftar_core::analysis::DEFAULT_TERMS,
@@ -363,6 +371,53 @@ impl App {
                 Err(e)
             }
         }
+    }
+
+    // --------------------------------------------------------------- view
+
+    /// Smallest and largest zoom the canvas allows.
+    pub const ZOOM_RANGE: (f32, f32) = (0.02, 4.0);
+    /// Zoom In / Zoom Out multiply or divide the zoom by this.
+    pub const ZOOM_STEP: f32 = 1.25;
+
+    /// Set the zoom, keeping the point at the centre of the canvas in place.
+    /// Turns automatic fitting off.
+    pub fn set_zoom(&mut self, zoom: f32) {
+        if !zoom.is_finite() {
+            return;
+        }
+        let new = zoom.clamp(Self::ZOOM_RANGE.0, Self::ZOOM_RANGE.1);
+        let k = new / self.zoom;
+        let rel = self.canvas.size() / 2.0;
+        self.pan = rel - (rel - self.pan) * k;
+        self.zoom = new;
+        self.auto_fit = false;
+    }
+
+    pub fn zoom_in(&mut self) {
+        self.set_zoom(self.zoom * Self::ZOOM_STEP);
+    }
+
+    pub fn zoom_out(&mut self) {
+        self.set_zoom(self.zoom / Self::ZOOM_STEP);
+    }
+
+    /// Zoom in percent, rounded.
+    pub fn zoom_percent(&self) -> u32 {
+        (self.zoom * 100.0).round() as u32
+    }
+
+    /// Move the view so the drawing point `world` (pixels at 100 %) is at the
+    /// centre of the canvas. Turns automatic fitting off.
+    pub fn centre_on(&mut self, world: Vec2) {
+        self.pan = self.canvas.size() / 2.0 - world * self.zoom;
+        self.auto_fit = false;
+    }
+
+    /// The part of the drawing (pixels at 100 %) the canvas shows.
+    pub fn visible_world(&self) -> eframe::egui::Rect {
+        let z = self.zoom.max(f32::EPSILON);
+        eframe::egui::Rect::from_min_size((-self.pan / z).to_pos2(), self.canvas.size() / z)
     }
 
     // ------------------------------------------------------------ editing
