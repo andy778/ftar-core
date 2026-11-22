@@ -283,6 +283,54 @@ impl App {
                         self.delete_selected();
                     }
                 });
+                ui.menu_button("View", |ui| {
+                    let shortcut = |k| {
+                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                    };
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.overview_open = true;
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_in();
+                    }
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_out();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.set_zoom_percent = self.zoom_percent() as f32;
+                        self.set_zoom_open = true;
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.fit_next = true;
+                    }
+                });
                 ui.menu_button("Analysis", |ui| {
                     if ui
                         .add_enabled(has_doc, egui::Button::new("Validate"))
@@ -343,54 +391,6 @@ impl App {
                 {
                     self.redo();
                 }
-                ui.menu_button("View", |ui| {
-                    let shortcut = |k| {
-                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
-                    };
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.overview_open = true;
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.zoom_in();
-                    }
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.zoom_out();
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.set_zoom_percent = self.zoom_percent() as f32;
-                        self.set_zoom_open = true;
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.fit_next = true;
-                    }
-                });
                 ui.separator();
                 if ui.button("Fit").clicked() {
                     self.fit_next = true;
