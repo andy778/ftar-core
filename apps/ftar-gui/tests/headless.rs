@@ -949,6 +949,28 @@ fn a_tree_can_use_a_shared_database_in_another_folder() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// The probability tab lists primary events alphabetically, as OpenFTA does
+/// (theatre.fta has RELAY_FAIL first in the tree).
+#[test]
+fn probability_tab_lists_events_alphabetically() {
+    let mut h = harness();
+    h.run();
+    h.get_by_label("Probability").click();
+    h.run();
+    h.get_by_label("Run").click();
+    h.run();
+    let ids: Vec<_> = h
+        .state()
+        .prob
+        .as_ref()
+        .expect("report")
+        .events
+        .iter()
+        .map(|e| e.id.clone())
+        .collect();
+    assert_eq!(ids, ["GEN_FAIL", "MAINS_FAIL", "RELAY_FAIL"]);
+}
+
 /// The event editor says which other trees in the folder use an event from
 /// the same database, and sees a new tree once it is saved.
 #[test]

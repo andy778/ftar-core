@@ -89,7 +89,10 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
    (`calc_bas_parms` + `rand_disc`) and the failure-mode table; `event_failures` counts already match the C
    importance numerator. The C uses `frand() <= p`, Rust `< p` (measure-zero difference). Rust evaluates the minimal cut
    sets, C evaluates the tree (`eval_tree`); these agree for the monotone trees OpenFTA produces.
-9. **Basic event order** in C reports is alphabetical (`strcmp` insertion, `event_list.c:159-196`), Rust uses tree order. Cosmetic.
+9. **Basic event order. (RESOLVED: ported - `Tree::primary_event_ids` sorts by byte order, as `strcmp`; reports, importance,
+   cut-set lines, failure statistics, Monte Carlo and the GUI all use it. Text below describes the original discrepancy.)**
+   C reports are alphabetical (`strcmp` insertion, `event_list.c:159-196`), Rust used tree order. The order also decides which
+   event is the "first failure" in the Monte Carlo method, so per-seed Monte Carlo numbers changed with the fix.
 10. **Event database lookup**: C looks an event up in the PED of the *file in which it is first met* during traversal and uses
     probability 0.0 if that PED lacks it (`event_list.c:171-175, 539-554`). Rust merges all PEDs, main file first, first definition wins.
     Differs only when the same id has different values in different PEDs or is defined only in another file's PED.

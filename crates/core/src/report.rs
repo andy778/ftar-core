@@ -50,7 +50,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use crate::analysis::{CutSet, ProbabilityOptions, ProbabilityReport};
-use crate::model::{EventType, PrimaryEventDb, Tree};
+use crate::model::{PrimaryEventDb, Tree};
 use crate::montecarlo::{MonteCarloOptions, MonteCarloReport};
 
 // ------------------------------------------------------------------ helpers
@@ -69,15 +69,10 @@ pub fn fmt_e(x: f64) -> String {
     format!("{m}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
 }
 
-/// Primary event ids in tree order (the order of the original event list / bit positions).
+/// Primary event ids in the order of OpenFTA's event list (alphabetical, see
+/// [`Tree::primary_event_ids`]); reports list events in this order.
 pub fn primary_event_order(tree: &Tree) -> Vec<String> {
-    let mut ids: Vec<String> = Vec::new();
-    for n in tree.nodes() {
-        if (n.kind.is_primary() || n.kind == EventType::ConditionAnalysed) && !ids.contains(&n.id) {
-            ids.push(n.id.clone());
-        }
-    }
-    ids
+    tree.primary_event_ids()
 }
 
 /// Port of `BitPara`/`ParaGrow`: event ids (in `events` order) as lines of at

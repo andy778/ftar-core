@@ -265,3 +265,52 @@ fn probability_report_prints_the_order_limit_like_openfta() {
     );
     assert!(r.contains("(minimal cut sets up to order 2 used):"), "{r}");
 }
+
+/// OpenFTA lists primary events alphabetically (`strcmp`, `event_list.c`),
+/// not in tree order. lift.fta has them out of order (LMD_1 comes first).
+#[test]
+fn primary_events_are_listed_in_openfta_order() {
+    let p = Project::load(data("lift.fta")).unwrap();
+    let first_in_tree = p
+        .tree
+        .nodes()
+        .into_iter()
+        .find(|n| n.kind.is_primary())
+        .unwrap();
+    assert_eq!(first_in_tree.id, "LMD_1");
+
+    let ev = primary_event_order(&p.tree);
+    let mut sorted = ev.clone();
+    sorted.sort();
+    assert_eq!(ev, sorted);
+    // byte order, as strcmp: `S` sorts before `_`
+    let pos = |id: &str| ev.iter().position(|e| e == id).unwrap();
+    assert!(pos("DMS_1") < pos("DM_1"));
+
+    let rep = probability_report(&p.tree, &p.db, &ProbabilityOptions::default()).unwrap();
+    let ids: Vec<_> = rep.events.iter().map(|e| e.id.clone()).collect();
+    assert_eq!(ids, ev);
+
+    let mc = simulate(
+        &p.tree,
+        &p.db,
+        &MonteCarloOptions {
+            trials: 100,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let ids: Vec<_> = mc.event_failures.iter().map(|(id, _)| id.clone()).collect();
+    assert_eq!(ids, ev);
+}
+
+/// Within a cut set line the events follow the same order. theatre.fta has
+/// RELAY_FAIL before MAINS_FAIL in the tree.
+#[test]
+fn cut_set_lines_list_events_alphabetically() {
+    let p = Project::load(data("theatre.fta")).unwrap();
+    let cs = minimal_cut_sets(&p.tree).unwrap();
+    let r = cut_sets_report("theatre.fta", TIME, &primary_event_order(&p.tree), &cs);
+    assert!(r.contains(" MAINS_FAIL RELAY_FAIL"), "{r}");
+    assert!(!r.contains(" RELAY_FAIL MAINS_FAIL"), "{r}");
+}

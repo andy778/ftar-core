@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 use crate::analysis::{minimal_cut_sets, CutSet};
 use crate::error::{Error, Result};
-use crate::model::{EventType, PrimaryEventDb, Tree};
+use crate::model::{PrimaryEventDb, Tree};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Method {
@@ -113,12 +113,7 @@ pub fn simulate(
     opts: &MonteCarloOptions,
 ) -> Result<MonteCarloReport> {
     let sets = minimal_cut_sets(tree)?;
-    let mut ids: Vec<String> = Vec::new();
-    for n in tree.nodes() {
-        if (n.kind.is_primary() || n.kind == EventType::ConditionAnalysed) && !ids.contains(&n.id) {
-            ids.push(n.id.clone());
-        }
-    }
+    let ids = tree.primary_event_ids();
     let probs: Vec<f64> = ids
         .iter()
         .map(|id| {
