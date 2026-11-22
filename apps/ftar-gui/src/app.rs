@@ -13,7 +13,9 @@ use ftar_core::project::Document;
 use ftar_core::report::{self, ReportKind, ReportParams};
 use ftar_core::write::{write_fta_with, write_ped, LineEnding};
 use ftar_core::{EventType, PrimaryEvent, PrimaryEventDb, Tree};
-use ftar_render::{print_html, svg_to_png, tree_svg, PrintOptions, SvgOptions};
+use ftar_render::{
+    print_html_with, svg_to_png, tree_svg_with, Preferences, PrintOptions, SvgOptions,
+};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Tab {
@@ -74,6 +76,12 @@ impl Default for EventForm {
 }
 
 pub struct App {
+    /// Drawing colours and monochrome mode (Edit > Preferences).
+    pub prefs: Preferences,
+    /// Where `prefs` are saved between sessions (`None`: not persisted).
+    pub prefs_path: Option<PathBuf>,
+    /// The preferences window is shown.
+    pub prefs_open: bool,
     /// The primary event editor window is shown.
     pub events_open: bool,
     /// Help window (user guide and about page).
@@ -135,6 +143,9 @@ type UsageKey = (Option<PathBuf>, Option<String>, String);
 impl Default for App {
     fn default() -> Self {
         Self {
+            prefs: Preferences::default(),
+            prefs_path: None,
+            prefs_open: false,
             doc: None,
             history: History::new(),
             dirty: false,
@@ -796,6 +807,24 @@ impl App {
             .unwrap_or_default()
     }
 
+    // ------------------------------------------------------------ preferences
+
+    /// Load the saved preferences from `path` and keep saving there.
+    pub fn use_prefs_file(&mut self, path: PathBuf) {
+        self.prefs = Preferences::load(&path);
+        self.prefs_path = Some(path);
+    }
+
+    /// Replace the preferences and save them (when a file is set).
+    pub fn set_prefs(&mut self, prefs: Preferences) {
+        self.prefs = prefs;
+        if let Some(p) = &self.prefs_path {
+            if let Err(e) = self.prefs.save(p) {
+                self.error = Some(format!("could not save preferences {}: {e}", p.display()));
+            }
+        }
+    }
+
     // ------------------------------------------------- images and printing
 
     fn svg_options(&self) -> SvgOptions {
@@ -809,7 +838,12 @@ impl App {
     /// Draw the tree as shown in the editor (transfer gates stay as symbols) as SVG.
     pub fn svg_text(&self) -> Result<String, String> {
         let doc = self.doc.as_ref().ok_or("no tree open")?;
-        Ok(tree_svg(&doc.tree, &doc.db, &self.svg_options()))
+        Ok(tree_svg_with(
+            &doc.tree,
+            &doc.db,
+            &self.svg_options(),
+            &self.prefs,
+        ))
     }
 
     pub fn default_image_name(&self) -> String {
@@ -850,7 +884,7 @@ impl App {
         } else {
             None
         };
-        Ok(print_html(
+        Ok(print_html_with(
             &doc.tree,
             &doc.db,
             &PrintOptions {
@@ -859,6 +893,7 @@ impl App {
                 report,
                 auto_print,
             },
+            &self.prefs,
         ))
     }
 

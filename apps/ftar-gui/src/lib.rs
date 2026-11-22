@@ -8,6 +8,7 @@ mod help;
 pub use ftar_core::layout;
 pub use help::HelpState;
 mod ped;
+mod prefs_ui;
 mod ui;
 mod view;
 
@@ -27,6 +28,9 @@ pub fn run(path: Option<PathBuf>) -> eframe::Result {
         },
         Box::new(move |_cc| {
             let mut app = App::default();
+            if let Some(p) = ftar_render::Preferences::default_path() {
+                app.use_prefs_file(p);
+            }
             if let Some(p) = path {
                 app.open(p);
             }

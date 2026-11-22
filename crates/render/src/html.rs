@@ -3,7 +3,8 @@
 
 use ftar_core::{PrimaryEventDb, Tree};
 
-use crate::svg::{tree_svg, xml_escape, SvgOptions};
+use crate::prefs::Preferences;
+use crate::svg::{tree_svg_with, xml_escape, SvgOptions};
 
 #[derive(Debug, Clone, Default)]
 pub struct PrintOptions {
@@ -16,7 +17,17 @@ pub struct PrintOptions {
 }
 
 pub fn print_html(tree: &Tree, db: &PrimaryEventDb, opts: &PrintOptions) -> String {
-    let svg = tree_svg(
+    print_html_with(tree, db, opts, &Preferences::default())
+}
+
+/// Like [`print_html`], with the user's colours and monochrome mode.
+pub fn print_html_with(
+    tree: &Tree,
+    db: &PrimaryEventDb,
+    opts: &PrintOptions,
+    prefs: &Preferences,
+) -> String {
+    let svg = tree_svg_with(
         tree,
         db,
         &SvgOptions {
@@ -24,6 +35,7 @@ pub fn print_html(tree: &Tree, db: &PrimaryEventDb, opts: &PrintOptions) -> Stri
             probabilities: opts.probabilities,
             background: false,
         },
+        prefs,
     );
     let title = xml_escape(&opts.title);
     let mut h = String::new();

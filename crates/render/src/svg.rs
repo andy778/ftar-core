@@ -4,9 +4,10 @@
 use std::fmt::Write as _;
 
 use ftar_core::layout::{layout, Placed};
-use ftar_core::{EventType, PrimaryEventDb, Tree};
+use ftar_core::{PrimaryEventDb, Tree};
 
 use crate::symbols::{fit_text, node_text, symbol};
+use crate::prefs::{hex, Preferences};
 
 const NODE_W: f64 = 120.0;
 /// Size of one symbol unit (a basic event is one unit across).
@@ -99,23 +100,6 @@ pub fn wrap(text: &str, width: usize, max_lines: usize) -> Vec<String> {
     lines
 }
 
-fn fill(kind: EventType) -> &'static str {
-    use EventType::*;
-    match kind {
-        Basic => "#a8c4ea",
-        Dormant => "#bcbcec",
-        Undeveloped => "#ecd9a0",
-        External => "#a9d9bc",
-        And => "#e8a8a8",
-        Or => "#b0d6b0",
-        Xor | PriorityAnd | Inhibit => "#d8b4d8",
-        Intermediate => "#c8c8c8",
-        ConditionAnalysed | ConditionNotAnalysed => "#f0e0c0",
-        TransferIn | TransferOut => "#d0d0d0",
-        Unknown => "#dddddd",
-    }
-}
-
 fn text(out: &mut String, x: f64, y: f64, size: f64, anchor: &str, s: &str, bold: bool) {
     let _ = writeln!(
         out,
@@ -137,6 +121,17 @@ fn poly_points(pts: &[(f32, f32)], x: f64, y: f64) -> String {
 /// Symbols and labels come from [`crate::symbols`], so the picture matches the GUI canvas
 /// and OpenFTA: gate shapes with the id above, descriptions inside the boxes.
 pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
+    tree_svg_with(tree, db, opts, &Preferences::default())
+}
+
+/// Like [`tree_svg`], with the user's colours and monochrome mode.
+pub fn tree_svg_with(
+    tree: &Tree,
+    db: &PrimaryEventDb,
+    opts: &SvgOptions,
+    prefs: &Preferences,
+) -> String {
+    let pen = hex(prefs.pen_colour());
     let placed = layout(&tree.root);
     let (max_x, max_y) = placed.iter().fold((0.0f64, 0.0f64), |a, p| {
         (a.0.max(p.x as f64), a.1.max(p.y as f64))
@@ -162,7 +157,11 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
         h = height.ceil()
     );
     if opts.background {
-        let _ = writeln!(o, r##"<rect width="100%" height="100%" fill="#ffffff"/>"##);
+        let _ = writeln!(
+            o,
+            r#"<rect width="100%" height="100%" fill="{}"/>"#,
+            hex(prefs.background_colour())
+        );
     }
     if !opts.title.is_empty() {
         text(
@@ -189,10 +188,7 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
     }
 
     // connectors first, so shapes sit on top
-    let _ = writeln!(
-        o,
-        r##"<g fill="none" stroke="#555555" stroke-width="1.6">"##
-    );
+    let _ = writeln!(o, r#"<g fill="none" stroke="{pen}" stroke-width="1.6">"#);
     for p in &placed {
         if let Some(pi) = p.parent {
             let (ax, ay) = at(&placed[pi]);
@@ -212,7 +208,7 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
         let (x, y) = at(p);
         let sym = symbol(n.kind);
         let lab = node_text(n, db);
-        let stroke = r##"stroke="#444444" stroke-width="1.6""##;
+        let stroke = format!(r#"stroke="{pen}" stroke-width="1.6""#);
         let dash = if sym.dashed {
             r#" stroke-dasharray="5 3""#
         } else {
@@ -222,7 +218,7 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
             o,
             r#"<polygon points="{}" fill="{}" {stroke}{dash} stroke-linejoin="round"/>"#,
             poly_points(&sym.outline, x, y),
-            fill(n.kind)
+            hex(prefs.fill(n.kind))
         );
         for l in &sym.lines {
             let _ = writeln!(

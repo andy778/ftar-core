@@ -9,9 +9,11 @@
 
 pub mod html;
 pub mod png;
+pub mod prefs;
 pub mod svg;
 pub mod symbols;
 
-pub use html::{print_html, PrintOptions};
+pub use html::{print_html, print_html_with, PrintOptions};
 pub use png::{svg_to_png, RenderError};
-pub use svg::{tree_svg, SvgOptions};
+pub use prefs::{Preferences, Symbol};
+pub use svg::{tree_svg, tree_svg_with, SvgOptions};
