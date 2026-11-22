@@ -1,0 +1,48 @@
+[package]
+name = "ftar-fuzz"
+version = "0.0.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+
+# Not part of the main workspace: needs nightly and libFuzzer (cargo fuzz).
+[workspace]
+members = ["."]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ftar-core = { path = "../crates/core" }
+ftar-automation = { path = "../crates/automation" }
+ftar-mcp = { path = "../crates/mcp" }
+serde_json = "1"
+
+[[bin]]
+name = "parse_fta"
+path = "fuzz_targets/parse_fta.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_ped"
+path = "fuzz_targets/parse_ped.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "analysis"
+path = "fuzz_targets/analysis.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp"
+path = "fuzz_targets/mcp.rs"
+test = false
+doc = false
+bench = false
