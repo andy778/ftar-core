@@ -349,3 +349,96 @@ impl Document {
         Ok(Project { tree, db })
     }
 }
+
+/// Most `.fta` files [`trees_using_event`] reads in one directory.
+pub const MAX_TREES_SCANNED: usize = 10_000;
+
+/// A tree file that uses a primary event.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EventUse {
+    pub path: PathBuf,
+    /// How many of the tree's events have the id.
+    pub nodes: usize,
+}
+
+/// What [`trees_using_event`] found.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EventUsage {
+    /// Trees that use the event, sorted by file name.
+    pub trees: Vec<EventUse>,
+    /// `.fta` files that could not be read or parsed (also sorted).
+    pub skipped: Vec<PathBuf>,
+    /// The directory held more than [`MAX_TREES_SCANNED`] trees; the rest were not read.
+    pub truncated: bool,
+}
+
+/// The database file a tree in `dir` named `name` uses, made comparable.
+fn database_key(dir: &Path, name: Option<&str>) -> Option<PathBuf> {
+    let p = ped_save_path(dir, name.filter(|n| !n.is_empty())?);
+    Some(p.canonicalize().unwrap_or(p))
+}
+
+/// The `.fta` files in `dir` that use primary event `id` from the database
+/// `database` (a tree's database name, resolved against `dir` as on load;
+/// `None` for trees without one). A tree uses the event when one of its
+/// primary or condition events has the id and it takes its events from the
+/// same `.ped` file; an event of the same name in another database is a
+/// different event. Only the files themselves are read: a tree that reaches
+/// the event through a transfer-in is not listed, the transferred tree is.
+/// The files are read as stored on disk, so unsaved edits are not seen.
+pub fn trees_using_event(
+    dir: &Path,
+    id: &str,
+    database: Option<&str>,
+    opts: &LoadOptions,
+) -> Result<EventUsage> {
+    let io = |e: std::io::Error| Error::Io(format!("{}: {e}", dir.display()));
+    if let Some(root) = &opts.root {
+        if !dir.canonicalize().map_err(io)?.starts_with(root) {
+            return Err(Error::Io(format!(
+                "{}: outside the allowed directory",
+                dir.display()
+            )));
+        }
+    }
+    let want = database_key(dir, database);
+    let mut files = Vec::new();
+    let mut usage = EventUsage::default();
+    for entry in std::fs::read_dir(dir).map_err(io)? {
+        let p = entry.map_err(io)?.path();
+        let is_fta = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("fta"));
+        if is_fta && p.is_file() {
+            if files.len() == MAX_TREES_SCANNED {
+                usage.truncated = true;
+                break;
+            }
+            files.push(p);
+        }
+    }
+    files.sort();
+    for p in files {
+        let Ok(tree) = opts.read(&p).and_then(|b| parse_fta(&b)) else {
+            usage.skipped.push(p);
+            continue;
+        };
+        if database_key(dir, tree.db_name.as_deref()) != want {
+            continue;
+        }
+        let nodes = tree
+            .nodes()
+            .iter()
+            .filter(|n| {
+                n.id == id
+                    && (n.kind.is_primary()
+                        || matches!(
+                            n.kind,
+                            EventType::ConditionAnalysed | EventType::ConditionNotAnalysed
+                        ))
+            })
+            .count();
+        if nodes > 0 {
+            usage.trees.push(EventUse { path: p, nodes });
+        }
+    }
+    Ok(usage)
+}

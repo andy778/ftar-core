@@ -948,3 +948,41 @@ fn a_tree_can_use_a_shared_database_in_another_folder() {
     assert!(shared.contains("DOD_1;"));
     let _ = std::fs::remove_dir_all(base);
 }
+
+/// The event editor says which other trees in the folder use an event from
+/// the same database, and sees a new tree once it is saved.
+#[test]
+fn event_editor_lists_other_trees_that_use_the_event() {
+    let dir = scratch("usage");
+    for f in ["lift.fta", "lift.ped"] {
+        std::fs::copy(data(f), dir.join(f)).unwrap();
+    }
+    let mut app = App::default();
+    app.open(dir.join("lift.fta"));
+    assert_eq!(
+        app.other_trees_using("DOD_1"),
+        "Not used by other trees in this folder"
+    );
+
+    std::fs::copy(data("lift.fta"), dir.join("lift_b.fta")).unwrap();
+    // answers are cached until the tree is saved (or another one opened)
+    assert!(app.other_trees_using("DOD_1").starts_with("Not used"));
+    app.save().unwrap();
+    assert_eq!(
+        app.other_trees_using("DOD_1"),
+        "Also used by lift_b.fta (2 times)"
+    );
+    assert!(app.other_trees_using("NO_SUCH").starts_with("Not used"));
+
+    // shown in the editor for the loaded event
+    app.events_open = true;
+    app.event_form_load("DOD_1");
+    let mut h = harness_for(app);
+    h.run();
+    h.get_by_label("Also used by lift_b.fta (2 times)");
+
+    let mut fresh = App::default();
+    fresh.new_doc();
+    assert!(fresh.other_trees_using("X").starts_with("Save the tree"));
+    let _ = std::fs::remove_dir_all(dir);
+}

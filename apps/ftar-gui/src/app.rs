@@ -116,7 +116,11 @@ pub struct App {
     pub cut_sets: Option<Vec<CutSet>>,
     pub prob: Option<ProbabilityReport>,
     pub mc: Option<MonteCarloReport>,
+    /// Last answer of [`App::other_trees_using`]: (tree file, database, event id) and the text.
+    usage_cache: Option<(UsageKey, String)>,
 }
+
+type UsageKey = (Option<PathBuf>, Option<String>, String);
 
 impl Default for App {
     fn default() -> Self {
@@ -154,6 +158,7 @@ impl Default for App {
             cut_sets: None,
             prob: None,
             mc: None,
+            usage_cache: None,
         }
     }
 }
@@ -175,6 +180,7 @@ impl App {
         self.mc = None;
         self.fit_next = true;
         self.error = None;
+        self.usage_cache = None;
     }
 
     /// Start a new empty tree (asks first when there are unsaved changes).
@@ -307,6 +313,7 @@ impl App {
             Ok(w) => {
                 doc.path = Some(path);
                 self.dirty = false;
+                self.usage_cache = None;
                 self.error = None;
                 self.status = Some(format!(
                     "Saved {}",
@@ -602,6 +609,72 @@ impl App {
             (false, Some(n)) => format!("Not in database {n} yet - edit a value to add it"),
             (false, None) => "Not in a database yet - edit a value to add it".into(),
         }
+    }
+
+    /// Text shown with an event: the other tree files in this tree's folder
+    /// that use it from the same database (as saved on disk). Read once per
+    /// event, database and file, and again after a save.
+    pub fn other_trees_using(&mut self, id: &str) -> String {
+        let Some(doc) = self.doc.as_ref() else {
+            return String::new();
+        };
+        let key = (doc.path.clone(), doc.tree.db_name.clone(), id.to_string());
+        if let Some((k, text)) = &self.usage_cache {
+            if *k == key {
+                return text.clone();
+            }
+        }
+        let text = Self::usage_text(doc, id);
+        self.usage_cache = Some((key, text.clone()));
+        text
+    }
+
+    fn usage_text(doc: &Document, id: &str) -> String {
+        let Some(path) = doc.path.as_deref() else {
+            return "Save the tree to see which other trees use this event".into();
+        };
+        let usage = match ftar_core::project::trees_using_event(
+            &doc.dir(),
+            id,
+            doc.tree.db_name.as_deref(),
+            &ftar_core::project::LoadOptions::default(),
+        ) {
+            Ok(u) => u,
+            Err(e) => return format!("Could not look for other trees: {e}"),
+        };
+        let me = path.canonicalize().ok();
+        let names: Vec<String> = usage
+            .trees
+            .iter()
+            .filter(|t| t.path.canonicalize().ok() != me)
+            .map(|t| {
+                let name = t
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                if t.nodes > 1 {
+                    format!("{name} ({} times)", t.nodes)
+                } else {
+                    name
+                }
+            })
+            .collect();
+        let mut text = if names.is_empty() {
+            "Not used by other trees in this folder".to_string()
+        } else {
+            format!("Also used by {}", names.join(", "))
+        };
+        if usage.truncated {
+            text.push_str(" (folder has too many trees; not all were read)");
+        }
+        if !usage.skipped.is_empty() {
+            text.push_str(&format!(
+                " ({} unreadable tree file(s) skipped)",
+                usage.skipped.len()
+            ));
+        }
+        text
     }
 
     pub fn set_text(&mut self, text: &str) {

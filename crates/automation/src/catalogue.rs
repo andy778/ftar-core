@@ -64,6 +64,8 @@ pub fn tools() -> Vec<ToolInfo> {
                       "description": {"type":"string"}, "rate": {"type":"boolean"}, "dormant": {"type":"boolean"}, "kind": kind }), &["id", "probability"])),
         t("event_delete", "Remove a primary event from the database (undoable). Reports how many tree nodes still use the id.",
           obj(json!({ "doc": doc, "id": {"type":"string"} }), &["id"])),
+        t("event_usage", "Which tree files in the document's folder use primary event `id` from the same database (.ped). Files are read as saved; the open document itself is reported separately from memory. Transfer-in trees count only for the file that holds the event.",
+          obj(json!({ "doc": doc, "id": {"type":"string"} }), &["id"])),
         t("analysis_cutsets", "Minimal cut sets, sorted by order.",
           obj(json!({ "doc": doc, "max_order": order }), &[])),
         t("analysis_probability", "Cut-set probabilities, top-event probability (inclusion-exclusion with bounds) and event importance.",
