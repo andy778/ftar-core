@@ -1,0 +1,38 @@
+name: Fuzzing
+
+# ClusterFuzzLite runs the cargo-fuzz targets in fuzz/ (see fuzz/README.md).
+# * pull requests: fuzz the change for 5 minutes, with AddressSanitizer
+# * weekly / manual: a longer batch run
+on:
+  pull_request:
+  schedule:
+    - cron: "11 2 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cflite-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fuzz:
+    name: ClusterFuzzLite (${{ github.event_name == 'pull_request' && 'code-change' || 'batch' }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build fuzzers
+        id: build
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: rust
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: ${{ github.event_name == 'pull_request' && 'code-change' || 'batch' }}
+          fuzz-seconds: ${{ github.event_name == 'pull_request' && 300 || 1800 }}
+          sanitizer: address
+          output-sarif: false
