@@ -147,6 +147,10 @@ impl App {
                         ui.close();
                         self.events_open = true;
                     }
+                    if ui.button("Preferences...").clicked() {
+                        ui.close();
+                        self.prefs_open = true;
+                    }
                     ui.separator();
                     let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
                     if ui
@@ -874,6 +878,7 @@ impl eframe::App for App {
         self.status_bar(ui);
         self.details_panel(ui);
         self.events_window(ui.ctx());
+        self.prefs_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(doc) = &self.doc else {
@@ -923,16 +928,18 @@ impl eframe::App for App {
                 origin + Vec2::new(p.x * GAP_X + NODE_W / 2.0, p.y * GAP_Y + NODE_H / 2.0) * z
             };
 
-            let dark = ctx.global_style().visuals.dark_mode;
-            let line = Stroke::new(
-                1.5 * z.max(0.5),
-                if dark {
-                    Color32::GRAY
-                } else {
-                    Color32::DARK_GRAY
-                },
-            );
-            let text_col = if dark { Color32::WHITE } else { Color32::BLACK };
+            let pen = rgb32(self.prefs.pen_colour());
+            let bg = rgb32(self.prefs.background_colour());
+            painter.rect_filled(rect, 0.0, bg);
+            let line = Stroke::new(1.5 * z.max(0.5), pen);
+            let lum =
+                |c: Color32| 0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32;
+            let text_col = if lum(bg) < 128.0 {
+                Color32::WHITE
+            } else {
+                Color32::BLACK
+            };
+            let highlight = rgb32(self.prefs.highlight_colour());
 
             // edges (elbow connectors)
             for p in &placed {
@@ -957,9 +964,9 @@ impl eframe::App for App {
                     continue;
                 }
                 let sel = self.selected.as_ref() == Some(&p.path);
-                let (fill, label) = node_style(p.node, dark);
+                let (fill, label) = node_style(p.node, &self.prefs);
                 let stroke = if sel {
-                    Stroke::new(3.0, Color32::from_rgb(255, 170, 0))
+                    Stroke::new(3.0, highlight)
                 } else {
                     line
                 };
@@ -1059,24 +1066,12 @@ impl eframe::App for App {
     }
 }
 
-fn node_style(n: &ftar_core::Node, dark: bool) -> (Color32, String) {
-    use EventType::*;
-    let (r, g, b) = match n.kind {
-        Basic => (70, 130, 200),
-        Dormant => (110, 110, 200),
-        Undeveloped => (200, 160, 60),
-        External => (90, 170, 120),
-        And => (200, 90, 90),
-        Or => (90, 150, 90),
-        Xor | PriorityAnd | Inhibit => (170, 100, 170),
-        Intermediate => (120, 120, 120),
-        _ => (150, 150, 150),
-    };
-    let fill = if dark {
-        Color32::from_rgb(r / 2, g / 2, b / 2)
-    } else {
-        Color32::from_rgb(r / 2 + 128, g / 2 + 128, b / 2 + 128)
-    };
+fn rgb32(c: ftar_render::prefs::Rgb) -> Color32 {
+    Color32::from_rgb(c[0], c[1], c[2])
+}
+
+fn node_style(n: &ftar_core::Node, prefs: &ftar_render::Preferences) -> (Color32, String) {
+    let fill = rgb32(prefs.fill(n.kind));
     let label = if n.kind.is_gate() {
         gate_label(n.kind).to_string()
     } else {

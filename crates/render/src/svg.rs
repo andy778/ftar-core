@@ -6,6 +6,8 @@ use std::fmt::Write as _;
 use ftar_core::layout::{layout, Placed};
 use ftar_core::{EventType, PrimaryEventDb, Tree};
 
+use crate::prefs::{hex, Preferences};
+
 const NODE_W: f64 = 120.0;
 const NODE_H: f64 = 56.0;
 const GAP_X: f64 = 140.0;
@@ -94,23 +96,6 @@ pub fn wrap(text: &str, width: usize, max_lines: usize) -> Vec<String> {
     lines
 }
 
-fn fill(kind: EventType) -> &'static str {
-    use EventType::*;
-    match kind {
-        Basic => "#a8c4ea",
-        Dormant => "#bcbcec",
-        Undeveloped => "#ecd9a0",
-        External => "#a9d9bc",
-        And => "#e8a8a8",
-        Or => "#b0d6b0",
-        Xor | PriorityAnd | Inhibit => "#d8b4d8",
-        Intermediate => "#c8c8c8",
-        ConditionAnalysed | ConditionNotAnalysed => "#f0e0c0",
-        TransferIn | TransferOut => "#d0d0d0",
-        Unknown => "#dddddd",
-    }
-}
-
 fn gate_label(kind: EventType) -> &'static str {
     use EventType::*;
     match kind {
@@ -144,6 +129,17 @@ fn text(out: &mut String, x: f64, y: f64, size: f64, anchor: &str, s: &str, bold
 
 /// Draw `tree` as an SVG document. `db` supplies probabilities and descriptions.
 pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
+    tree_svg_with(tree, db, opts, &Preferences::default())
+}
+
+/// Like [`tree_svg`], with the user's colours and monochrome mode.
+pub fn tree_svg_with(
+    tree: &Tree,
+    db: &PrimaryEventDb,
+    opts: &SvgOptions,
+    prefs: &Preferences,
+) -> String {
+    let pen = hex(prefs.pen_colour());
     let placed = layout(&tree.root);
     let (max_x, max_y) = placed.iter().fold((0.0f64, 0.0f64), |a, p| {
         (a.0.max(p.x as f64), a.1.max(p.y as f64))
@@ -169,7 +165,11 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
         h = height.ceil()
     );
     if opts.background {
-        let _ = writeln!(o, r##"<rect width="100%" height="100%" fill="#ffffff"/>"##);
+        let _ = writeln!(
+            o,
+            r#"<rect width="100%" height="100%" fill="{}"/>"#,
+            hex(prefs.background_colour())
+        );
     }
     if !opts.title.is_empty() {
         text(
@@ -196,10 +196,7 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
     }
 
     // connectors first, so shapes sit on top
-    let _ = writeln!(
-        o,
-        r##"<g fill="none" stroke="#555555" stroke-width="1.6">"##
-    );
+    let _ = writeln!(o, r#"<g fill="none" stroke="{pen}" stroke-width="1.6">"#);
     for p in &placed {
         if let Some(pi) = p.parent {
             let (ax, ay) = c(&placed[pi]);
@@ -226,8 +223,8 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
     for p in &placed {
         let n = p.node;
         let (x, y) = c(p);
-        let f = fill(n.kind);
-        let stroke = r##"stroke="#444444" stroke-width="1.6""##;
+        let f = hex(prefs.fill(n.kind));
+        let stroke = format!(r#"stroke="{pen}" stroke-width="1.6""#);
         use EventType::*;
         // first free text baseline under the shape (NaN: no label)
         let label_y: f64 = match n.kind {
