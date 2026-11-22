@@ -11,11 +11,7 @@ all-features = true
 # are for upstream to replace.
 unmaintained = "workspace"
 yanked = "deny"
-ignore = [
-    # chrono is used only for the report timestamp in ftar-gui.
-    # Replacing it is tracked in #36; remove this entry when done.
-    { id = "RUSTSEC-2026-0543", reason = "chrono only formats a local timestamp in ftar-gui; replacement tracked in #36" },
-]
+ignore = []
 
 [licenses]
 # ftar is GPL-2.0-or-later (AGENTS.md §1): every dependency must be
