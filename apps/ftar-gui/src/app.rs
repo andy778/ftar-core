@@ -965,11 +965,10 @@ impl App {
             .map_err(|e| e.to_string())
     }
 
-    /// Timestamp for report headers, in the style of C's `ctime`.
+    /// Timestamp for report headers, in the style of C's `ctime`, local time.
+    /// Falls back to UTC when the system time zone cannot be determined.
     pub fn now_text() -> String {
-        chrono::Local::now()
-            .format("%a %b %e %H:%M:%S %Y")
-            .to_string()
+        ctime_text(&jiff::ZonedDateTime::now())
     }
 
     /// Write the selected report to `path`.
@@ -1048,4 +1047,9 @@ fn csv_field(s: &str) -> String {
     } else {
         s.to_string()
     }
+}
+
+/// Format like C's `ctime` without the trailing newline: `"Mon Jan  1 12:00:00 2024"`.
+pub fn ctime_text(t: &jiff::ZonedDateTime) -> String {
+    t.strftime("%a %b %e %H:%M:%S %Y").to_string()
 }
