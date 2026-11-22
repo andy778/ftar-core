@@ -863,7 +863,7 @@ impl App {
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("status").show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if let Some(e) = &self.error {
                     ui.colored_label(Color32::LIGHT_RED, e);
                 } else if let Some(s) = &self.status {
@@ -925,7 +925,7 @@ impl App {
             let Some(node) = self.selected_node().cloned() else {
                 ui.label("Click a node to edit it. Scroll to zoom, drag to pan.");
                 if self.doc.is_some() {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label("Nothing selected: new nodes go under the top event.");
                         self.add_controls(ui, true);
                     });
