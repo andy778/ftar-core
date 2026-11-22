@@ -27,6 +27,10 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (rules in [AGENTS.md](AGENTS.md)) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Releases
 
 Pushing a tag `vX.Y.Z` (it must equal the `ftar-cli` version in `Cargo.toml`) runs `.github/workflows/release.yml`:
