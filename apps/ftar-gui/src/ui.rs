@@ -40,6 +40,20 @@ impl App {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         // keyboard shortcuts
+        let (zoom_in, zoom_out) = ctx.input_mut(|i| {
+            (
+                i.consume_key(Modifiers::COMMAND, Key::Plus)
+                    || i.consume_key(Modifiers::COMMAND, Key::Equals),
+                i.consume_key(Modifiers::COMMAND, Key::Minus),
+            )
+        });
+        if self.doc.is_some() {
+            if zoom_in {
+                self.zoom_in();
+            } else if zoom_out {
+                self.zoom_out();
+            }
+        }
         let (save, undo, redo, del, new, open, print) = ctx.input_mut(|i| {
             (
                 i.consume_key(Modifiers::COMMAND, Key::S),
@@ -174,9 +188,60 @@ impl App {
                 {
                     self.redo();
                 }
+                ui.menu_button("View", |ui| {
+                    let shortcut = |k| {
+                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                    };
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.overview_open = true;
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_in();
+                    }
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_out();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.set_zoom_percent = self.zoom_percent() as f32;
+                        self.set_zoom_open = true;
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.fit_next = true;
+                    }
+                });
                 ui.separator();
                 if ui.button("Fit").clicked() {
                     self.fit_next = true;
+                }
+                if has_doc {
+                    ui.label(format!("{}%", self.zoom_percent()));
                 }
                 ui.label(self.title());
                 if has_doc {
@@ -295,6 +360,97 @@ impl App {
 
     /// The primary event editor, laid out like OpenPED: the events on the left,
     /// the selected event's fields on the right, Apply / Clear / Delete below.
+    /// View > Set Zoom: OpenFTA's preset percentages, or any value.
+    fn set_zoom_window(&mut self, ctx: &egui::Context) {
+        if !self.set_zoom_open || self.doc.is_none() {
+            return;
+        }
+        let mut open = true;
+        let mut apply = false;
+        egui::Window::new("Set Zoom")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    for p in [25.0, 50.0, 100.0, 150.0, 200.0] {
+                        if ui
+                            .selectable_label(self.set_zoom_percent == p, format!("{p}%"))
+                            .clicked()
+                        {
+                            self.set_zoom_percent = p;
+                            apply = true;
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("zoom");
+                    let r = ui.add(
+                        egui::DragValue::new(&mut self.set_zoom_percent)
+                            .range(App::ZOOM_RANGE.0 * 100.0..=App::ZOOM_RANGE.1 * 100.0)
+                            .suffix("%"),
+                    );
+                    if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                        apply = true;
+                    }
+                    if ui.button("Apply").clicked() {
+                        apply = true;
+                    }
+                });
+            });
+        if apply {
+            self.set_zoom(self.set_zoom_percent / 100.0);
+        }
+        self.set_zoom_open = open;
+    }
+
+    /// View > Tree Overview: the whole tree, with the part the canvas shows
+    /// outlined; click or drag to move the view there.
+    fn overview_window(&mut self, ctx: &egui::Context) {
+        if !self.overview_open {
+            return;
+        }
+        let Some(scene) = self.scene() else {
+            self.overview_open = false;
+            return;
+        };
+        let mut open = true;
+        let mut target = None;
+        egui::Window::new("Tree Overview")
+            .open(&mut open)
+            .default_size([300.0, 200.0])
+            .resizable(true)
+            .show(ctx, |ui| {
+                let size = ui.available_size().max(Vec2::new(120.0, 80.0));
+                let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
+                let r = resp.rect;
+                let z = (r.width() / scene.width).min(r.height() / scene.height);
+                let origin = r.center() - Vec2::new(scene.width, scene.height) * z / 2.0;
+                paint_scene(&painter.with_clip_rect(r), &scene, origin, z, None);
+                let seen = self.visible_world();
+                let frame = Rect::from_min_max(
+                    origin + seen.min.to_vec2() * z,
+                    origin + seen.max.to_vec2() * z,
+                )
+                .intersect(r);
+                painter.rect_stroke(
+                    frame,
+                    0.0,
+                    Stroke::new(2.0, Color32::from_rgb(0, 120, 215)),
+                    egui::StrokeKind::Inside,
+                );
+                if resp.clicked() || resp.dragged() {
+                    if let Some(p) = resp.interact_pointer_pos() {
+                        target = Some((p - origin) / z);
+                    }
+                }
+            });
+        if let Some(w) = target {
+            self.centre_on(w);
+        }
+        self.overview_open = open;
+    }
+
     fn events_window(&mut self, ctx: &egui::Context) {
         if !self.events_open {
             return;
@@ -950,6 +1106,8 @@ impl eframe::App for App {
         self.status_bar(ui);
         self.details_panel(ui);
         self.events_window(ui.ctx());
+        self.set_zoom_window(ui.ctx());
+        self.overview_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(scene) = self.scene() else {
