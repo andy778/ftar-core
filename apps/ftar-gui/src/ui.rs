@@ -10,6 +10,7 @@ use ftar_core::EventType;
 
 use crate::app::{App, Pending, Tab};
 use crate::layout;
+use ftar_render::symbols::{fit_text, header_lines, node_text, symbol};
 
 const GATES: &[EventType] = &[
     EventType::And,
@@ -611,24 +612,15 @@ fn kind_name(k: EventType) -> &'static str {
     }
 }
 
-fn gate_label(k: EventType) -> &'static str {
-    use EventType::*;
-    match k {
-        And => "AND",
-        Or => "OR",
-        Xor => "XOR",
-        PriorityAnd => "PAND",
-        Inhibit => "INH",
-        _ => "",
-    }
-}
-
-const NODE_W: f32 = 96.0;
-const NODE_H: f32 = 56.0;
-const GAP_X: f32 = 104.0;
+const NODE_W: f32 = 116.0;
+/// Size of one symbol unit: a basic event is this wide.
+const SYM_U: f32 = 88.0;
+/// Room above a row for ids.
+const ID_SPACE: f32 = 16.0;
+const GAP_X: f32 = 124.0;
 const GAP_Y: f32 = 96.0;
 /// Room under a node for its caption, in tree units.
-const CAPTION: f32 = 24.0;
+const CAPTION: f32 = 18.0;
 /// Empty border around the fitted tree, in screen pixels.
 const MARGIN: f32 = 12.0;
 
@@ -636,7 +628,7 @@ const MARGIN: f32 = 12.0;
 fn content_size(max_x: f32, max_y: f32) -> Vec2 {
     Vec2::new(
         (max_x * GAP_X + NODE_W).max(1.0),
-        (max_y * GAP_Y + NODE_H + CAPTION).max(1.0),
+        (max_y * GAP_Y + ID_SPACE + SYM_U + CAPTION).max(1.0),
     )
 }
 
@@ -919,8 +911,9 @@ impl eframe::App for App {
             }
             let origin = rect.min + self.pan;
             let z = self.zoom;
-            let centre = |p: &layout::Placed| {
-                origin + Vec2::new(p.x * GAP_X + NODE_W / 2.0, p.y * GAP_Y + NODE_H / 2.0) * z
+            // centre column and top of a node's symbol
+            let anchor = |p: &layout::Placed| {
+                origin + Vec2::new(p.x * GAP_X + NODE_W / 2.0, p.y * GAP_Y + ID_SPACE) * z
             };
 
             let dark = ctx.global_style().visuals.dark_mode;
@@ -934,11 +927,12 @@ impl eframe::App for App {
             );
             let text_col = if dark { Color32::WHITE } else { Color32::BLACK };
 
-            // edges (elbow connectors)
+            // edges (elbow connectors), from the bottom of a symbol to the top of the next
             for p in &placed {
                 if let Some(pi) = p.parent {
-                    let a = centre(&placed[pi]) + Vec2::new(0.0, NODE_H / 2.0 * z);
-                    let b = centre(p) - Vec2::new(0.0, NODE_H / 2.0 * z);
+                    let a = anchor(&placed[pi])
+                        + Vec2::new(0.0, symbol(placed[pi].node.kind).depth * SYM_U * z);
+                    let b = anchor(p);
                     let mid = (a.y + b.y) / 2.0;
                     painter.add(Shape::line(
                         vec![a, Pos2::new(a.x, mid), Pos2::new(b.x, mid), b],
@@ -947,95 +941,89 @@ impl eframe::App for App {
                 }
             }
 
-            // nodes
+            // nodes: OpenFTA's symbols, id above, description inside
             let mut clicked: Option<Vec<usize>> = None;
             let mut hit_any = false;
             for p in placed.iter() {
-                let c = centre(p);
-                let r = Rect::from_center_size(c, Vec2::new(NODE_W, NODE_H) * z);
-                if !r.intersects(rect) {
+                let n = p.node;
+                let sym = symbol(n.kind);
+                let top = anchor(p);
+                let r = Rect::from_min_size(
+                    top - Vec2::new(sym.width * SYM_U / 2.0 * z, 0.0),
+                    Vec2::new(sym.width, sym.depth) * SYM_U * z,
+                );
+                // room for the id above and the probability below
+                if !r.expand(20.0 * z).intersects(rect) {
                     continue;
                 }
                 let sel = self.selected.as_ref() == Some(&p.path);
-                let (fill, label) = node_style(p.node, dark);
+                let fill = node_fill(n.kind, dark);
                 let stroke = if sel {
                     Stroke::new(3.0, Color32::from_rgb(255, 170, 0))
                 } else {
                     line
                 };
-                let n = p.node;
-                match n.kind {
-                    EventType::Basic | EventType::Dormant => {
-                        let rad = (NODE_H / 2.0 - 6.0) * z;
-                        painter.circle(c + Vec2::new(0.0, 0.0), rad, fill, stroke);
-                    }
-                    EventType::Undeveloped => {
-                        let (w, h) = (NODE_H * 0.6 * z, NODE_H * 0.45 * z);
-                        painter.add(Shape::convex_polygon(
-                            vec![
-                                c + Vec2::new(0.0, -h),
-                                c + Vec2::new(w, 0.0),
-                                c + Vec2::new(0.0, h),
-                                c + Vec2::new(-w, 0.0),
-                            ],
-                            fill,
-                            stroke,
-                        ));
-                    }
-                    EventType::External => {
-                        let (w, h) = (NODE_H * 0.5 * z, NODE_H * 0.45 * z);
-                        painter.add(Shape::convex_polygon(
-                            vec![
-                                c + Vec2::new(0.0, -h),
-                                c + Vec2::new(w, 0.0),
-                                c + Vec2::new(w, h),
-                                c + Vec2::new(-w, h),
-                                c + Vec2::new(-w, 0.0),
-                            ],
-                            fill,
-                            stroke,
-                        ));
-                    }
-                    k if k.is_gate() => {
-                        let rr =
-                            Rect::from_center_size(c, Vec2::new(NODE_H * 0.9, NODE_H * 0.55) * z);
-                        painter.rect(rr, 14.0 * z, fill, stroke, egui::StrokeKind::Middle);
-                    }
-                    _ => {
-                        let rr = Rect::from_center_size(c, Vec2::new(NODE_W, NODE_H * 0.8) * z);
-                        painter.rect(rr, 3.0 * z, fill, stroke, egui::StrokeKind::Middle);
-                    }
+                let to_screen = |pt: &(f32, f32)| top + Vec2::new(pt.0, pt.1) * SYM_U * z;
+                for piece in &sym.fills {
+                    painter.add(Shape::convex_polygon(
+                        piece.iter().map(to_screen).collect(),
+                        fill,
+                        Stroke::NONE,
+                    ));
+                }
+                let outline: Vec<Pos2> = sym.outline.iter().map(to_screen).collect();
+                if sym.dashed {
+                    let mut closed = outline;
+                    closed.extend(closed.first().copied());
+                    painter.extend(Shape::dashed_line(
+                        &closed,
+                        stroke,
+                        6.0 * z.max(0.5),
+                        4.0 * z.max(0.5),
+                    ));
+                } else {
+                    painter.add(Shape::closed_line(outline, stroke));
+                }
+                for l in &sym.lines {
+                    painter.add(Shape::line(l.iter().map(to_screen).collect(), stroke));
                 }
                 if z > 0.22 {
-                    let fs = (12.0 * z).clamp(7.0, 22.0);
-                    painter.text(
-                        c,
-                        Align2::CENTER_CENTER,
-                        label,
-                        FontId::proportional(fs),
-                        text_col,
-                    );
-                    // text for intermediate events / ids under basic events
-                    let cap = match n.kind {
-                        EventType::Intermediate => n.text.as_str(),
-                        _ => "",
-                    };
-                    if !cap.is_empty() {
-                        let fs = (10.0 * z).clamp(7.0, 16.0);
-                        // keep captions inside their column so neighbours don't overlap
-                        let max = ((GAP_X * z - 4.0) / (fs * 0.5)).floor().max(4.0) as usize;
-                        let short: String = if cap.chars().count() > max {
-                            cap.chars()
-                                .take(max - 1)
-                                .chain(std::iter::once('…'))
-                                .collect()
-                        } else {
-                            cap.to_string()
-                        };
+                    let lab = node_text(n, &doc.db);
+                    let fs = (11.0 * z).clamp(7.0, 22.0);
+                    if !lab.id.is_empty() {
                         painter.text(
-                            c + Vec2::new(0.0, NODE_H * 0.5 * z + 2.0),
+                            top + Vec2::new(5.0 * z, -3.0 * z),
+                            Align2::LEFT_BOTTOM,
+                            &lab.id,
+                            FontId::proportional(fs),
+                            text_col,
+                        );
+                    }
+                    let (tw, th) = sym.text_size;
+                    if tw > 0.0 && !lab.inside.is_empty() {
+                        let (lines, font) = fit_text(&lab.inside, tw * SYM_U, th * SYM_U, 9.0);
+                        let fsz = font * z;
+                        // too small to read: leave the box empty rather than draw mush
+                        if fsz >= 3.5 {
+                            let lh = fsz * 1.2;
+                            let cy = top.y + sym.text_centre.1 * SYM_U * z;
+                            let y0 = cy - lh * lines.len() as f32 / 2.0;
+                            for (i, l) in lines.iter().enumerate() {
+                                painter.text(
+                                    Pos2::new(top.x, y0 + i as f32 * lh),
+                                    Align2::CENTER_TOP,
+                                    l,
+                                    FontId::proportional(fsz),
+                                    text_col,
+                                );
+                            }
+                        }
+                    }
+                    if let Some(pt) = &lab.prob {
+                        painter.text(
+                            top + Vec2::new(0.0, (sym.depth * SYM_U + 2.0) * z),
                             Align2::CENTER_TOP,
-                            short,
+                            pt,
                             FontId::proportional((10.0 * z).clamp(7.0, 16.0)),
                             text_col,
                         );
@@ -1050,6 +1038,21 @@ impl eframe::App for App {
                     }
                 }
             }
+            // header, as in the top-left corner of OpenFTA's canvas
+            let header = header_lines(
+                &self.tree_name(),
+                doc.tree.db_name.as_deref(),
+                &doc.tree.note,
+            );
+            for (i, l) in header.iter().enumerate() {
+                painter.text(
+                    rect.min + Vec2::new(8.0, 6.0 + 14.0 * i as f32),
+                    Align2::LEFT_TOP,
+                    l,
+                    FontId::proportional(12.0),
+                    text_col,
+                );
+            }
             if resp.clicked() {
                 let _ = hit_any;
                 self.selected = clicked;
@@ -1059,9 +1062,9 @@ impl eframe::App for App {
     }
 }
 
-fn node_style(n: &ftar_core::Node, dark: bool) -> (Color32, String) {
+fn node_fill(kind: EventType, dark: bool) -> Color32 {
     use EventType::*;
-    let (r, g, b) = match n.kind {
+    let (r, g, b) = match kind {
         Basic => (70, 130, 200),
         Dormant => (110, 110, 200),
         Undeveloped => (200, 160, 60),
@@ -1072,17 +1075,11 @@ fn node_style(n: &ftar_core::Node, dark: bool) -> (Color32, String) {
         Intermediate => (120, 120, 120),
         _ => (150, 150, 150),
     };
-    let fill = if dark {
+    if dark {
         Color32::from_rgb(r / 2, g / 2, b / 2)
     } else {
         Color32::from_rgb(r / 2 + 128, g / 2 + 128, b / 2 + 128)
-    };
-    let label = if n.kind.is_gate() {
-        gate_label(n.kind).to_string()
-    } else {
-        n.id.clone()
-    };
-    (fill, label)
+    }
 }
 
 /// Open a file with the system's default application (the browser, for HTML).
