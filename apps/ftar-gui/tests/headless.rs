@@ -14,8 +14,23 @@ use ftar_gui::{App, Pending, Tab};
 
 const DATA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../crates/core/tests/data");
 
+/// A fixture file, copied (with its siblings) into a fresh temp directory so
+/// analyses that write report files beside the tree never touch the repo.
 fn data(name: &str) -> PathBuf {
-    PathBuf::from(DATA).join(name)
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "ftar_gui_data_{}_{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    for e in std::fs::read_dir(DATA).unwrap().flatten() {
+        if e.path().is_file() {
+            let _ = std::fs::copy(e.path(), dir.join(e.file_name()));
+        }
+    }
+    dir.join(name)
 }
 
 fn scratch(name: &str) -> PathBuf {
