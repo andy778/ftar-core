@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use ftar_core::layout::{layout, Placed};
 use ftar_core::{PrimaryEventDb, Tree};
 
-use crate::symbols::{fit_text, node_text, symbol};
 use crate::prefs::{hex, Preferences};
+use crate::symbols::{fit_text, node_text, symbol};
 
 const NODE_W: f64 = 120.0;
 /// Size of one symbol unit (a basic event is one unit across).

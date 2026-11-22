@@ -236,7 +236,14 @@ pub fn print_pages(
     probabilities: bool,
     setup: &PageSetup,
 ) -> Vec<String> {
-    print_pages_with(tree, db, title, probabilities, setup, &Preferences::default())
+    print_pages_with(
+        tree,
+        db,
+        title,
+        probabilities,
+        setup,
+        &Preferences::default(),
+    )
 }
 
 /// Like [`print_pages`], with the user's colours and monochrome mode.

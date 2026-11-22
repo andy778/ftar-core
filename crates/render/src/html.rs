@@ -31,14 +31,7 @@ pub fn print_html_with(
     opts: &PrintOptions,
     prefs: &Preferences,
 ) -> String {
-    let pages = print_pages_with(
-        tree,
-        db,
-        &opts.title,
-        opts.probabilities,
-        &opts.page,
-        prefs,
-    );
+    let pages = print_pages_with(tree, db, &opts.title, opts.probabilities, &opts.page, prefs);
     let title = xml_escape(&opts.title);
     let (sw, sh) = opts.page.sheet_mm();
     let m = opts.page.content_margin();

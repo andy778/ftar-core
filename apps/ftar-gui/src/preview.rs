@@ -3,7 +3,9 @@
 //! printed sheet before printing. The layout itself is `ftar_render::page`.
 
 use eframe::egui;
-use ftar_render::{print_pages_with, svg_to_rgba, Fit, Orientation, PageSetup, PageSize, MAX_PAGES};
+use ftar_render::{
+    print_pages_with, svg_to_rgba, Fit, Orientation, PageSetup, PageSize, MAX_PAGES,
+};
 
 use crate::app::App;
 

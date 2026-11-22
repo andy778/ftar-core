@@ -325,7 +325,6 @@ fn descriptions_shrink_to_fit_and_never_panic() {
     assert!(fit_text("", 50.0, 50.0, 9.0).0.is_empty());
 }
 
-
 mod page_setup {
     use super::*;
     use ftar_render::{page_count, print_pages, Fit, Orientation, PageSetup, PageSize, MAX_PAGES};
