@@ -16,6 +16,7 @@ pub mod montecarlo;
 pub mod parse;
 pub mod project;
 pub mod report;
+pub mod report_files;
 pub mod write;
 
 pub use error::{Error, Result};

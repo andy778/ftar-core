@@ -161,6 +161,21 @@ impl App {
                         self.delete_selected();
                     }
                 });
+                ui.menu_button("Report", |ui| {
+                    ui.menu_button("View", |ui| {
+                        for (k, label) in [
+                            (ReportKind::CutSets, "Qualitative Report"),
+                            (ReportKind::Probability, "Probability Report"),
+                            (ReportKind::MonteCarlo, "Monte Carlo Report"),
+                        ] {
+                            let on = self.saved_report_exists(k);
+                            if ui.add_enabled(on, egui::Button::new(label)).clicked() {
+                                ui.close();
+                                let _ = self.view_saved_report(k);
+                            }
+                        }
+                    });
+                });
                 ui.menu_button("Help", |ui| {
                     if ui.button("User guide").clicked() {
                         ui.close();
@@ -400,6 +415,28 @@ impl App {
                 }
             });
         self.events_open = open;
+    }
+
+    /// The saved report opened by Report > View.
+    fn report_window(&mut self, ctx: &egui::Context) {
+        let Some((kind, text)) = &self.report_view else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new("Report")
+            .open(&mut open)
+            .default_size([640.0, 480.0])
+            .show(ctx, |ui| {
+                ui.label(kind.label());
+                egui::ScrollArea::both().show(ui, |ui| {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(text).monospace()).selectable(true),
+                    );
+                });
+            });
+        if !open {
+            self.report_view = None;
+        }
     }
 
     fn unsaved_prompt(&mut self, ctx: &egui::Context) {
@@ -890,6 +927,7 @@ impl eframe::App for App {
         self.details_panel(ui);
         self.events_window(ui.ctx());
         self.ped_window(ui.ctx());
+        self.report_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(doc) = &self.doc else {

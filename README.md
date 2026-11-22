@@ -33,6 +33,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] Primary event database as its own window (OpenPED, File/Edit > Primary event database...): new/open/save/save as a `.ped` without a tree, export text file, copy events between the database and the tree's, link a tree event to a database event (asks when types differ); headless `database::{export_text, copy_events, link_node}`
 - [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
 - [x] Built-in help: Help menu with the user guide (docs/USER-GUIDE.md) and an About page with the licence
+- [x] GUI Report > View: reopen the last saved Qualitative, Probability and Monte Carlo reports (`.crp`, `.prp`, `.mrp` next to the tree, written by each analysis run; disabled when missing). Report > Print is tracked in #56
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 - [x] Fuzzing: cargo-fuzz targets for the `.fta`/`.ped` parsers, analysis and the MCP server, run on every PR by ClusterFuzzLite (fuzz/README.md)
 
