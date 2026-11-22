@@ -34,3 +34,7 @@ it builds `ftar` and `ftar-gui` with `cargo build --release --locked` for Linux 
 (arm64), smoke-tests the CLI, packages each platform (binaries, LICENSE, NOTICE, README, docs), and publishes a GitHub release with
 the archives and `SHA256SUMS.txt`. The same workflow runs as a build-only dry run on manual dispatch and on pull requests that
 touch `Cargo.toml`, `Cargo.lock` or the workflow.
+
+## Security
+
+Report vulnerabilities privately, not in public issues: see [SECURITY.md](SECURITY.md).
