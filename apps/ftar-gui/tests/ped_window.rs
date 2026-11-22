@@ -4,7 +4,10 @@
 use std::path::PathBuf;
 
 use eframe::egui::vec2;
-use egui_kittest::{kittest::Queryable, Harness};
+use egui_kittest::{
+    kittest::{NodeT, Queryable},
+    Harness,
+};
 use ftar_core::EventType;
 use ftar_gui::App;
 
@@ -152,4 +155,80 @@ fn database_window_has_named_controls() {
     h.get_by_label("PUMP").click();
     h.run();
     assert_eq!(h.state().ped.form.id, "PUMP");
+}
+
+// ------------------------------------------------ Edit > Link in the main menu (#70)
+
+fn lift_with_database_event(kind: EventType) -> (App, Vec<usize>) {
+    let mut app = App::default();
+    app.open(data("lift.fta"));
+    app.ped_new();
+    fill(&mut app, "FRESH", "0.5", kind);
+    app.ped.selected = Some("FRESH".into());
+    let leaf = ftar_core::edit::all_paths(&app.doc.as_ref().unwrap().tree)
+        .into_iter()
+        .find(|p| {
+            ftar_core::edit::node_at(&app.doc.as_ref().unwrap().tree, p)
+                .is_some_and(|n| n.children.is_empty() && n.kind == EventType::Basic)
+        })
+        .unwrap();
+    (app, leaf)
+}
+
+#[test]
+fn edit_link_needs_a_tree_event_and_a_database_event() {
+    let (mut app, leaf) = lift_with_database_event(EventType::Basic);
+    assert!(!app.can_link(), "no tree event selected yet");
+    app.select(Some(leaf.clone()));
+    assert!(app.can_link());
+    app.ped.selected = None;
+    assert!(!app.can_link(), "no database event selected");
+    app.ped.selected = Some("FRESH".into());
+    app.select(Some(vec![]));
+    assert!(!app.can_link(), "the top event is not a primary event");
+    // linking reports problems in the main status line too
+    app.edit_link();
+    assert!(app.error.is_some());
+}
+
+#[test]
+fn edit_link_links_and_can_be_undone_without_the_database_window() {
+    let (mut app, leaf) = lift_with_database_event(EventType::Basic);
+    app.ped.open = false;
+    app.select(Some(leaf.clone()));
+    app.edit_link();
+    assert!(app.error.is_none(), "{:?}", app.error);
+    assert_eq!(app.selected_node().unwrap().id, "FRESH");
+    assert!(app.status.as_deref().unwrap().contains("Linked to FRESH"));
+    app.undo();
+    assert_ne!(app.selected_node().unwrap().id, "FRESH");
+}
+
+#[test]
+fn edit_menu_link_asks_when_types_differ_even_with_the_window_closed() {
+    let (mut app, leaf) = lift_with_database_event(EventType::External);
+    app.ped.open = false;
+    app.select(Some(leaf));
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_by_label("Edit").click();
+    h.run();
+    let link = h
+        .query_all_by_label_contains("Link")
+        .find(|n| {
+            n.accesskit_node()
+                .label()
+                .is_some_and(|l| l.starts_with("Link"))
+        })
+        .expect("Edit > Link");
+    link.click();
+    h.run();
+    assert_eq!(h.state().ped.confirm_link.as_deref(), Some("FRESH"));
+    h.get_by_label_contains("have different types");
+    h.get_by_label("Link anyway").click();
+    h.run();
+    assert_eq!(h.state().selected_node().unwrap().id, "FRESH");
+    assert!(h.state().ped.confirm_link.is_none());
 }

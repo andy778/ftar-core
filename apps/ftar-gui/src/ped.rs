@@ -268,6 +268,28 @@ impl App {
         self.link_with(&path, &id, false)
     }
 
+    /// The selected tree event is a primary event and a database event is
+    /// selected in the database window: what Edit > Link needs.
+    pub fn can_link(&self) -> bool {
+        self.ped.selected.is_some()
+            && self
+                .selected_node()
+                .is_some_and(|n| n.kind.is_primary() && !n.id.is_empty())
+    }
+
+    /// Edit > Link (Ctrl+I) in the main window: like the database window's
+    /// button, but problems also show in the main status line.
+    pub fn edit_link(&mut self) {
+        self.ped.error = None;
+        if self.ped_link().is_none() {
+            if let Some(e) = self.ped.error.clone() {
+                self.error = Some(e);
+            }
+        } else if let Some(s) = self.ped.status.clone() {
+            self.status = Some(s);
+        }
+    }
+
     /// Link although the types differ.
     pub fn ped_link_confirmed(&mut self) -> Option<LinkOutcome> {
         let id = self.ped.confirm_link.take()?;
@@ -292,6 +314,30 @@ impl App {
             LinkOutcome::Linked => self.ped.status = Some(format!("Linked to {id}")),
         }
         Some(out)
+    }
+
+    /// Edit > Link in the main window can start a link while the database
+    /// window is closed, so its question is drawn on its own.
+    pub(crate) fn ped_link_question(&mut self, ctx: &egui::Context) {
+        if let Some(id) = self.ped.confirm_link.clone() {
+            egui::Window::new("Event types differ")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .show(ctx, |ui| {
+                    ui.label(format!(
+                        "The tree event and database event {id} have different types. Link anyway?"
+                    ));
+                    ui.horizontal(|ui| {
+                        if ui.button("Link anyway").clicked() {
+                            self.ped_link_confirmed();
+                        }
+                        if ui.button("Cancel link").clicked() {
+                            self.ped.confirm_link = None;
+                        }
+                    });
+                });
+        }
     }
 
     /// The database window (draw once per frame).
@@ -431,25 +477,6 @@ impl App {
                     ui.label(s);
                 }
             });
-        if let Some(id) = self.ped.confirm_link.clone() {
-            egui::Window::new("Event types differ")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-                .show(ctx, |ui| {
-                    ui.label(format!(
-                        "The tree event and database event {id} have different types. Link anyway?"
-                    ));
-                    ui.horizontal(|ui| {
-                        if ui.button("Link anyway").clicked() {
-                            self.ped_link_confirmed();
-                        }
-                        if ui.button("Cancel link").clicked() {
-                            self.ped.confirm_link = None;
-                        }
-                    });
-                });
-        }
         self.ped.open = open;
     }
 

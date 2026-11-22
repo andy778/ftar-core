@@ -66,14 +66,15 @@ impl App {
         });
         // Cut, copy and paste act on the tree unless a text field has the keyboard;
         // backends send them as clipboard events, tests as key presses.
-        let (cut, copy, paste) = if ctx.memory(|m| m.focused().is_some()) {
-            (false, false, false)
+        let (cut, copy, paste, link) = if ctx.memory(|m| m.focused().is_some()) {
+            (false, false, false, false)
         } else {
             ctx.input_mut(|i| {
                 let mut c = (
                     i.consume_key(Modifiers::COMMAND, Key::X),
                     i.consume_key(Modifiers::COMMAND, Key::C),
                     i.consume_key(Modifiers::COMMAND, Key::V),
+                    i.consume_key(Modifiers::COMMAND, Key::I),
                 );
                 i.events.retain(|e| match e {
                     egui::Event::Cut => {
@@ -99,6 +100,8 @@ impl App {
             self.copy_selected();
         } else if paste {
             self.paste();
+        } else if link && self.can_link() {
+            self.edit_link();
         }
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
@@ -249,6 +252,19 @@ impl App {
                     {
                         ui.close();
                         self.move_selected(1);
+                    }
+                    if ui
+                        .add_enabled(
+                            self.can_link(),
+                            egui::Button::new("Link").shortcut_text(shortcut(Key::I)),
+                        )
+                        .on_disabled_hover_text(
+                            "Select a primary event in the tree and an event in the Primary event database window",
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.edit_link();
                     }
                     if ui
                         .add_enabled(self.selected.is_some(), egui::Button::new("Selected..."))
@@ -1360,6 +1376,7 @@ impl eframe::App for App {
         self.details_panel(ui);
         self.events_window(ui.ctx());
         self.validate_window(ui.ctx());
+        self.ped_link_question(ui.ctx());
         self.ped_window(ui.ctx());
         self.report_window(ui.ctx());
         self.overview_window(ui.ctx());
