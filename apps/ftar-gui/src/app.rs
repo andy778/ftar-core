@@ -76,6 +76,8 @@ impl Default for EventForm {
 pub struct App {
     /// The primary event editor window is shown.
     pub events_open: bool,
+    /// The primary event database window (OpenPED), independent of the tree.
+    pub ped: crate::ped::PedWindow,
     pub event_form: EventForm,
     pub doc: Option<Document>,
     pub history: History<Snapshot>,
@@ -138,6 +140,7 @@ impl Default for App {
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
             events_open: false,
+            ped: Default::default(),
             event_form: EventForm::default(),
             zoom: 1.0,
             pan: Vec2::ZERO,
@@ -335,7 +338,10 @@ impl App {
 
     /// Run an edit on the document. On success it is recorded for undo; on
     /// failure the document is restored and the error shown.
-    fn edit<R>(&mut self, f: impl FnOnce(&mut Document) -> Result<R, String>) -> Option<R> {
+    pub(crate) fn edit<R>(
+        &mut self,
+        f: impl FnOnce(&mut Document) -> Result<R, String>,
+    ) -> Option<R> {
         let doc = self.doc.as_mut()?;
         let before: Snapshot = (doc.tree.clone(), doc.db.clone());
         match f(doc) {
