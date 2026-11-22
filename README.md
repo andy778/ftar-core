@@ -30,6 +30,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] Compare numbers with reports from the original engine: a native build of OpenFTA's C core (`tools/openfta-native/`) made the fixtures in `crates/core/tests/data/openfta/`; cut sets reports are identical, probability reports agree to float precision (docs/VERIFICATION.md)
 - [x] Failure statistics report, text report files compatible with OpenFTA
 - [x] Writing `.fta`/`.ped`, tree editing (GUI: add/delete/move/retype/rename, event database, OpenPED-style primary event editor (Edit > Primary events) that also lists the other trees in the folder using an event (an ftar addition; MCP/automation `event_usage`), undo/redo, save, unsaved-changes prompt)
+- [x] Primary event database as its own window (OpenPED, File/Edit > Primary event database...): new/open/save/save as a `.ped` without a tree, export text file, copy events between the database and the tree's, link a tree event to a database event (asks when types differ); headless `database::{export_text, copy_events, link_node}`
 - [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
 - [x] Built-in help: Help menu with the user guide (docs/USER-GUIDE.md) and an About page with the licence
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`

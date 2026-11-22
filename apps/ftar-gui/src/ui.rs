@@ -147,6 +147,10 @@ impl App {
                         ui.close();
                         self.events_open = true;
                     }
+                    if ui.button("Primary event database...").clicked() {
+                        ui.close();
+                        self.ped.open = true;
+                    }
                     ui.separator();
                     let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
                     if ui
@@ -885,6 +889,7 @@ impl eframe::App for App {
         self.status_bar(ui);
         self.details_panel(ui);
         self.events_window(ui.ctx());
+        self.ped_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(doc) = &self.doc else {
