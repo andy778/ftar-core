@@ -114,6 +114,7 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         }
         "event_set" => event_set(s, &a),
         "event_delete" => event_delete(s, &a),
+        "event_usage" => event_usage(s, &a),
         "analysis_cutsets" => {
             let (_, d) = s.doc_mut(args)?;
             ensure_analysable(d)?;
@@ -446,6 +447,51 @@ fn event_delete(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     })?;
     d.dirty = true;
     Ok(json!({ "deleted": id, "still_used_by_nodes": used }))
+}
+
+fn event_usage(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let opts = LoadOptions {
+        root: s.root.clone(),
+        max_file_size: Some(MAX_FILE),
+    };
+    let (_, d) = s.doc_mut(a.0)?;
+    let id = a.str("id")?;
+    let path = d
+        .path
+        .clone()
+        .ok_or_else(|| ToolError::args("document has no path; save it first"))?;
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let here = d
+        .tree
+        .nodes()
+        .iter()
+        .filter(|n| n.id == id && uses_event(n.kind))
+        .count();
+    let u = ftar_core::project::trees_using_event(dir, id, d.tree.db_name.as_deref(), &opts)?;
+    let me = path.canonicalize().ok();
+    let others: Vec<Value> = u
+        .trees
+        .iter()
+        .filter(|t| t.path.canonicalize().ok() != me)
+        .map(|t| json!({ "path": display_path(&t.path), "nodes": t.nodes }))
+        .collect();
+    Ok(json!({
+        "id": id,
+        "database": d.tree.db_name,
+        "in_database": d.db.events.contains_key(id),
+        "this_tree_nodes": here,
+        "other_trees": others,
+        "skipped": u.skipped.iter().map(|p| display_path(p)).collect::<Vec<_>>(),
+        "truncated": u.truncated,
+    }))
+}
+
+fn uses_event(k: EventType) -> bool {
+    k.is_primary()
+        || matches!(
+            k,
+            EventType::ConditionAnalysed | EventType::ConditionNotAnalysed
+        )
 }
 
 fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
