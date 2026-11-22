@@ -1,46 +1,26 @@
-# Security policy
+# Security Policy
+
+This is a personal hobby project, provided **as is** with no warranty and no
+guaranteed support, maintenance, or response. See the [LICENSE](LICENSE).
 
 ## Reporting a vulnerability
 
-Please **do not** report security problems in public issues, pull requests or discussions.
+Found a security issue? Just open a public
+[issue](https://github.com/andy778/ftar-core/issues). There is no private
+disclosure process and no commitment to triage, respond, or fix within any
+timeframe. Fixes, if any, land on `master` and ship in the next release.
 
-Report them privately through GitHub:
-[**Report a vulnerability**](https://github.com/andy778/ftar-core/security/advisories/new)
-(repository *Security* tab → *Report a vulnerability*).
+## Scope and notes
 
-Include what you can of:
-
-- the affected version (release tag, or commit if built from source) and platform;
-- the input that triggers it (`.fta`, `.ped`, script or MCP request), or steps to reproduce;
-- what happens (crash, hang, file access outside the root, wrong result, ...) and the impact you see.
-
-ftar is maintained by one person in their spare time. The aim is to acknowledge a report within
-7 days and to agree a fix and disclosure date with you. Fixes are released as a new version and
-published as a GitHub security advisory, crediting you unless you prefer otherwise.
-
-## Supported versions
-
-Only the latest release gets security fixes. Fixes are not backported to older versions.
-
-| Version | Supported |
-|---|---|
-| latest release | yes |
-| older releases | no |
-
-## Scope
-
-ftar treats every input as untrusted (see [AGENTS.md](AGENTS.md) §3). In scope, for example:
-
-- a panic, hang, unbounded memory use or crash caused by a `.fta`, `.ped` or JSON script file;
-- the MCP server (`ftar mcp --root DIR`) reading or writing a file outside its root, or crashing on a
-  request;
-- a silently wrong analysis result caused by crafted input, where it could mislead a safety assessment;
-- problems in the release process, such as release files that don't match their checksums or
-  provenance attestation.
-
-Out of scope:
-
-- `ftar mcp --unrestricted`, which deliberately gives the client access to any path the user can reach;
-- vulnerabilities in dependencies that ftar does not use in an exploitable way (please report those
-  upstream; `cargo deny` checks the RustSec database weekly);
-- differences from the original OpenFTA's numbers that are not security issues: open a normal bug report.
+- ftar treats every `.fta`, `.ped` and JSON script file as untrusted input
+  (see [AGENTS.md](AGENTS.md) §3). A panic, hang or runaway memory use on such
+  input is a bug worth reporting.
+- `ftar mcp --root DIR` is meant to keep the client inside `DIR`.
+  `ftar mcp --unrestricted` deliberately gives the client access to every path
+  the user can reach.
+- ftar's results can feed safety assessments. Check important results
+  independently; the license disclaims any warranty.
+- Release binaries carry SHA-256 checksums and a build provenance attestation;
+  see "Verifying a download" in the [README](README.md).
+- Dependencies are checked against the RustSec advisory database with
+  `cargo deny` ([deny.toml](deny.toml)) on every PR and weekly.

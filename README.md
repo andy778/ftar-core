@@ -37,4 +37,4 @@ touch `Cargo.toml`, `Cargo.lock` or the workflow.
 
 ## Security
 
-Report vulnerabilities privately, not in public issues: see [SECURITY.md](SECURITY.md).
+Report security issues as public [issues](https://github.com/andy778/ftar-core/issues); see [SECURITY.md](SECURITY.md).
