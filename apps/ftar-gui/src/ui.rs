@@ -66,14 +66,15 @@ impl App {
         });
         // Cut, copy and paste act on the tree unless a text field has the keyboard;
         // backends send them as clipboard events, tests as key presses.
-        let (cut, copy, paste) = if ctx.memory(|m| m.focused().is_some()) {
-            (false, false, false)
+        let (cut, copy, paste, link) = if ctx.memory(|m| m.focused().is_some()) {
+            (false, false, false, false)
         } else {
             ctx.input_mut(|i| {
                 let mut c = (
                     i.consume_key(Modifiers::COMMAND, Key::X),
                     i.consume_key(Modifiers::COMMAND, Key::C),
                     i.consume_key(Modifiers::COMMAND, Key::V),
+                    i.consume_key(Modifiers::COMMAND, Key::I),
                 );
                 i.events.retain(|e| match e {
                     egui::Event::Cut => {
@@ -99,6 +100,8 @@ impl App {
             self.copy_selected();
         } else if paste {
             self.paste();
+        } else if link && self.can_link() {
+            self.edit_link();
         }
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
@@ -235,6 +238,42 @@ impl App {
                         self.paste();
                     }
                     ui.separator();
+                    let can_shift = self.selected.as_ref().is_some_and(|p| !p.is_empty());
+                    if ui
+                        .add_enabled(can_shift, egui::Button::new("Shift Left"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.move_selected(-1);
+                    }
+                    if ui
+                        .add_enabled(can_shift, egui::Button::new("Shift Right"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.move_selected(1);
+                    }
+                    if ui
+                        .add_enabled(
+                            self.can_link(),
+                            egui::Button::new("Link").shortcut_text(shortcut(Key::I)),
+                        )
+                        .on_disabled_hover_text(
+                            "Select a primary event in the tree and an event in the Primary event database window",
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.edit_link();
+                    }
+                    if ui
+                        .add_enabled(self.selected.is_some(), egui::Button::new("Selected..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.edit_selected();
+                    }
+                    ui.separator();
                     if ui
                         .add_enabled(has_doc, egui::Button::new("Primary events..."))
                         .clicked()
@@ -258,6 +297,54 @@ impl App {
                     {
                         ui.close();
                         self.delete_selected();
+                    }
+                });
+                ui.menu_button("View", |ui| {
+                    let shortcut = |k| {
+                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                    };
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.overview_open = true;
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_in();
+                    }
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_out();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.set_zoom_percent = self.zoom_percent() as f32;
+                        self.set_zoom_open = true;
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.fit_next = true;
                     }
                 });
                 ui.menu_button("Analysis", |ui| {
@@ -320,54 +407,6 @@ impl App {
                 {
                     self.redo();
                 }
-                ui.menu_button("View", |ui| {
-                    let shortcut = |k| {
-                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
-                    };
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.overview_open = true;
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.zoom_in();
-                    }
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.zoom_out();
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.set_zoom_percent = self.zoom_percent() as f32;
-                        self.set_zoom_open = true;
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.fit_next = true;
-                    }
-                });
                 ui.separator();
                 if ui.button("Fit").clicked() {
                     self.fit_next = true;
@@ -887,6 +926,9 @@ impl App {
                 let r = ui
                     .add(egui::TextEdit::singleline(&mut self.buf.id).desired_width(110.0))
                     .labelled_by(l.id);
+                if std::mem::take(&mut self.focus_details) {
+                    r.request_focus();
+                }
                 if r.lost_focus() && self.buf.id != node.id {
                     let id = self.buf.id.clone();
                     self.set_id(&id);
@@ -911,10 +953,10 @@ impl App {
                     if ui.button("Delete").clicked() {
                         self.delete_selected();
                     }
-                    if ui.button("Move earlier").clicked() {
+                    if ui.button("Shift left").clicked() {
                         self.move_selected(-1);
                     }
-                    if ui.button("Move later").clicked() {
+                    if ui.button("Shift right").clicked() {
                         self.move_selected(1);
                     }
                 }
@@ -1334,6 +1376,7 @@ impl eframe::App for App {
         self.details_panel(ui);
         self.events_window(ui.ctx());
         self.validate_window(ui.ctx());
+        self.ped_link_question(ui.ctx());
         self.ped_window(ui.ctx());
         self.report_window(ui.ctx());
         self.overview_window(ui.ctx());
@@ -1396,6 +1439,9 @@ impl eframe::App for App {
                 });
                 self.selected = hit;
                 self.version += 1;
+            }
+            if resp.double_clicked() && self.selected.is_some() {
+                self.edit_selected();
             }
         });
     }

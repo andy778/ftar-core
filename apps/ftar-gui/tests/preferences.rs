@@ -47,7 +47,7 @@ fn monochrome_is_black_on_white() {
     });
     let mono = app.svg_text().unwrap();
     assert_ne!(colour, mono);
-    assert!(!mono.contains("#a8c4ea"));
+    assert!(!mono.contains("#d2fac8"));
     assert!(mono.contains("fill=\"#ffffff\""));
     assert!(mono.contains("stroke=\"#000000\""));
     let _ = EventType::Basic;
