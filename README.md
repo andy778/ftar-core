@@ -32,5 +32,19 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 Pushing a tag `vX.Y.Z` (it must equal the `ftar-cli` version in `Cargo.toml`) runs `.github/workflows/release.yml`:
 it builds `ftar` and `ftar-gui` with `cargo build --release --locked` for Linux (x86_64), Windows (x86_64) and macOS
 (arm64), smoke-tests the CLI, packages each platform (binaries, LICENSE, NOTICE, README, docs), and publishes a GitHub release with
-the archives and `SHA256SUMS.txt`. The same workflow runs as a build-only dry run on manual dispatch and on pull requests that
+the archives, `SHA256SUMS.txt` and `ftar-vX.Y.Z.sigstore.json` (signed SLSA build provenance for every file, see below). The same workflow runs as a build-only dry run on manual dispatch and on pull requests that
 touch `Cargo.toml`, `Cargo.lock` or the workflow.
+
+### Verifying a download
+
+Every release file has a build provenance attestation, signed with Sigstore by the release workflow. It proves the file was
+built by `.github/workflows/release.yml` in this repository from the tagged commit. With the [GitHub CLI](https://cli.github.com):
+
+```sh
+gh attestation verify ftar-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz --repo andy778/ftar-core
+# offline, with the bundle attached to the release:
+gh attestation verify ftar-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz --repo andy778/ftar-core \
+  --bundle ftar-vX.Y.Z.sigstore.json
+```
+
+`sha256sum -c SHA256SUMS.txt --ignore-missing` checks a download against the checksums (the checksum file is attested too).
