@@ -17,6 +17,7 @@ enum Icon {
     Cut,
     Copy,
     Paste,
+    Delete,
     Link,
     Undo,
     Redo,
@@ -93,6 +94,14 @@ fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
             rect(0.38, 0.08, 0.62, 0.28);
             line(&[(0.32, 0.5), (0.68, 0.5)], false);
             line(&[(0.32, 0.68), (0.68, 0.68)], false);
+        }
+        Delete => {
+            // a bin: lid, handle and body
+            line(&[(0.15, 0.25), (0.85, 0.25)], false);
+            line(&[(0.4, 0.25), (0.4, 0.12), (0.6, 0.12), (0.6, 0.25)], false);
+            line(&[(0.25, 0.25), (0.3, 0.9), (0.7, 0.9), (0.75, 0.25)], false);
+            line(&[(0.45, 0.4), (0.45, 0.75)], false);
+            line(&[(0.55, 0.4), (0.55, 0.75)], false);
         }
         Link => {
             circle(0.36, 0.5, 0.22);
@@ -193,6 +202,8 @@ impl App {
                     self.can_paste(),
                     self.can_link(),
                 );
+                // like Edit > Delete selected: any node but the top event
+                let delete = self.can_cut();
                 if icon_button(ui, Icon::Cut, "Cut", cut) {
                     self.cut_selected();
                 }
@@ -201,6 +212,9 @@ impl App {
                 }
                 if icon_button(ui, Icon::Paste, "Paste", paste) {
                     self.paste();
+                }
+                if icon_button(ui, Icon::Delete, "Delete", delete) {
+                    self.delete_selected();
                 }
                 if icon_button(ui, Icon::Link, "Link", link) {
                     self.edit_link();

@@ -25,8 +25,13 @@ fn theatre() -> App {
     app
 }
 
+/// The toolbar button (first in the tree; the edit panel has its own "Delete").
 fn disabled(h: &Harness<'_, App>, label: &str) -> bool {
-    h.get_by_label(label).accesskit_node().is_disabled()
+    h.get_all_by_label(label)
+        .next()
+        .unwrap()
+        .accesskit_node()
+        .is_disabled()
 }
 
 #[test]
@@ -38,8 +43,8 @@ fn toolbar_has_openftas_commands_and_enables_them_like_the_menus() {
         assert!(!disabled(&h, on), "{on}");
     }
     for off in [
-        "Save", "Print...", "Cut", "Copy", "Paste", "Link", "Undo", "Redo", "Zoom In", "Zoom Out",
-        "Fit",
+        "Save", "Print...", "Cut", "Copy", "Paste", "Delete", "Link", "Undo", "Redo", "Zoom In",
+        "Zoom Out", "Fit",
     ] {
         assert!(disabled(&h, off), "{off}");
     }
@@ -56,6 +61,37 @@ fn toolbar_has_openftas_commands_and_enables_them_like_the_menus() {
     h.run();
     assert!(!disabled(&h, "Cut") && !disabled(&h, "Copy"));
     assert!(disabled(&h, "Paste"), "clipboard is empty");
+    assert!(!disabled(&h, "Delete"));
+    h.state_mut().select(Some(vec![]));
+    h.run();
+    assert!(disabled(&h, "Delete"), "the top event cannot be deleted");
+}
+
+#[test]
+fn toolbar_delete_removes_the_selected_branch_and_can_be_undone() {
+    let mut h = harness_for(theatre());
+    h.run();
+    h.state_mut().select(Some(vec![0, 1])); // MAINS_FAIL
+    h.run();
+    h.get_all_by_label("Delete").next().unwrap().click();
+    h.run();
+    assert_eq!(
+        node_at(&h.state().doc.as_ref().unwrap().tree, &[0])
+            .unwrap()
+            .children
+            .len(),
+        1
+    );
+    assert!(h.state().dirty);
+    h.get_by_label("Undo").click();
+    h.run();
+    assert_eq!(
+        node_at(&h.state().doc.as_ref().unwrap().tree, &[0])
+            .unwrap()
+            .children
+            .len(),
+        2
+    );
 }
 
 #[test]

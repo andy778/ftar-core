@@ -333,7 +333,7 @@ fn clicking_delete_removes_the_selected_node() {
     let n = children(&app, &[0]);
     let mut h = harness_for(app);
     h.run();
-    h.get_by_label("Delete").click();
+    h.get_all_by_label("Delete").last().unwrap().click(); // the edit panel button, after the toolbar one
     h.run();
     assert_eq!(children(h.state(), &[0]), n - 1);
     assert_eq!(h.state().selected, Some(vec![0]));
