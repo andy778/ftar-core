@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/andy778/ftar-core/blob/master/CONTRIBUTING.md
+    about: How to report problems and propose changes.

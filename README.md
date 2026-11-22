@@ -28,6 +28,10 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 - [x] Fuzzing: cargo-fuzz targets for the `.fta`/`.ped` parsers, analysis and the MCP server, run on every PR by ClusterFuzzLite (fuzz/README.md)
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (rules in [AGENTS.md](AGENTS.md)) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Releases
 
 Pushing a tag `vX.Y.Z` (it must equal the `ftar-cli` version in `Cargo.toml`) runs `.github/workflows/release.yml`:
@@ -35,3 +39,7 @@ it builds `ftar` and `ftar-gui` with `cargo build --release --locked` for Linux 
 (arm64), smoke-tests the CLI, packages each platform (binaries, LICENSE, NOTICE, README, docs), and publishes a GitHub release with
 the archives and `SHA256SUMS.txt`. The same workflow runs as a build-only dry run on manual dispatch and on pull requests that
 touch `Cargo.toml`, `Cargo.lock` or the workflow.
+
+## Security
+
+Report security issues as public [issues](https://github.com/andy778/ftar-core/issues); see [SECURITY.md](SECURITY.md).
