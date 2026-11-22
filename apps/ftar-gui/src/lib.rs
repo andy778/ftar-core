@@ -5,12 +5,14 @@
 
 mod app;
 pub use ftar_core::layout;
+mod preview;
 mod ui;
 
 use std::path::PathBuf;
 
 pub use app::{ctime_text, App, Pending, Tab};
 use eframe::egui;
+pub use preview::PrintPreview;
 
 /// Start the desktop app, optionally opening `path`.
 pub fn run(path: Option<PathBuf>) -> eframe::Result {

@@ -74,6 +74,8 @@ impl Default for EventForm {
 }
 
 pub struct App {
+    /// Page setup and print preview window state.
+    pub preview: crate::preview::PrintPreview,
     /// The primary event editor window is shown.
     pub events_open: bool,
     pub event_form: EventForm,
@@ -137,6 +139,7 @@ impl Default for App {
             add_kind: EventType::Basic,
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
+            preview: Default::default(),
             events_open: false,
             event_form: EventForm::default(),
             zoom: 1.0,
@@ -840,6 +843,7 @@ impl App {
                 probabilities: self.image_probabilities,
                 report,
                 auto_print,
+                page: self.preview.setup,
             },
         ))
     }

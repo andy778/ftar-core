@@ -113,6 +113,16 @@ impl App {
                         ui.close();
                         self.print_now();
                     }
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Page setup and print preview..."),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.preview.open = true;
+                    }
                     ui.checkbox(
                         &mut self.image_probabilities,
                         "Probabilities in images and prints",
@@ -237,7 +247,7 @@ impl App {
     }
 
     /// Open the browser's print dialog for the tree (and report).
-    fn print_now(&mut self) {
+    pub(crate) fn print_now(&mut self) {
         if let Ok(path) = self.prepare_print() {
             if let Err(e) = open_with_default_app(&path) {
                 self.error = Some(format!("could not open the print page: {e}"));
@@ -874,6 +884,7 @@ impl eframe::App for App {
         self.status_bar(ui);
         self.details_panel(ui);
         self.events_window(ui.ctx());
+        self.preview_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(doc) = &self.doc else {

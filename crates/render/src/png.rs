@@ -42,8 +42,22 @@ fn fonts() -> Arc<usvg::fontdb::Database> {
         .clone()
 }
 
-/// Rasterise `svg` at `scale` (1.0 = the SVG's own size) and encode it as PNG.
+/// Rasterise `svg` at `scale` and encode it as PNG.
 pub fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, RenderError> {
+    rasterise(svg, scale)?
+        .encode_png()
+        .map_err(|e| RenderError::Encode(e.to_string()))
+}
+
+/// Rasterise `svg` at `scale` into premultiplied RGBA: (width, height, bytes).
+/// Used by on-screen previews, which need pixels rather than a PNG file.
+pub fn svg_to_rgba(svg: &str, scale: f32) -> Result<(u32, u32, Vec<u8>), RenderError> {
+    let p = rasterise(svg, scale)?;
+    Ok((p.width(), p.height(), p.take()))
+}
+
+/// Rasterise `svg` at `scale` (1.0 = the SVG's own size).
+fn rasterise(svg: &str, scale: f32) -> Result<tiny_skia::Pixmap, RenderError> {
     if !(scale.is_finite() && scale > 0.0) {
         return Err(RenderError::Size("scale must be a positive number".into()));
     }
@@ -71,7 +85,5 @@ pub fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, RenderError> {
         tiny_skia::Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );
-    pixmap
-        .encode_png()
-        .map_err(|e| RenderError::Encode(e.to_string()))
+    Ok(pixmap)
 }

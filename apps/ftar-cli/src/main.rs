@@ -14,7 +14,7 @@ commands:
   cutsets    minimal cut sets
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
-  draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S]   draw the tree
+  draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
   tools      list the JSON automation tools (name, description, schema)
   call       ftar call <tool> [json-args]    run one tool, print the JSON result
   run        ftar run <script.json>          run a JSON script (steps of {tool, args})
@@ -303,13 +303,28 @@ fn draw(args: &[String]) -> Result<(), String> {
     let (tree_path, out) = match args {
         [t, o, ..] => (t, o),
         _ => {
-            return Err("usage: ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S]".into())
+            return Err("usage: ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [--page-size A4|A3|A5|Letter|Legal|Tabloid] [--orientation landscape|portrait] [--fit fit|split] [--page-scale PERCENT] [--margin MM] [--sheet N]".into())
         }
     };
     let mut scale = 2.0f32;
+    let (mut size, mut orient, mut fit) = (None, None, None);
+    let (mut pscale, mut margin, mut sheet) = (None, None, None);
     let mut rest = args[2..].iter();
     while let Some(a) = rest.next() {
+        fn num(rest: &mut std::slice::Iter<String>, what: &str) -> Result<f64, String> {
+            rest.next()
+                .and_then(|v| v.parse::<f64>().ok())
+                .ok_or(format!("{what} needs a number"))
+        }
         match a.as_str() {
+            "--page-size" => size = Some(rest.next().ok_or("--page-size needs a value")?.clone()),
+            "--orientation" => {
+                orient = Some(rest.next().ok_or("--orientation needs a value")?.clone())
+            }
+            "--fit" => fit = Some(rest.next().ok_or("--fit needs a value")?.clone()),
+            "--page-scale" => pscale = Some(num(&mut rest, "--page-scale")?),
+            "--margin" => margin = Some(num(&mut rest, "--margin")?),
+            "--sheet" => sheet = Some(num(&mut rest, "--sheet")?),
             "--scale" => {
                 scale = rest
                     .next()
@@ -328,14 +343,36 @@ fn draw(args: &[String]) -> Result<(), String> {
         .extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
         .unwrap_or_default();
+    let setup = ftar_render::PageSetup::from_options(
+        size.as_deref(),
+        orient.as_deref(),
+        fit.as_deref(),
+        pscale,
+        margin,
+    )?;
     let svg_opts = SvgOptions {
         title: name.clone(),
         ..Default::default()
     };
+    let drawing = |doc: &Document| -> Result<String, String> {
+        match sheet {
+            // one printed sheet of the page layout (print preview)
+            Some(n) => {
+                let pages = ftar_render::print_pages(&doc.tree, &doc.db, &name, true, &setup);
+                let idx = if n >= 1.0 {
+                    (n as usize).checked_sub(1)
+                } else {
+                    None
+                };
+                idx.and_then(|i| pages.get(i).cloned())
+                    .ok_or(format!("--sheet must be 1..={} (got {n})", pages.len()))
+            }
+            None => Ok(tree_svg(&doc.tree, &doc.db, &svg_opts)),
+        }
+    };
     let bytes = match ext.as_str() {
-        "svg" => tree_svg(&doc.tree, &doc.db, &svg_opts).into_bytes(),
-        "png" => svg_to_png(&tree_svg(&doc.tree, &doc.db, &svg_opts), scale)
-            .map_err(|e| e.to_string())?,
+        "svg" => drawing(&doc)?.into_bytes(),
+        "png" => svg_to_png(&drawing(&doc)?, scale).map_err(|e| e.to_string())?,
         "html" => print_html(
             &doc.tree,
             &doc.db,
@@ -344,12 +381,16 @@ fn draw(args: &[String]) -> Result<(), String> {
                 probabilities: true,
                 report: None,
                 auto_print: false,
+                page: setup,
             },
         )
         .into_bytes(),
         _ => return Err("output must end in .png, .svg or .html".into()),
     };
     std::fs::write(out, bytes).map_err(|e| format!("{out}: {e}"))?;
-    eprintln!("wrote {out}");
+    eprintln!(
+        "wrote {out} ({} sheet(s))",
+        ftar_render::page_count(&doc.tree, &doc.db, true, &setup)
+    );
     Ok(())
 }
