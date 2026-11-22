@@ -1,0 +1,72 @@
+Minimal Cut Sets
+================
+
+Tree   : lift.fta
+Time   : 
+
+Method : Algebraic
+
+No. of primary events = 14
+Minimal cut set order = 1 to 14
+
+Order 1:
+    1)  CP_1                                             
+    2)  DMS_1                                            
+    3)  DMS_2                                            
+    4)  DM_1                                             
+    5)  DOD_1                                            
+    6)  DOD_2                                            
+    7)  DPD_1                                            
+    8)  D_1                                              
+    9)  LMD_1                                            
+   10)  LMD_2                                            
+   11)  LPD_1                                            
+   12)  PS_1                                             
+
+Order 2:
+
+Order 3:
+
+Order 4:
+
+Order 5:
+
+Order 6:
+
+Order 7:
+
+Order 8:
+
+Order 9:
+
+Order 10:
+
+Order 11:
+
+Order 12:
+
+Order 13:
+
+Order 14:
+
+
+Qualitative Importance Analysis:
+
+Order        Number
+-----        ------
+   1           12
+   2           0
+   3           0
+   4           0
+   5           0
+   6           0
+   7           0
+   8           0
+   9           0
+  10           0
+  11           0
+  12           0
+  13           0
+  14           0
+  ALL          12
+

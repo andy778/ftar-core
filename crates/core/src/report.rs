@@ -297,17 +297,23 @@ pub fn event_contributions(
 /// `Minimal Cut Sets` report (`mcs_print` + header of the algebraic method).
 ///
 /// `cut_sets` are grouped by order; `events` gives the primary event order
-/// (see [`primary_event_order`]).
+/// (see [`primary_event_order`]); `order_limit` is the order the cut sets were
+/// limited to (`usize::MAX` or the number of events for all of them).
 #[allow(clippy::needless_range_loop)]
 pub fn cut_sets_report(
     tree_name: &str,
     time: &str,
     events: &[String],
+    order_limit: usize,
     cut_sets: &[CutSet],
 ) -> String {
     let mut out = String::new();
     header(&mut out, "Minimal Cut Sets", tree_name, time);
-    let max_order = cut_sets.iter().map(|c| c.len()).max().unwrap_or(0);
+    // OpenFTA prints the order limit the analysis ran with (`tree->max_order`)
+    // and lists every order up to it, empty ones included (`mcs_print`). A
+    // limit is never more than the number of events, nor less than what was found.
+    let found = cut_sets.iter().map(|c| c.len()).max().unwrap_or(0);
+    let max_order = order_limit.min(events.len()).max(found);
     let _ = writeln!(out, "Method : Algebraic\n");
     let _ = writeln!(out, "No. of primary events = {}", events.len());
     let _ = writeln!(out, "Minimal cut set order = 1 to {max_order}");
@@ -644,7 +650,7 @@ pub fn generate(
     Ok(match kind {
         ReportKind::CutSets => {
             let sets = crate::analysis::minimal_cut_sets_limited(tree, params.max_order)?;
-            cut_sets_report(tree_name, time, &events, &sets)
+            cut_sets_report(tree_name, time, &events, params.max_order, &sets)
         }
         ReportKind::Probability => {
             let opts = ProbabilityOptions {

@@ -1,0 +1,54 @@
+Probabilities Analysis
+======================
+
+Tree   : lift.fta
+Time   : 
+
+Number of primary events   = 14
+Number of minimal cut sets = 12
+Order of minimal cut sets  = 14
+
+Unit time span         = 1.000000
+
+Minimal cut set probabilities :
+
+  1    CP_1                            1.000000E-06
+  2    DMS_1                           1.000000E-06
+  3    DMS_2                           1.000000E-06
+  4    DM_1                            1.000000E-06
+  5    DOD_1                           1.000000E-06
+  6    DOD_2                           1.000000E-06
+  7    DPD_1                           1.000000E-06
+  8    D_1                             1.000000E-06
+  9    LMD_1                           1.000000E-06
+ 10    LMD_2                           1.000000E-06
+ 11    LPD_1                           1.000000E-06
+ 12    PS_1                            1.000000E-06
+
+
+Probability of top level event (minimal cut sets up to order 14 used):
+
+ 1 term    +1.200000E-05   = 1.200000E-05 (upper bound)
+ 2 terms   -6.599996E-11   = 1.199993E-05 (lower bound)
+ 3 terms   +2.200003E-16   = 1.199993E-05 (upper bound)
+ 4 terms   -4.949991E-22   = 1.199993E-05 (lower bound)
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ CP_1           1.000000E-06             8.33%
+ DMS_1          1.000000E-06             8.33%
+ DMS_2          1.000000E-06             8.33%
+ DM_1           1.000000E-06             8.33%
+ DOD_1          1.000000E-06             8.33%
+ DOD_2          1.000000E-06             8.33%
+ DPD_1          1.000000E-06             8.33%
+ D_1            1.000000E-06             8.33%
+ LMD_1          1.000000E-06             8.33%
+ LMD_1_1        0.000000E+00             0.00%
+ LMD_2          1.000000E-06             8.33%
+ LPD_1          1.000000E-06             8.33%
+ PS_1           1.000000E-06             8.33%
+ W_1            0.000000E+00             0.00%

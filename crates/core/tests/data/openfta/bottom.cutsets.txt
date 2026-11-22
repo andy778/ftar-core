@@ -1,0 +1,26 @@
+Minimal Cut Sets
+================
+
+Tree   : bottom.fta
+Time   : 
+
+Method : Algebraic
+
+No. of primary events = 2
+Minimal cut set order = 1 to 2
+
+Order 1:
+    1)  a                                                
+    2)  b                                                
+
+Order 2:
+
+
+Qualitative Importance Analysis:
+
+Order        Number
+-----        ------
+   1           2
+   2           0
+  ALL          2
+

@@ -1,0 +1,56 @@
+Minimal Cut Sets
+================
+
+Tree   : T.fta
+Time   : 
+
+Method : Algebraic
+
+No. of primary events = 9
+Minimal cut set order = 1 to 9
+
+Order 1:
+    1)  K1                                               
+    2)  S1                                               
+    3)  T1inc                                            
+
+Order 2:
+
+Order 3:
+    1)  KT1inc KT2inc KT3inc                             
+    2)  KT1inc KT2inc T4inc                              
+    3)  KT1inc KT3inc T3inc                              
+    4)  KT1inc T3inc T4inc                               
+    5)  KT2inc KT3inc T2inc                              
+    6)  KT2inc T2inc T4inc                               
+    7)  KT3inc T2inc T3inc                               
+    8)  T2inc T3inc T4inc                                
+
+Order 4:
+
+Order 5:
+
+Order 6:
+
+Order 7:
+
+Order 8:
+
+Order 9:
+
+
+Qualitative Importance Analysis:
+
+Order        Number
+-----        ------
+   1           3
+   2           0
+   3           8
+   4           0
+   5           0
+   6           0
+   7           0
+   8           0
+   9           0
+  ALL          11
+

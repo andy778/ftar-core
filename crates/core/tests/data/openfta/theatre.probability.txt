@@ -1,0 +1,33 @@
+Probabilities Analysis
+======================
+
+Tree   : theatre.fta
+Time   : 
+
+Number of primary events   = 3
+Number of minimal cut sets = 2
+Order of minimal cut sets  = 3
+
+Unit time span         = 1.000000
+
+Minimal cut set probabilities :
+
+  1    GEN_FAIL MAINS_FAIL             5.940398E-04
+  2    MAINS_FAIL RELAY_FAIL           1.500000E-03
+
+
+Probability of top level event (minimal cut sets up to order 3 used):
+
+ 1 term    +2.094040E-03   = 2.094040E-03 (upper bound)
+ 2 terms   -2.970199E-05   = 2.064338E-03 (lower bound)
+
+Exact value : 2.064338E-03
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ GEN_FAIL       5.940398E-04            28.78%
+ MAINS_FAIL     2.094040E-03            101.44%
+ RELAY_FAIL     1.500000E-03            72.66%

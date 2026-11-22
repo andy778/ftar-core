@@ -26,19 +26,24 @@ fn cut_set_report_layout() {
     let p = Project::load(data("theatre.fta")).unwrap();
     let cs = minimal_cut_sets(&p.tree).unwrap();
     let ev = primary_event_order(&p.tree);
-    let r = cut_sets_report("theatre.fta", TIME, &ev, &cs);
+    let r = cut_sets_report("theatre.fta", TIME, &ev, usize::MAX, &cs);
     assert!(r.starts_with(
         "Minimal Cut Sets\n================\n\nTree   : theatre.fta\nTime   : Mon Jan  1 12:00:00 2024\n\nMethod : Algebraic\n\n"
     ));
-    assert!(r.contains("No. of primary events = 3\nMinimal cut set order = 1 to 2\n"));
+    // as OpenFTA: the order limit (all = number of events), empty orders listed (#41)
+    assert!(r.contains("No. of primary events = 3\nMinimal cut set order = 1 to 3\n"));
     assert!(r.contains("\nOrder 1:\n\nOrder 2:\n  "), "{r}");
+    assert!(r.contains("\nOrder 3:\n\n\nQualitative"), "{r}");
     assert!(r.contains(
         "Qualitative Importance Analysis:\n\nOrder        Number\n-----        ------\n"
     ));
     assert!(
-        r.contains("   1           0\n   2           2\n  ALL          2\n"),
+        r.contains("   1           0\n   2           2\n   3           0\n  ALL          2\n"),
         "{r}"
     );
+    // an explicit limit is printed as given
+    let r2 = cut_sets_report("theatre.fta", TIME, &ev, 2, &cs);
+    assert!(r2.contains("Minimal cut set order = 1 to 2\n"), "{r2}");
 }
 
 #[test]
@@ -205,7 +210,13 @@ fn failure_statistics_report_lists_modes() {
 fn top_with_transfers_reports() {
     let p = Project::load(data("top.fta")).unwrap();
     let cs = minimal_cut_sets(&p.tree).unwrap();
-    let r = cut_sets_report("top.fta", TIME, &primary_event_order(&p.tree), &cs);
+    let r = cut_sets_report(
+        "top.fta",
+        TIME,
+        &primary_event_order(&p.tree),
+        usize::MAX,
+        &cs,
+    );
     assert!(r.contains("  ALL          2\n"));
 }
 
@@ -310,7 +321,13 @@ fn primary_events_are_listed_in_openfta_order() {
 fn cut_set_lines_list_events_alphabetically() {
     let p = Project::load(data("theatre.fta")).unwrap();
     let cs = minimal_cut_sets(&p.tree).unwrap();
-    let r = cut_sets_report("theatre.fta", TIME, &primary_event_order(&p.tree), &cs);
+    let r = cut_sets_report(
+        "theatre.fta",
+        TIME,
+        &primary_event_order(&p.tree),
+        usize::MAX,
+        &cs,
+    );
     assert!(r.contains(" MAINS_FAIL RELAY_FAIL"), "{r}");
     assert!(!r.contains(" RELAY_FAIL MAINS_FAIL"), "{r}");
 }
@@ -349,7 +366,7 @@ const LONG: [&str; 4] = [
 fn long_cut_set_lines_wrap_like_openfta() {
     let (tree, _) = and_tree(&LONG, 0.5);
     let cs = minimal_cut_sets(&tree).unwrap();
-    let r = cut_sets_report("t.fta", TIME, &primary_event_order(&tree), &cs);
+    let r = cut_sets_report("t.fta", TIME, &primary_event_order(&tree), usize::MAX, &cs);
     let want = format!(
         "\nOrder 4:\n    1) {}\n       {}\n",
         c_pad(" LONG_EVENT_ID_1 LONG_EVENT_ID_2 LONG_EVENT_ID_3", 50),
@@ -411,7 +428,7 @@ fn non_ascii_ids_are_padded_in_bytes() {
     let (tree, db) = and_tree(&["PUMPÄ"], 0.5);
     let cs = minimal_cut_sets(&tree).unwrap();
     let ev = primary_event_order(&tree);
-    let r = cut_sets_report("t.fta", TIME, &ev, &cs);
+    let r = cut_sets_report("t.fta", TIME, &ev, usize::MAX, &cs);
     let want = format!("    1) {}\n", c_pad(" PUMPÄ", 50));
     assert_eq!(want.len(), 7 + 50 + 1);
     assert!(r.contains(&want), "{r:?}");

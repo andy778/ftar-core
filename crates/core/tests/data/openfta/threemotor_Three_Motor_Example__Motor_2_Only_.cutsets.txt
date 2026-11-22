@@ -1,0 +1,126 @@
+Minimal Cut Sets
+================
+
+Tree   : Three Motor Example (Motor 2 Only).fta
+Time   : 
+
+Method : Algebraic
+
+No. of primary events = 18
+Minimal cut set order = 1 to 18
+
+Order 1:
+
+Order 2:
+    1)  K1 K5                                            
+    2)  K1 T2                                            
+    3)  K2 K5                                            
+    4)  K5 S1                                            
+    5)  K5 T1                                            
+    6)  K5 T3                                            
+    7)  S1 T2                                            
+
+Order 3:
+    1)  K2 T1inc T2                                      
+    2)  T1 T1inc T2                                      
+    3)  T1inc T2 T3                                      
+
+Order 4:
+    1)  K5 KT1 KT2 KT3                                   
+    2)  K5 KT1 KT3 T4                                    
+
+Order 5:
+    1)  K2 KT1inc KT2inc KT3inc T2                       
+    2)  K2 KT1inc KT2inc T2 T4inc                        
+    3)  K2 KT1inc KT3inc T2 T3inc                        
+    4)  K2 KT1inc T2 T3inc T4inc                         
+    5)  K2 KT2inc KT3inc T2 T2inc                        
+    6)  K2 KT2inc T2 T2inc T4inc                         
+    7)  K2 KT3inc T2 T2inc T3inc                         
+    8)  K2 T2 T2inc T3inc T4inc                          
+    9)  KT1 KT2 KT3 T1inc T2                             
+   10)  KT1 KT3 T1inc T2 T4                              
+   11)  KT1inc KT2inc KT3inc T1 T2                       
+   12)  KT1inc KT2inc KT3inc T2 T3                       
+   13)  KT1inc KT2inc T1 T2 T4inc                        
+   14)  KT1inc KT2inc T2 T3 T4inc                        
+   15)  KT1inc KT3inc T1 T2 T3inc                        
+   16)  KT1inc KT3inc T2 T3 T3inc                        
+   17)  KT1inc T1 T2 T3inc T4inc                         
+   18)  KT1inc T2 T3 T3inc T4inc                         
+   19)  KT2inc KT3inc T1 T2 T2inc                        
+   20)  KT2inc KT3inc T2 T2inc T3                        
+   21)  KT2inc T1 T2 T2inc T4inc                         
+   22)  KT2inc T2 T2inc T3 T4inc                         
+   23)  KT3inc T1 T2 T2inc T3inc                         
+   24)  KT3inc T2 T2inc T3 T3inc                         
+   25)  T1 T2 T2inc T3inc T4inc                          
+   26)  T2 T2inc T3 T3inc T4inc                          
+
+Order 6:
+
+Order 7:
+    1)  KT1 KT1inc KT2 KT2inc KT3 KT3inc T2              
+    2)  KT1 KT1inc KT2 KT2inc KT3 T2 T4inc               
+    3)  KT1 KT1inc KT2 KT3 KT3inc T2 T3inc               
+    4)  KT1 KT1inc KT2 KT3 T2 T3inc T4inc                
+    5)  KT1 KT1inc KT2inc KT3 KT3inc T2 T4               
+    6)  KT1 KT1inc KT2inc KT3 T2 T4 T4inc                
+    7)  KT1 KT1inc KT3 KT3inc T2 T3inc T4                
+    8)  KT1 KT1inc KT3 T2 T3inc T4 T4inc                 
+    9)  KT1 KT2 KT2inc KT3 KT3inc T2 T2inc               
+   10)  KT1 KT2 KT2inc KT3 T2 T2inc T4inc                
+   11)  KT1 KT2 KT3 KT3inc T2 T2inc T3inc                
+   12)  KT1 KT2 KT3 T2 T2inc T3inc T4inc                 
+   13)  KT1 KT2inc KT3 KT3inc T2 T2inc T4                
+   14)  KT1 KT2inc KT3 T2 T2inc T4 T4inc                 
+   15)  KT1 KT3 KT3inc T2 T2inc T3inc T4                 
+   16)  KT1 KT3 T2 T2inc T3inc T4 T4inc                  
+
+Order 8:
+
+Order 9:
+
+Order 10:
+
+Order 11:
+
+Order 12:
+
+Order 13:
+
+Order 14:
+
+Order 15:
+
+Order 16:
+
+Order 17:
+
+Order 18:
+
+
+Qualitative Importance Analysis:
+
+Order        Number
+-----        ------
+   1           0
+   2           7
+   3           3
+   4           2
+   5           26
+   6           0
+   7           16
+   8           0
+   9           0
+  10           0
+  11           0
+  12           0
+  13           0
+  14           0
+  15           0
+  16           0
+  17           0
+  18           0
+  ALL          54
+
