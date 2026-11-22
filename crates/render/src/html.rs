@@ -75,3 +75,33 @@ pub fn print_html_with(
     h.push_str("</body></html>\n");
     h
 }
+
+/// A printable page with only a text report (OpenFTA's Report > Print): the same
+/// sheet size and margins as [`print_html_with`], the text in a monospaced block.
+pub fn report_html(title: &str, report: &str, auto_print: bool, page: &PageSetup) -> String {
+    let (sw, sh) = page.sheet_mm();
+    let m = page.content_margin();
+    let mut h = String::new();
+    h.push_str("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n");
+    h.push_str(&format!("<title>{}</title>\n", xml_escape(title)));
+    h.push_str(&format!(
+        "<style>\n\
+         @page {{ size: {sw:.1}mm {sh:.1}mm; margin: {m:.1}mm; }}\n\
+         body {{ font-family: 'DejaVu Sans', Arial, sans-serif; margin: 0; color: #111; }}\n\
+         pre.report {{ font-family: 'DejaVu Sans Mono', monospace; font-size: 8.5pt; line-height: 1.25; margin: 0; }}\n\
+         @media screen {{ body {{ padding: {m:.1}mm; }} }}\n\
+         </style>\n"
+    ));
+    if auto_print {
+        h.push_str(
+            "<script>window.addEventListener('load', function () { window.print(); });</script>\n",
+        );
+    }
+    h.push_str("</head><body>\n");
+    h.push_str(&format!(
+        "<pre class=\"report\">{}</pre>\n",
+        xml_escape(report)
+    ));
+    h.push_str("</body></html>\n");
+    h
+}

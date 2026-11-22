@@ -1151,6 +1151,46 @@ impl App {
         res
     }
 
+    /// Report > Print: write the last saved report of `kind` as a page of its
+    /// own (the page setup from File > Page setup) that opens the print
+    /// dialog. Does not run the analysis again.
+    pub fn prepare_report_print(&mut self, kind: ReportKind) -> Result<PathBuf, String> {
+        let res = self
+            .tree_path()
+            .ok_or_else(|| "save the tree and run the analysis first".to_string())
+            .and_then(|t| ftar_core::report_files::read(t, kind))
+            .and_then(|text| {
+                let what = match kind {
+                    ReportKind::CutSets => "Qualitative report",
+                    ReportKind::Probability => "Probability report",
+                    ReportKind::MonteCarlo => "Monte Carlo report",
+                    ReportKind::FailureStatistics => "Failure statistics",
+                };
+                let html = ftar_render::report_html(
+                    &format!("{} - {what}", self.tree_name()),
+                    &text,
+                    true,
+                    &self.preview.setup,
+                );
+                let path = std::env::temp_dir().join(format!(
+                    "ftar_report_print_{}_{}.html",
+                    std::process::id(),
+                    self.version
+                ));
+                std::fs::write(&path, html)
+                    .map(|_| path.clone())
+                    .map_err(|e| format!("{}: {e}", path.display()))
+            });
+        match &res {
+            Ok(p) => {
+                self.error = None;
+                self.status = Some(format!("Print page written to {}", p.display()));
+            }
+            Err(e) => self.error = Some(e.clone()),
+        }
+        res
+    }
+
     // ------------------------------------------------------------ reports
 
     /// Monte Carlo settings as chosen on screen.
