@@ -18,6 +18,9 @@ jobs:
       security-events: write
       contents: read
       actions: read
+      # Publishing to the Scorecard API signs the results with the job's
+      # OIDC token.
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,10 +32,9 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          # Results are NOT published to the Scorecard API. To publish and
-          # enable the README badge, set this to true and add
-          # `id-token: write` to the job permissions above.
-          publish_results: false
+          # Published to the Scorecard API (scorecard.dev) for the README
+          # badge (#48). The repo is public; this is what anyone can compute.
+          publish_results: true
 
       - name: Upload SARIF artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

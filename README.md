@@ -1,5 +1,7 @@
 # ftar-core
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/andy778/ftar-core/badge)](https://scorecard.dev/viewer/?uri=github.com/andy778/ftar-core)
+
 Rust port of the [OpenFTA](https://github.com/luyangshang/OpenFTA) fault tree analysis engine (unmaintained since 2013).
 Java 21 baseline of the original: <https://github.com/andy778/OpenFTA/tree/dev>.
 
