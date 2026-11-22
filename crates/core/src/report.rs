@@ -75,6 +75,16 @@ pub fn primary_event_order(tree: &Tree) -> Vec<String> {
     tree.primary_event_ids()
 }
 
+/// `s` padded with spaces to `width` *bytes*, as C's `%-Ns` does (Rust's
+/// `{:<N}` counts characters, so ids with letters such as `ä` would line up
+/// differently from OpenFTA's reports).
+fn pad(s: &str, width: usize) -> String {
+    let mut out = String::with_capacity(width.max(s.len()));
+    out.push_str(s);
+    out.extend(std::iter::repeat_n(' ', width.saturating_sub(s.len())));
+    out
+}
+
 /// Port of `BitPara`/`ParaGrow`: event ids (in `events` order) as lines of at
 /// most `width` characters, every id preceded by a space.
 fn paragraph(set: &CutSet, events: &[String], width: usize) -> Vec<String> {
@@ -308,9 +318,9 @@ pub fn cut_sets_report(
         for cs in cut_sets.iter().filter(|c| c.len() == order) {
             counts[order] += 1;
             let lines = paragraph(cs, events, 50);
-            let _ = writeln!(out, "  {:>3}) {:<50}", counts[order], lines[0]);
+            let _ = writeln!(out, "  {:>3}) {}", counts[order], pad(&lines[0], 50));
             for l in &lines[1..] {
-                let _ = writeln!(out, "       {l:<50}");
+                let _ = writeln!(out, "       {}", pad(l, 50));
             }
         }
     }
@@ -364,9 +374,9 @@ pub fn probability_report_text(
     out.push_str("Minimal cut set probabilities :\n\n");
     for (i, (cs, p)) in report.cut_sets.iter().enumerate() {
         let lines = paragraph(cs, events, 30);
-        let _ = writeln!(out, "{:>3}   {:<30}   {}", i + 1, lines[0], fmt_e(*p));
+        let _ = writeln!(out, "{:>3}   {}   {}", i + 1, pad(&lines[0], 30), fmt_e(*p));
         for l in &lines[1..] {
-            let _ = writeln!(out, "      {l:<20}");
+            let _ = writeln!(out, "      {}", pad(l, 20));
         }
     }
 
@@ -396,8 +406,8 @@ pub fn probability_report_text(
     for e in &report.events {
         let _ = writeln!(
             out,
-            "{:<15} {}            {:>5.2}%",
-            format!(" {}", e.id),
+            "{} {}            {:>5.2}%",
+            pad(&format!(" {}", e.id), 15),
             fmt_e(e.contribution),
             e.importance_pct
         );
@@ -420,16 +430,16 @@ fn mode_rows(
         let n = m.count as f64;
         let _ = writeln!(
             out,
-            "{:>3}   {:<20}  {:<8}  {} ( +/- {} )  {:>5.2}%",
+            "{:>3}   {}  {:<8}  {} ( +/- {} )  {:>5.2}%",
             i + 1,
-            lines[0],
+            pad(&lines[0], 20),
             m.count,
             fmt_e(scale * n / trials as f64),
             fmt_e(scale * n.sqrt() / trials as f64),
             100.0 * n / failures as f64
         );
         for l in &lines[1..] {
-            let _ = writeln!(out, "      {l:<20}");
+            let _ = writeln!(out, "      {}", pad(l, 20));
         }
     }
 }
@@ -529,8 +539,8 @@ pub fn monte_carlo_report_text(
     {
         let _ = writeln!(
             out,
-            "{:<15} {}            {:>5.2}%",
-            format!(" {e}"),
+            "{} {}            {:>5.2}%",
+            pad(&format!(" {e}"), 15),
             fmt_e(c),
             imp
         );

@@ -314,3 +314,117 @@ fn cut_set_lines_list_events_alphabetically() {
     assert!(r.contains(" MAINS_FAIL RELAY_FAIL"), "{r}");
     assert!(!r.contains(" RELAY_FAIL MAINS_FAIL"), "{r}");
 }
+
+// ------------------------------------------------- long lines (issue #9)
+
+/// C's `%-Ns`: pad to `n` bytes.
+fn c_pad(s: &str, n: usize) -> String {
+    format!("{s}{}", " ".repeat(n.saturating_sub(s.len())))
+}
+
+/// An AND of `ids`, each with probability `p`.
+fn and_tree(ids: &[&str], p: f64) -> (ftar_core::Tree, ftar_core::PrimaryEventDb) {
+    let mut fta = format!("NULL\nS NULL 0\n0\nM NULL 1 \n0\nA NULL {} \n", ids.len());
+    let mut ped = String::new();
+    for id in ids {
+        fta.push_str(&format!("B {id} 0 \n"));
+        ped.push_str(&format!("{id};;B ;d;{p:e}; ;\n"));
+    }
+    (
+        ftar_core::parse::parse_fta(fta.as_bytes()).unwrap(),
+        ftar_core::parse::parse_ped(ped.as_bytes()).unwrap(),
+    )
+}
+
+const LONG: [&str; 4] = [
+    "LONG_EVENT_ID_1",
+    "LONG_EVENT_ID_2",
+    "LONG_EVENT_ID_3",
+    "LONG_EVENT_ID_4",
+];
+
+/// Cut sets wrap at 50 bytes (`BitPara(g->b, 50)`); each line is `%-50s`,
+/// continuation lines indented 7 (`CutSetsCommon.c`).
+#[test]
+fn long_cut_set_lines_wrap_like_openfta() {
+    let (tree, _) = and_tree(&LONG, 0.5);
+    let cs = minimal_cut_sets(&tree).unwrap();
+    let r = cut_sets_report("t.fta", TIME, &primary_event_order(&tree), &cs);
+    let want = format!(
+        "\nOrder 4:\n    1) {}\n       {}\n",
+        c_pad(" LONG_EVENT_ID_1 LONG_EVENT_ID_2 LONG_EVENT_ID_3", 50),
+        c_pad(" LONG_EVENT_ID_4", 50)
+    );
+    assert!(r.contains(&want), "{r}");
+}
+
+/// Probability cut-set rows wrap at 30 bytes; the first line is `%-30s`, the
+/// rest `%-20s` indented 6 (`ProbabilityAnalysis.c`).
+#[test]
+fn long_probability_lines_wrap_like_openfta() {
+    let (tree, db) = and_tree(&LONG, 0.5);
+    let opts = ProbabilityOptions::default();
+    let rep = probability_report(&tree, &db, &opts).unwrap();
+    let r = probability_report_text("t.fta", TIME, &primary_event_order(&tree), 4, &opts, &rep);
+    let mut want = format!(
+        "  1   {}   {}\n",
+        c_pad(" LONG_EVENT_ID_1", 30),
+        fmt_e(0.0625)
+    );
+    for id in &LONG[1..] {
+        want.push_str(&format!("      {}\n", c_pad(&format!(" {id}"), 20)));
+    }
+    assert!(r.contains(&want), "{r}");
+}
+
+/// Monte Carlo failure modes wrap at 20 bytes, continuation lines `%-20s`
+/// indented 6 (`MonteCarloSimulation.c`).
+#[test]
+fn long_failure_mode_lines_wrap_like_openfta() {
+    let (tree, db) = and_tree(&LONG, 0.9);
+    let mc = simulate(
+        &tree,
+        &db,
+        &MonteCarloOptions {
+            trials: 1_000,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let fs = failure_statistics_from_hits(&mc, 0);
+    let r = monte_carlo_report_text("t.fta", TIME, 1.0, &mc, &fs);
+    let line1 = format!("  1   {}  ", c_pad(" LONG_EVENT_ID_1", 20));
+    let rest: String = LONG[1..]
+        .iter()
+        .map(|id| format!("      {}\n", c_pad(&format!(" {id}"), 20)))
+        .collect();
+    let at = r.find(&line1).unwrap_or_else(|| panic!("{r}"));
+    let after = &r[at..];
+    let next = after.find('\n').unwrap() + 1;
+    assert!(after[next..].starts_with(&rest), "{r}");
+}
+
+/// Columns are padded in bytes, as C's printf does, so a non-ASCII id lines
+/// up as in OpenFTA's files.
+#[test]
+fn non_ascii_ids_are_padded_in_bytes() {
+    let (tree, db) = and_tree(&["PUMPÄ"], 0.5);
+    let cs = minimal_cut_sets(&tree).unwrap();
+    let ev = primary_event_order(&tree);
+    let r = cut_sets_report("t.fta", TIME, &ev, &cs);
+    let want = format!("    1) {}\n", c_pad(" PUMPÄ", 50));
+    assert_eq!(want.len(), 7 + 50 + 1);
+    assert!(r.contains(&want), "{r:?}");
+
+    let opts = ProbabilityOptions::default();
+    let rep = probability_report(&tree, &db, &opts).unwrap();
+    let r = probability_report_text("t.fta", TIME, &ev, 1, &opts, &rep);
+    assert!(
+        r.contains(&format!("  1   {}   ", c_pad(" PUMPÄ", 30))),
+        "{r:?}"
+    );
+    assert!(
+        r.contains(&format!("\n{} {}", c_pad(" PUMPÄ", 15), fmt_e(0.5))),
+        "{r:?}"
+    );
+}
