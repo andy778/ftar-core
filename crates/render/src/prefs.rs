@@ -103,18 +103,19 @@ impl Symbol {
         })
     }
 
+    /// OpenFTA's defaults (`Preferences.java`). OpenFTA has no colour for
+    /// dormant events (it draws them as basic events), so they share the basic one.
     fn default_fill(self) -> Rgb {
         match self {
-            Symbol::Basic => [0xa8, 0xc4, 0xea],
-            Symbol::Dormant => [0xbc, 0xbc, 0xec],
-            Symbol::Undeveloped => [0xec, 0xd9, 0xa0],
-            Symbol::External => [0xa9, 0xd9, 0xbc],
-            Symbol::And => [0xe8, 0xa8, 0xa8],
-            Symbol::Or => [0xb0, 0xd6, 0xb0],
-            Symbol::Xor | Symbol::PriorityAnd | Symbol::Inhibit => [0xd8, 0xb4, 0xd8],
-            Symbol::Intermediate => [0xc8, 0xc8, 0xc8],
-            Symbol::Conditioning => [0xf0, 0xe0, 0xc0],
-            Symbol::TransferIn | Symbol::TransferOut => [0xd0, 0xd0, 0xd0],
+            Symbol::Intermediate => [250, 250, 200],
+            Symbol::Basic | Symbol::Dormant | Symbol::Undeveloped | Symbol::External => {
+                [210, 250, 200]
+            }
+            Symbol::Conditioning => [200, 245, 250],
+            Symbol::And | Symbol::Or | Symbol::PriorityAnd | Symbol::Xor | Symbol::Inhibit => {
+                [250, 200, 200]
+            }
+            Symbol::TransferIn | Symbol::TransferOut => [220, 200, 170],
         }
     }
 
@@ -143,9 +144,9 @@ impl Default for Preferences {
         }
         Self {
             monochrome: false,
-            pen: [0x44, 0x44, 0x44],
+            pen: [0, 0, 0],
             background: [0xff, 0xff, 0xff],
-            highlight: [0xff, 0xaa, 0x00],
+            highlight: [255, 50, 50],
             fills,
         }
     }
@@ -302,6 +303,29 @@ fn set(slot: &mut Rgb, v: &str) {
 
 #[cfg(test)]
 mod tests {
+    /// OpenFTA's defaults, from `Preferences.java` (#69).
+    #[test]
+    fn defaults_are_openftas() {
+        use EventType::*;
+        let p = Preferences::default();
+        assert_eq!(p.pen, [0, 0, 0]);
+        assert_eq!(p.background, [255, 255, 255]);
+        assert_eq!(p.highlight, [255, 50, 50]);
+        assert_eq!(p.fill(Intermediate), [250, 250, 200]);
+        for k in [Basic, Undeveloped, External, Dormant] {
+            assert_eq!(p.fill(k), [210, 250, 200], "{k:?}");
+        }
+        for k in [ConditionAnalysed, ConditionNotAnalysed] {
+            assert_eq!(p.fill(k), [200, 245, 250], "{k:?}");
+        }
+        for k in [And, Or, PriorityAnd, Xor, Inhibit] {
+            assert_eq!(p.fill(k), [250, 200, 200], "{k:?}");
+        }
+        for k in [TransferIn, TransferOut] {
+            assert_eq!(p.fill(k), [220, 200, 170], "{k:?}");
+        }
+    }
+
     use super::*;
 
     #[test]

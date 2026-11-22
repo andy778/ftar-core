@@ -86,6 +86,8 @@ pub struct App {
     pub preview: crate::preview::PrintPreview,
     /// The primary event editor window is shown.
     pub events_open: bool,
+    /// The next frame puts the keyboard in the selected node's id field (Edit > Selected...).
+    pub focus_details: bool,
     /// Analysis > Validate window is shown.
     pub validate_open: bool,
     /// Help window (user guide and about page).
@@ -175,6 +177,7 @@ impl Default for App {
             buf: Buffers::default(),
             preview: Default::default(),
             events_open: false,
+            focus_details: false,
             validate_open: false,
             help: crate::help::HelpState::default(),
             ped: Default::default(),
@@ -895,23 +898,70 @@ impl App {
     }
 
     /// Move the selected node among its siblings (`-1` earlier, `+1` later).
+    /// Shift Left / Shift Right (delta -1 / +1): move the selected node one
+    /// place among its siblings, with OpenFTA's rules: conditions and
+    /// transfer-out symbols stay where they are (with a warning), a node is not
+    /// shifted past a condition or transfer-out, and shifting at the end of the
+    /// row does nothing.
     pub fn move_selected(&mut self, delta: i32) {
         let Some(path) = self.selected.clone() else {
+            self.error = Some("Select an item first.".into());
             return;
         };
         let Some(&idx) = path.last() else { return };
-        let new = if delta < 0 {
-            idx.saturating_sub(1)
-        } else {
-            idx + 1
+        let Some(doc) = self.doc.as_ref() else { return };
+        let Some(node) = edit::node_at(&doc.tree, &path) else {
+            return;
         };
-        if new == idx {
+        let pinned = |k: EventType| {
+            matches!(
+                k,
+                EventType::ConditionAnalysed
+                    | EventType::ConditionNotAnalysed
+                    | EventType::TransferOut
+            )
+        };
+        if pinned(node.kind) {
+            self.error = Some("A condition or a transfer-out cannot be shifted.".into());
             return;
         }
+        let parent = &path[..path.len() - 1];
+        let siblings = edit::node_at(&doc.tree, parent).map_or(0, |p| p.children.len());
+        let new = if delta < 0 {
+            if idx == 0 {
+                return;
+            }
+            let left = &edit::node_at(&doc.tree, parent).unwrap().children[idx - 1];
+            if pinned(left.kind) {
+                return;
+            }
+            idx - 1
+        } else {
+            if idx + 1 >= siblings {
+                return;
+            }
+            idx + 1
+        };
         if let Some(p) =
             self.edit(|doc| edit::reorder(&mut doc.tree, &path, new).map_err(|e| e.to_string()))
         {
             self.select(Some(p));
+        }
+    }
+
+    /// Edit > Selected... and double-click: edit the selected symbol. Primary
+    /// events open in the primary event editor, as in OpenFTA; everything else
+    /// puts the keyboard in the edit panel's id field.
+    pub fn edit_selected(&mut self) {
+        let Some(node) = self.selected_node().cloned() else {
+            self.error = Some("Select an item first.".into());
+            return;
+        };
+        if node.kind.is_primary() && !node.id.is_empty() {
+            self.event_form_load(&node.id);
+            self.events_open = true;
+        } else {
+            self.focus_details = true;
         }
     }
 
