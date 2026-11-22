@@ -10,6 +10,7 @@
 pub mod html;
 pub mod png;
 pub mod svg;
+pub mod symbols;
 
 pub use html::{print_html, PrintOptions};
 pub use png::{svg_to_png, RenderError};

@@ -5,7 +5,7 @@ use eframe::egui::{self, Color32, Key, Modifiers, Rect, Sense, Stroke, Vec2};
 
 use crate::app::App;
 use crate::layout;
-use crate::ui::{content_size, GAP_X, GAP_Y, NODE_H, NODE_W};
+use crate::ui::{content_size, GAP_X, GAP_Y, ID_SPACE, NODE_W, SYM_U};
 
 /// Smallest and largest zoom factor (2% .. 400%).
 pub const ZOOM_MIN: f32 = 0.02;
@@ -215,7 +215,7 @@ impl App {
                     for p in layout::layout(&doc.tree.root).iter() {
                         let c = to_o(Vec2::new(
                             p.x * GAP_X + NODE_W / 2.0,
-                            p.y * GAP_Y + NODE_H / 2.0,
+                            p.y * GAP_Y + (ID_SPACE + SYM_U) / 2.0,
                         ));
                         painter.circle_filled(c, 2.0, Color32::from_rgb(120, 150, 200));
                     }
