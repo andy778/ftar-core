@@ -192,13 +192,8 @@ pub fn probability_report(
 ) -> Result<ProbabilityReport> {
     let sets = minimal_cut_sets_limited(tree, opts.max_order)?;
 
-    // Primary events in tree order, then index them.
-    let mut ids: Vec<String> = Vec::new();
-    for n in tree.nodes() {
-        if (n.kind.is_primary() || n.kind == EventType::ConditionAnalysed) && !ids.contains(&n.id) {
-            ids.push(n.id.clone());
-        }
-    }
+    // Primary events in OpenFTA list order, then index them.
+    let ids = tree.primary_event_ids();
     let probs: Vec<f64> = ids
         .iter()
         .map(|id| {

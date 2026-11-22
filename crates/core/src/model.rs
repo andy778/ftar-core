@@ -135,6 +135,23 @@ impl Tree {
         }
         out
     }
+
+    /// Ids of the events an analysis works on (basic, undeveloped, external,
+    /// dormant and analysed conditions), each once, in byte order. This is the
+    /// order of OpenFTA's event list, which inserts every event at its
+    /// `strcmp` position (`event_list.c`, `rec_expand_tree`), so reports and
+    /// the Monte Carlo "first failure" follow it.
+    pub fn primary_event_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .nodes()
+            .into_iter()
+            .filter(|n| n.kind.is_primary() || n.kind == EventType::ConditionAnalysed)
+            .map(|n| n.id.clone())
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
