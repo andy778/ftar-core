@@ -310,6 +310,23 @@ impl App {
                         ui.close();
                         self.overview_open = true;
                     }
+                    ui.menu_button("Theme", |ui| {
+                        for (t, label) in [
+                            (ftar_render::Theme::System, "System"),
+                            (ftar_render::Theme::Light, "Light"),
+                            (ftar_render::Theme::Dark, "Dark"),
+                        ] {
+                            if ui
+                                .selectable_label(self.prefs.theme == t, label)
+                                .clicked()
+                            {
+                                ui.close();
+                                let mut p = self.prefs.clone();
+                                p.theme = t;
+                                self.set_prefs(p);
+                            }
+                        }
+                    });
                     ui.separator();
                     if ui
                         .add_enabled(
@@ -1176,6 +1193,11 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        ctx.set_theme(match self.prefs.theme {
+            ftar_render::Theme::Light => egui::ThemePreference::Light,
+            ftar_render::Theme::Dark => egui::ThemePreference::Dark,
+            ftar_render::Theme::System => egui::ThemePreference::System,
+        });
 
         self.top_bar(ui);
         self.toolbar(ui);

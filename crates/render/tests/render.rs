@@ -355,3 +355,17 @@ fn report_page_holds_only_the_escaped_report_and_prints_on_load() {
     let quiet = report_html("T", "x", false, &PageSetup::default());
     assert!(!quiet.contains("window.print()"));
 }
+
+#[test]
+fn theme_is_light_by_default_and_round_trips() {
+    use ftar_render::{Preferences, Theme};
+    assert_eq!(Preferences::default().theme, Theme::Light);
+    for t in Theme::ALL {
+        let p = Preferences {
+            theme: t,
+            ..Preferences::default()
+        };
+        assert_eq!(Preferences::from_text(&p.to_text()).theme, t);
+    }
+    assert_eq!(Preferences::from_text("theme = bogus").theme, Theme::Light);
+}

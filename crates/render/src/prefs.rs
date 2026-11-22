@@ -124,9 +124,34 @@ impl Symbol {
     }
 }
 
+/// Window theme of the GUI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Theme {
+    /// Light, like OpenFTA.
+    #[default]
+    Light,
+    Dark,
+    /// Follow the desktop.
+    System,
+}
+
+impl Theme {
+    pub const ALL: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Theme::Light => "light",
+            Theme::Dark => "dark",
+            Theme::System => "system",
+        }
+    }
+}
+
 /// Colours and mode used by the canvas, image export and print.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preferences {
+    /// GUI window theme (not used by image export or print).
+    pub theme: Theme,
     /// Draw in black on white (fills white) regardless of the colours below.
     pub monochrome: bool,
     pub pen: Rgb,
@@ -143,6 +168,7 @@ impl Default for Preferences {
             fills[s.index()] = s.default_fill();
         }
         Self {
+            theme: Theme::default(),
             monochrome: false,
             pen: [0, 0, 0],
             background: [0xff, 0xff, 0xff],
@@ -203,6 +229,7 @@ impl Preferences {
     /// Serialise as `key = value` lines.
     pub fn to_text(&self) -> String {
         let mut s = String::from("# ftar drawing preferences\n");
+        s.push_str(&format!("theme = {}\n", self.theme.key()));
         s.push_str(&format!("monochrome = {}\n", self.monochrome));
         s.push_str(&format!("pen = {}\n", hex(self.pen)));
         s.push_str(&format!("background = {}\n", hex(self.background)));
@@ -230,6 +257,11 @@ impl Preferences {
             };
             let (k, v) = (k.trim(), v.trim());
             match k {
+                "theme" => {
+                    if let Some(t) = Theme::ALL.into_iter().find(|t| t.key() == v) {
+                        p.theme = t;
+                    }
+                }
                 "monochrome" => {
                     if let Ok(b) = v.parse::<bool>() {
                         p.monochrome = b;
