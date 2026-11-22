@@ -1164,3 +1164,114 @@ fn overview_shows_the_whole_tree_and_clicking_moves_the_view() {
     );
     assert!(!h.state().auto_fit);
 }
+
+// ------------------------------------------------- cut, copy and paste (#53)
+
+#[test]
+fn copy_and_paste_a_branch_under_another_gate_and_undo() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    // Top -> AND1 -> [Backup_Fail -> Or1 -> [RELAY_FAIL, GEN_FAIL], MAINS_FAIL]
+    assert!(!app.can_copy() && !app.can_paste());
+    app.select(Some(vec![0, 1]));
+    app.copy_selected();
+    assert!(app.can_paste());
+    assert!(!app.dirty, "copying does not change the tree");
+    app.select(Some(vec![0, 0, 0]));
+    app.paste();
+    assert_eq!(app.selected.as_deref(), Some(&[0usize, 0, 0, 2][..]));
+    assert_eq!(children(&app, &[0, 0, 0]), 3);
+    assert!(app.dirty && app.error.is_none());
+    // pasting again with an event selected puts the copy after it
+    app.paste();
+    assert_eq!(app.selected.as_deref(), Some(&[0usize, 0, 0, 3][..]));
+    app.undo();
+    app.undo();
+    assert_eq!(children(&app, &[0, 0, 0]), 2);
+}
+
+#[test]
+fn cut_and_paste_moves_a_branch_and_bad_targets_say_why() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.select(Some(vec![]));
+    assert!(
+        app.can_copy() && !app.can_cut(),
+        "the top event cannot be cut"
+    );
+    app.select(Some(vec![0, 0]));
+    app.cut_selected();
+    assert_eq!(children(&app, &[0]), 1, "Backup_Fail is gone");
+    assert!(app.status.as_deref().unwrap().contains("Backup_Fail"));
+    // the top event already has its gate: refused, tree unchanged
+    app.select(Some(vec![]));
+    app.paste();
+    assert!(app.error.is_some());
+    assert_eq!(children(&app, &[0]), 1);
+    app.select(Some(vec![0]));
+    app.paste();
+    assert!(app.error.is_none());
+    assert_eq!(children(&app, &[0]), 2);
+    assert_eq!(app.selected.as_deref(), Some(&[0usize, 1][..]));
+    assert_eq!(app.selected_node().unwrap().id, "Backup_Fail");
+    assert_eq!(children(&app, &[0, 1, 0]), 2, "with its whole branch");
+}
+
+#[test]
+fn pasting_into_another_tree_brings_the_event_data() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.select(Some(vec![0, 1])); // MAINS_FAIL, p = 0.03
+    app.copy_selected();
+    app.open(data("lift.fta"));
+    assert!(
+        app.can_paste(),
+        "the clipboard survives opening another tree"
+    );
+    assert!(!app
+        .doc
+        .as_ref()
+        .unwrap()
+        .db
+        .events
+        .contains_key("MAINS_FAIL"));
+    app.select(Some(vec![0]));
+    app.paste();
+    assert!(app.error.is_none(), "{:?}", app.error);
+    let e = &app.doc.as_ref().unwrap().db.events["MAINS_FAIL"];
+    assert!((e.probability - 0.03).abs() < 1e-12);
+}
+
+#[test]
+fn edit_menu_and_shortcuts_cut_copy_paste() {
+    use eframe::egui::{Key, Modifiers};
+    let mut h = harness();
+    h.run();
+    h.state_mut().select(Some(vec![0, 1]));
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::C);
+    h.run();
+    assert!(h.state().clipboard.is_some(), "Ctrl+C copies");
+    h.state_mut().select(Some(vec![0, 0, 0]));
+    h.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    h.run();
+    assert_eq!(children(h.state(), &[0, 0, 0]), 3, "Ctrl+V pastes");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::X);
+    h.run();
+    assert_eq!(
+        children(h.state(), &[0, 0, 0]),
+        2,
+        "Ctrl+X cuts the pasted copy"
+    );
+    // the Edit menu has the three commands, with their shortcuts
+    h.get_by_label("Edit").click();
+    h.run();
+    for item in ["Cut", "Copy", "Paste"] {
+        let mut found = h.query_all_by_label_contains(item).filter(|n| {
+            n.accesskit_node()
+                .label()
+                .is_some_and(|l| l.starts_with(item) && l.contains("Ctrl"))
+        });
+        assert!(found.next().is_some(), "{item} in the Edit menu");
+    }
+}

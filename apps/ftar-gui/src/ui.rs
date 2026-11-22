@@ -65,6 +65,42 @@ impl App {
                 i.consume_key(Modifiers::COMMAND, Key::P),
             )
         });
+        // Cut, copy and paste act on the tree unless a text field has the keyboard;
+        // backends send them as clipboard events, tests as key presses.
+        let (cut, copy, paste) = if ctx.memory(|m| m.focused().is_some()) {
+            (false, false, false)
+        } else {
+            ctx.input_mut(|i| {
+                let mut c = (
+                    i.consume_key(Modifiers::COMMAND, Key::X),
+                    i.consume_key(Modifiers::COMMAND, Key::C),
+                    i.consume_key(Modifiers::COMMAND, Key::V),
+                );
+                i.events.retain(|e| match e {
+                    egui::Event::Cut => {
+                        c.0 = true;
+                        false
+                    }
+                    egui::Event::Copy => {
+                        c.1 = true;
+                        false
+                    }
+                    egui::Event::Paste(_) => {
+                        c.2 = true;
+                        false
+                    }
+                    _ => true,
+                });
+                c
+            })
+        };
+        if cut {
+            self.cut_selected();
+        } else if copy {
+            self.copy_selected();
+        } else if paste {
+            self.paste();
+        }
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.request_quit();
@@ -154,6 +190,40 @@ impl App {
                     {
                         ui.close();
                         self.redo();
+                    }
+                    ui.separator();
+                    let shortcut = |k| {
+                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                    };
+                    if ui
+                        .add_enabled(
+                            self.can_cut(),
+                            egui::Button::new("Cut").shortcut_text(shortcut(Key::X)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.cut_selected();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.can_copy(),
+                            egui::Button::new("Copy").shortcut_text(shortcut(Key::C)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.copy_selected();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.can_paste(),
+                            egui::Button::new("Paste").shortcut_text(shortcut(Key::V)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.paste();
                     }
                     ui.separator();
                     if ui
