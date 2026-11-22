@@ -4,7 +4,7 @@ ftar is a Rust port of OpenFTA, an unmaintained fault tree analysis tool (Java G
 
 ## Orient
 1. `README.md` (status checklist), `docs/architecture.md` (layers, crates), `docs/VERIFICATION.md` (what is proven equal to the original).
-2. The reference implementation is at https://github.com/andy778/OpenFTA (branch `dev`): C core in `src/lib/{Analysis,Appn,PrimaryEvents}`, Java GUI in `src/gui/FTAGUI`. It cannot be built on this machine; read it.
+2. The reference implementation is at https://github.com/andy778/OpenFTA (branch `dev`): C core in `src/lib/{Analysis,Appn,PrimaryEvents}`, Java GUI in `src/gui/FTAGUI`. Its C analysis core builds headless with `tools/openfta-native/build.sh` (gcc); the GUI is not needed. Read the source first.
 
 ## Run and look
 - Headless CLI: `cargo run -p ftar-cli -- prob tests/data/theatre.fta` (also `cutsets`, `mc`, `info`, `run` for JSON scripts).

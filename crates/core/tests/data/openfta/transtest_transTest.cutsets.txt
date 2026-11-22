@@ -1,0 +1,28 @@
+Minimal Cut Sets
+================
+
+Tree   : transTest.fta
+Time   : 
+
+Method : Algebraic
+
+No. of primary events = 3
+Minimal cut set order = 1 to 3
+
+Order 1:
+
+Order 2:
+
+Order 3:
+    1)  a b c                                            
+
+
+Qualitative Importance Analysis:
+
+Order        Number
+-----        ------
+   1           0
+   2           0
+   3           1
+  ALL          1
+

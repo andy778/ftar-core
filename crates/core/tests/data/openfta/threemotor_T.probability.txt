@@ -1,0 +1,48 @@
+Probabilities Analysis
+======================
+
+Tree   : T.fta
+Time   : 
+
+Number of primary events   = 9
+Number of minimal cut sets = 11
+Order of minimal cut sets  = 9
+
+Unit time span         = 1.000000
+
+Minimal cut set probabilities :
+
+  1    K1                              2.000000E-02
+  2    S1                              2.000000E-02
+  3    T1inc                           2.000000E-02
+  4    KT1inc KT2inc KT3inc            8.000000E-06
+  5    KT1inc KT2inc T4inc             8.000000E-06
+  6    KT1inc KT3inc T3inc             8.000000E-06
+  7    KT1inc T3inc T4inc              8.000000E-06
+  8    KT2inc KT3inc T2inc             8.000000E-06
+  9    KT2inc T2inc T4inc              8.000000E-06
+ 10    KT3inc T2inc T3inc              8.000000E-06
+ 11    T2inc T3inc T4inc               8.000000E-06
+
+
+Probability of top level event (minimal cut sets up to order 9 used):
+
+ 1 term    +6.006398E-02   = 6.006398E-02 (upper bound)
+ 2 terms   -1.205797E-03   = 5.885819E-02 (lower bound)
+ 3 terms   +8.273107E-06   = 5.886646E-02 (upper bound)
+ 4 terms   -3.088928E-08   = 5.886643E-02 (lower bound)
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ K1             2.000000E-02            33.98%
+ KT1inc         3.200000E-05             0.05%
+ KT2inc         3.200000E-05             0.05%
+ KT3inc         3.200000E-05             0.05%
+ S1             2.000000E-02            33.98%
+ T1inc          2.000000E-02            33.98%
+ T2inc          3.200000E-05             0.05%
+ T3inc          3.200000E-05             0.05%
+ T4inc          3.200000E-05             0.05%

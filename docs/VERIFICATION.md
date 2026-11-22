@@ -1,8 +1,25 @@
 # Verification of the Rust analysis against OpenFTA
 
 Reference: OpenFTA `dev` branch, `src/lib/Analysis/*.c`, `src/lib/Appn/{treeUtil,item,event_list}.c`.
-There is no C toolchain here, so the comparison is by reading the C plus an independent
-brute-force oracle (`tests/verify.rs`). No numbers from a native OpenFTA build were available.
+The comparison is by reading the C, an independent brute-force oracle (`tests/verify.rs`), and reports from
+a native build of OpenFTA's C core.
+
+## Native OpenFTA reports (`tests/openfta_reports.rs`)
+
+`tools/openfta-native/` builds OpenFTA's analysis engine (pinned commit of the `dev` branch) as a headless program,
+with the Java GUI's callbacks replaced by a small C driver, and `generate.sh` writes its cut sets and probability
+reports for every example tree in `tests/data` to `tests/data/openfta/`. `tests/openfta_reports.rs` checks ftar
+against them:
+
+- **Cut sets reports: identical** for all 10 trees (after #41: the order limit and empty orders are printed as in C).
+- **Probability reports: identical layout**; numbers agree to float precision (item 7). Single inclusion-exclusion
+  term values differ by up to 2.4e-5 relative where C sums C(54,4) = 316251 products in `float`; running totals and
+  everything else within 1e-5.
+- **Monte Carlo** is not compared: the random streams differ (item 18).
+
+Two things the native build needs that the GUI does silently: the probability analysis reads the cut sets back from
+`TREE.mcs` (saved by the cut sets run, used only when strictly newer than the tree, to the second); and on Linux
+OpenFTA cannot open a `.ped` with CRLF line ends (item 20), so `generate.sh` converts them first.
 
 ## The oracle (`tests/verify.rs`)
 
@@ -76,8 +93,8 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
    Proposal: separate `cutset_order` from `prob_order` in `ProbabilityOptions` if exact report parity is wanted.
 6. **No cut sets**: C returns FALSE without a report (`ProbabilityAnalysis.c:165-167`); Rust returns top 0, exact.
 7. **Probability precision**: C stores probabilities, cut-set terms and sums as `float` (`primary_event.h`, `ProbabilityAnalysis.c:95-96`,
-   `NormalisedBooleanExpressions.c:877-878`); Rust uses `f64`. Expect ~1e-7 relative differences versus a native OpenFTA
-   report, larger for many-term sums. Rust is the more accurate one.
+   `NormalisedBooleanExpressions.c:877-878`); Rust uses `f64`. Measured against the native build: last-digit differences
+   on most numbers, up to 2.4e-5 relative on a term that sums 316251 `float` products. Rust is the more accurate one.
 8. **Monte Carlo estimator. (RESOLVED: ported - `Method::FirstFailure` is now the default, with the failure-mode table and the C error formula; `Method::Direct` keeps the old behaviour. Text below describes the original discrepancy.)** C simulates only runs with at least one failure: it picks the first failed event with the
    conditional distribution `rel[]` and fails the later events independently (`MonteCarloSimulation.c:536-575`,
    `calc_bas_parms`), and reports `P = P(any failure) * failures / tests` with error `P/sqrt(failures)` (`…c:312, 342-344`).
@@ -124,6 +141,9 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
     OpenFTA's files (before #9 ftar padded in characters). One difference is kept: an id longer than the line width is
     dropped from the line by `ParaGrow` ("string too long") and makes `ParaCreate` return NULL, which `BitPara`'s caller then
     dereferences when it is the first id. ftar prints the id on its own line instead.
+20. **`.ped` with CRLF line ends**: OpenFTA built for Linux fails to open them ("error opening file") and then crashes
+    in the analysis; on Windows the C runtime strips the `\r`. Two example databases in `tests/data/transtest` have
+    CRLF. ftar reads both.
 
 ### Notes on the C snapshot
 
@@ -138,4 +158,4 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
 1. Port the first-failure Monte Carlo scheme and the failure-mode report (item 8).
 2. Treat order 0 as unlimited (item 3); decide on missing-event policy (item 4).
 3. Split cut-set order from probability order if byte-compatible reports are required (item 5).
-4. Once a native OpenFTA build is available, compare reports for the examples; expect agreement to float precision (item 7).
+4. ~~Compare reports with a native OpenFTA build~~ (done: `tests/openfta_reports.rs`, #12).

@@ -1,0 +1,31 @@
+Probabilities Analysis
+======================
+
+Tree   : transTest2.fta
+Time   : 
+
+Number of primary events   = 3
+Number of minimal cut sets = 1
+Order of minimal cut sets  = 3
+
+Unit time span         = 1.000000
+
+Minimal cut set probabilities :
+
+  1    a b c                           2.400000E-05
+
+
+Probability of top level event (minimal cut sets up to order 3 used):
+
+ 1 term    +2.400000E-05   = 2.400000E-05 (upper bound)
+
+Exact value : 2.400000E-05
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ a              2.400000E-05            100.00%
+ b              2.400000E-05            100.00%
+ c              2.400000E-05            100.00%

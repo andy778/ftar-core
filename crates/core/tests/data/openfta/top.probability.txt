@@ -1,0 +1,32 @@
+Probabilities Analysis
+======================
+
+Tree   : top.fta
+Time   : 
+
+Number of primary events   = 2
+Number of minimal cut sets = 2
+Order of minimal cut sets  = 2
+
+Unit time span         = 1.000000
+
+Minimal cut set probabilities :
+
+  1    a                               1.000000E-01
+  2    b                               2.000000E-01
+
+
+Probability of top level event (minimal cut sets up to order 2 used):
+
+ 1 term    +3.000000E-01   = 3.000000E-01 (upper bound)
+ 2 terms   -2.000000E-02   = 2.800000E-01 (lower bound)
+
+Exact value : 2.800000E-01
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ a              1.000000E-01            35.71%
+ b              2.000000E-01            71.43%
