@@ -34,6 +34,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] GUI (egui): tree canvas, editing, File/Edit menus, analyses, report and Monte Carlo failure-mode export
 - [x] Built-in help: Help menu with the user guide (docs/USER-GUIDE.md) and an About page with the licence
 - [x] GUI Report > View: reopen the last saved Qualitative, Probability and Monte Carlo reports (`.crp`, `.prp`, `.mrp` next to the tree, written by each analysis run; disabled when missing). Report > Print is tracked in #56
+- [x] GUI View menu: Zoom In/Out (Ctrl+= / Ctrl+-), Set Zoom (percentage) and a Tree Overview window (minimap; click or drag to move the view)
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 - [x] Fuzzing: cargo-fuzz targets for the `.fta`/`.ped` parsers, analysis and the MCP server, run on every PR by ClusterFuzzLite (fuzz/README.md)
 

@@ -100,6 +100,10 @@ pub struct App {
     pub zoom: f32,
     pub pan: Vec2,
     pub fit_next: bool,
+    /// Tree Overview window shown.
+    pub overview_open: bool,
+    /// Set Zoom dialog: the percentage being edited, while open.
+    pub zoom_dialog: Option<f32>,
     /// Keep the tree fitted while the canvas or the tree changes size, until the user pans or zooms.
     pub auto_fit: bool,
     pub(crate) fit_key: Option<(Vec2, f32, f32)>,
@@ -151,6 +155,8 @@ impl Default for App {
             zoom: 1.0,
             pan: Vec2::ZERO,
             fit_next: true,
+            overview_open: false,
+            zoom_dialog: None,
             auto_fit: true,
             fit_key: None,
             canvas: eframe::egui::Rect::ZERO,

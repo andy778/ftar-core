@@ -9,6 +9,7 @@ pub use ftar_core::layout;
 pub use help::HelpState;
 mod ped;
 mod ui;
+mod view;
 
 use std::path::PathBuf;
 

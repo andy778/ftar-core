@@ -49,6 +49,7 @@ impl App {
                 i.consume_key(Modifiers::COMMAND, Key::P),
             )
         });
+        self.view_shortcuts(&ctx);
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.request_quit();
@@ -161,6 +162,7 @@ impl App {
                         self.delete_selected();
                     }
                 });
+                self.view_menu(ui);
                 ui.menu_button("Report", |ui| {
                     ui.menu_button("View", |ui| {
                         for (k, label) in [
@@ -674,17 +676,17 @@ fn gate_label(k: EventType) -> &'static str {
     }
 }
 
-const NODE_W: f32 = 96.0;
-const NODE_H: f32 = 56.0;
-const GAP_X: f32 = 104.0;
-const GAP_Y: f32 = 96.0;
+pub(crate) const NODE_W: f32 = 96.0;
+pub(crate) const NODE_H: f32 = 56.0;
+pub(crate) const GAP_X: f32 = 104.0;
+pub(crate) const GAP_Y: f32 = 96.0;
 /// Room under a node for its caption, in tree units.
 const CAPTION: f32 = 24.0;
 /// Empty border around the fitted tree, in screen pixels.
 const MARGIN: f32 = 12.0;
 
 /// Size of the whole drawing (nodes and captions) in tree units.
-fn content_size(max_x: f32, max_y: f32) -> Vec2 {
+pub(crate) fn content_size(max_x: f32, max_y: f32) -> Vec2 {
     Vec2::new(
         (max_x * GAP_X + NODE_W).max(1.0),
         (max_y * GAP_Y + NODE_H + CAPTION).max(1.0),
@@ -928,6 +930,8 @@ impl eframe::App for App {
         self.events_window(ui.ctx());
         self.ped_window(ui.ctx());
         self.report_window(ui.ctx());
+        self.overview_window(ui.ctx());
+        self.set_zoom_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(doc) = &self.doc else {
