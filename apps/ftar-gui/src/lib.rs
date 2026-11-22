@@ -10,6 +10,7 @@ pub use help::HelpState;
 mod ped;
 mod prefs_ui;
 mod preview;
+mod toolbar;
 mod ui;
 
 use std::path::PathBuf;

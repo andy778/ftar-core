@@ -333,7 +333,7 @@ fn clicking_delete_removes_the_selected_node() {
     let n = children(&app, &[0]);
     let mut h = harness_for(app);
     h.run();
-    h.get_by_label("Delete").click();
+    h.get_all_by_label("Delete").last().unwrap().click(); // the edit panel button, after the toolbar one
     h.run();
     assert_eq!(children(h.state(), &[0]), n - 1);
     assert_eq!(h.state().selected, Some(vec![0]));
@@ -534,7 +534,7 @@ fn file_menu_new_and_quit_with_the_unsaved_prompt() {
     h.run();
     h.get_by_label("File").click();
     h.run();
-    h.get_by_label("New").click();
+    h.get_all_by_label("New").last().unwrap().click(); // the menu item, after the toolbar button
     h.run();
     assert_eq!(h.state().pending, Some(Pending::New));
 }
@@ -547,7 +547,7 @@ fn file_menu_new_starts_an_untitled_tree_when_clean() {
     h.run();
     h.get_by_label("File").click();
     h.run();
-    h.get_by_label("New").click();
+    h.get_all_by_label("New").last().unwrap().click();
     h.run();
     assert!(h.state().title().starts_with("untitled"));
 }
@@ -815,7 +815,7 @@ fn file_menu_lists_image_export_and_print() {
         "Print...",
         "Probabilities in images and prints",
     ] {
-        h.get_by_label(item);
+        h.get_all_by_label(item).last().unwrap();
     }
     let mut empty = Harness::builder()
         .with_size(vec2(1280.0, 800.0))
@@ -825,7 +825,12 @@ fn file_menu_lists_image_export_and_print() {
     empty.run();
     for item in ["Export image...", "Print..."] {
         assert!(
-            empty.get_by_label(item).accesskit_node().is_disabled(),
+            empty
+                .get_all_by_label(item)
+                .last()
+                .unwrap()
+                .accesskit_node()
+                .is_disabled(),
             "{item}"
         );
     }
