@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. For a security problem, please don't open a public issue; see SECURITY.md or contact the maintainer privately.
+        Thanks for reporting. Security problems are welcome here too; see SECURITY.md.
   - type: textarea
     id: what
     attributes:

@@ -13,8 +13,7 @@ If the two disagree, AGENTS.md wins.
 - Use the issue templates. For a wrong result or a crash, attach the `.fta`/`.ped` files (or the smallest
   tree that shows it), the command or GUI steps, the ftar version (the release tag, or the commit if built from source)
   and, if you have it, what OpenFTA reports for the same tree.
-- Security problems: do **not** open a public issue; see [SECURITY.md](SECURITY.md) when it exists, or
-  contact the maintainer privately via their GitHub profile.
+- Security problems are reported as ordinary public issues too; see [SECURITY.md](SECURITY.md).
 
 ## Every change starts with an issue
 
@@ -68,7 +67,7 @@ Orientation: [docs/architecture.md](docs/architecture.md) (layers and crates),
   squash or merge commits made by GitHub are signed for you.
 - Changes to `.github/workflows` go in their own PR, never mixed into a feature PR.
 - Open a PR into `master` and fill in the template. Required checks: `cargo xtask ci` on Linux and
-  Windows, `cargo deny`, and CodeQL. All review threads must be resolved before merging.
+  Windows, `cargo deny`, CodeQL and ClusterFuzzLite. All review threads must be resolved before merging.
 
 ## Code of conduct
 
