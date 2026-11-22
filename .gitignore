@@ -1,2 +1,7 @@
 target/
 .claude/
+
+# report files written by GUI tests that analyse fixtures in place (#55)
+/crates/core/tests/data/*.crp
+/crates/core/tests/data/*.prp
+/crates/core/tests/data/*.mrp
