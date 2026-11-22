@@ -1023,3 +1023,270 @@ fn event_editor_lists_other_trees_that_use_the_event() {
     assert!(fresh.other_trees_using("X").starts_with("Save the tree"));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+// ------------------------------------------- canvas drawn like OpenFTA (#52)
+
+#[test]
+fn canvas_draws_openfta_labels_and_clicking_a_symbol_selects_it() {
+    use eframe::egui::{Event, Modifiers, PointerButton, Pos2};
+    let mut h = harness();
+    h.run();
+    let scene = h.state().scene().expect("scene");
+    // gate ids, probabilities and database descriptions, as OpenFTA shows them
+    let texts: Vec<String> = scene
+        .prims
+        .iter()
+        .filter_map(|p| match p {
+            ftar_render::scene::Prim::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    for want in ["AND1", "Or1", "0.03", "Mains Power", "Tree: theatre"] {
+        assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+    }
+    // click the middle of MAINS_FAIL's circle on screen
+    let it = scene.items.iter().find(|i| i.path == [0, 1]).unwrap();
+    let b = it.bbox;
+    let (z, origin) = (h.state().zoom, h.state().canvas.min + h.state().pan);
+    let pos = Pos2::new(
+        origin.x + (b[0] + b[2]) / 2.0 * z,
+        origin.y + (b[1] + b[3]) / 2.0 * z,
+    );
+    h.event(Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert_eq!(h.state().selected.as_deref(), Some(&[0usize, 1][..]));
+    // clicking empty paper clears the selection
+    let empty = h.state().canvas.min + vec2(2.0, 2.0);
+    h.event(Event::PointerMoved(empty));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos: empty,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert!(h.state().selected.is_none());
+}
+
+// ------------------------------------------- zoom and tree overview (#54)
+
+#[test]
+fn zoom_in_out_and_set_zoom_keep_the_centre_and_stop_auto_fit() {
+    let mut h = tree_with("lift.fta");
+    h.run();
+    let centre_world = |a: &App| a.visible_world().center();
+    let before = centre_world(h.state());
+    let z0 = h.state().zoom;
+    h.state_mut().zoom_in();
+    let a = h.state();
+    assert!((a.zoom - z0 * App::ZOOM_STEP).abs() < 1e-4);
+    assert!(!a.auto_fit, "a manual zoom is kept");
+    assert!(
+        (centre_world(a) - before).length() < 0.5,
+        "centre stays put"
+    );
+    h.state_mut().zoom_out();
+    assert!((h.state().zoom - z0).abs() < 1e-4);
+    h.state_mut().set_zoom(1.5);
+    assert_eq!(h.state().zoom_percent(), 150);
+    assert!((centre_world(h.state()) - before).length() < 0.5);
+    // limits and nonsense
+    h.state_mut().set_zoom(100.0);
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.1);
+    h.state_mut().set_zoom(0.0);
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.0);
+    h.state_mut().set_zoom(f32::NAN);
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.0);
+    h.run();
+    assert_eq!(h.state().zoom, App::ZOOM_RANGE.0, "not refitted");
+}
+
+#[test]
+fn keyboard_and_view_menu_zoom() {
+    use eframe::egui::{Key, Modifiers};
+    let mut h = tree_with("theatre.fta");
+    h.run();
+    let z0 = h.state().zoom;
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Plus);
+    h.run();
+    assert!(h.state().zoom > z0, "Ctrl++ zooms in");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Minus);
+    h.run();
+    assert!((h.state().zoom - z0).abs() < 1e-4, "Ctrl+- zooms out");
+    h.get_by_label("View").click();
+    h.run();
+    h.get_by_label("Set Zoom...").click();
+    h.run();
+    assert!(h.state().set_zoom_open);
+    h.get_by_label("25%").click();
+    h.run();
+    assert_eq!(h.state().zoom_percent(), 25);
+    // the preset and the zoom shown next to Fit
+    assert_eq!(h.query_all_by_label("25%").count(), 2);
+    h.get_by_label("Fit").click();
+    h.run();
+    assert!(h.state().auto_fit);
+    assert_fully_visible(h.state(), "after Fit");
+}
+
+#[test]
+fn overview_shows_the_whole_tree_and_clicking_moves_the_view() {
+    let mut h = tree_with("lift.fta");
+    h.run();
+    h.state_mut().set_zoom(2.0);
+    h.state_mut().centre_on(eframe::egui::vec2(0.0, 0.0));
+    h.get_by_label("View").click();
+    h.run();
+    h.get_by_label("Tree Overview").click();
+    h.run();
+    assert!(h.state().overview_open);
+    h.get_by_label("Tree Overview"); // the window title
+                                     // click near the right edge of the overview: the view moves to the right side of the tree
+    use eframe::egui::{Event, Modifiers, PointerButton, Pos2};
+    let before = h.state().visible_world().center().x;
+    let win = h
+        .query_all_by_label("Tree Overview")
+        .map(|n| n.rect())
+        .reduce(|a, b| if a.area() > b.area() { a } else { b })
+        .unwrap();
+    let pos = Pos2::new(win.right() - 20.0, win.center().y + 10.0);
+    h.event(Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.event(Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    let after = h.state().visible_world().center().x;
+    let scene = h.state().scene().unwrap();
+    assert!(
+        after > scene.width * 0.6,
+        "{before} -> {after} of {}",
+        scene.width
+    );
+    assert!(!h.state().auto_fit);
+}
+
+// ------------------------------------------------- cut, copy and paste (#53)
+
+#[test]
+fn copy_and_paste_a_branch_under_another_gate_and_undo() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    // Top -> AND1 -> [Backup_Fail -> Or1 -> [RELAY_FAIL, GEN_FAIL], MAINS_FAIL]
+    assert!(!app.can_copy() && !app.can_paste());
+    app.select(Some(vec![0, 1]));
+    app.copy_selected();
+    assert!(app.can_paste());
+    assert!(!app.dirty, "copying does not change the tree");
+    app.select(Some(vec![0, 0, 0]));
+    app.paste();
+    assert_eq!(app.selected.as_deref(), Some(&[0usize, 0, 0, 2][..]));
+    assert_eq!(children(&app, &[0, 0, 0]), 3);
+    assert!(app.dirty && app.error.is_none());
+    // pasting again with an event selected puts the copy after it
+    app.paste();
+    assert_eq!(app.selected.as_deref(), Some(&[0usize, 0, 0, 3][..]));
+    app.undo();
+    app.undo();
+    assert_eq!(children(&app, &[0, 0, 0]), 2);
+}
+
+#[test]
+fn cut_and_paste_moves_a_branch_and_bad_targets_say_why() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.select(Some(vec![]));
+    assert!(
+        app.can_copy() && !app.can_cut(),
+        "the top event cannot be cut"
+    );
+    app.select(Some(vec![0, 0]));
+    app.cut_selected();
+    assert_eq!(children(&app, &[0]), 1, "Backup_Fail is gone");
+    assert!(app.status.as_deref().unwrap().contains("Backup_Fail"));
+    // the top event already has its gate: refused, tree unchanged
+    app.select(Some(vec![]));
+    app.paste();
+    assert!(app.error.is_some());
+    assert_eq!(children(&app, &[0]), 1);
+    app.select(Some(vec![0]));
+    app.paste();
+    assert!(app.error.is_none());
+    assert_eq!(children(&app, &[0]), 2);
+    assert_eq!(app.selected.as_deref(), Some(&[0usize, 1][..]));
+    assert_eq!(app.selected_node().unwrap().id, "Backup_Fail");
+    assert_eq!(children(&app, &[0, 1, 0]), 2, "with its whole branch");
+}
+
+#[test]
+fn pasting_into_another_tree_brings_the_event_data() {
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.select(Some(vec![0, 1])); // MAINS_FAIL, p = 0.03
+    app.copy_selected();
+    app.open(data("lift.fta"));
+    assert!(
+        app.can_paste(),
+        "the clipboard survives opening another tree"
+    );
+    assert!(!app
+        .doc
+        .as_ref()
+        .unwrap()
+        .db
+        .events
+        .contains_key("MAINS_FAIL"));
+    app.select(Some(vec![0]));
+    app.paste();
+    assert!(app.error.is_none(), "{:?}", app.error);
+    let e = &app.doc.as_ref().unwrap().db.events["MAINS_FAIL"];
+    assert!((e.probability - 0.03).abs() < 1e-12);
+}
+
+#[test]
+fn edit_menu_and_shortcuts_cut_copy_paste() {
+    use eframe::egui::{Key, Modifiers};
+    let mut h = harness();
+    h.run();
+    h.state_mut().select(Some(vec![0, 1]));
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::C);
+    h.run();
+    assert!(h.state().clipboard.is_some(), "Ctrl+C copies");
+    h.state_mut().select(Some(vec![0, 0, 0]));
+    h.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    h.run();
+    assert_eq!(children(h.state(), &[0, 0, 0]), 3, "Ctrl+V pastes");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::X);
+    h.run();
+    assert_eq!(
+        children(h.state(), &[0, 0, 0]),
+        2,
+        "Ctrl+X cuts the pasted copy"
+    );
+    // the Edit menu has the three commands, with their shortcuts
+    h.get_by_label("Edit").click();
+    h.run();
+    for item in ["Cut", "Copy", "Paste"] {
+        let mut found = h.query_all_by_label_contains(item).filter(|n| {
+            n.accesskit_node()
+                .label()
+                .is_some_and(|l| l.starts_with(item) && l.contains("Ctrl"))
+        });
+        assert!(found.next().is_some(), "{item} in the Edit menu");
+    }
+}

@@ -9,8 +9,8 @@ use ftar_core::report::ReportKind;
 use ftar_core::EventType;
 
 use crate::app::{App, Pending, Tab};
-use crate::layout;
-use ftar_render::symbols::{fit_text, header_lines, node_text, symbol};
+use ftar_render::scene::{tree_scene, triangulate, Anchor, Prim, Rgb, Scene, SceneOptions};
+use ftar_render::Preferences;
 
 const GATES: &[EventType] = &[
     EventType::And,
@@ -39,6 +39,20 @@ impl App {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         // keyboard shortcuts
+        let (zoom_in, zoom_out) = ctx.input_mut(|i| {
+            (
+                i.consume_key(Modifiers::COMMAND, Key::Plus)
+                    || i.consume_key(Modifiers::COMMAND, Key::Equals),
+                i.consume_key(Modifiers::COMMAND, Key::Minus),
+            )
+        });
+        if self.doc.is_some() {
+            if zoom_in {
+                self.zoom_in();
+            } else if zoom_out {
+                self.zoom_out();
+            }
+        }
         let (save, undo, redo, del, new, open, print) = ctx.input_mut(|i| {
             (
                 i.consume_key(Modifiers::COMMAND, Key::S),
@@ -50,7 +64,42 @@ impl App {
                 i.consume_key(Modifiers::COMMAND, Key::P),
             )
         });
-        self.view_shortcuts(&ctx);
+        // Cut, copy and paste act on the tree unless a text field has the keyboard;
+        // backends send them as clipboard events, tests as key presses.
+        let (cut, copy, paste) = if ctx.memory(|m| m.focused().is_some()) {
+            (false, false, false)
+        } else {
+            ctx.input_mut(|i| {
+                let mut c = (
+                    i.consume_key(Modifiers::COMMAND, Key::X),
+                    i.consume_key(Modifiers::COMMAND, Key::C),
+                    i.consume_key(Modifiers::COMMAND, Key::V),
+                );
+                i.events.retain(|e| match e {
+                    egui::Event::Cut => {
+                        c.0 = true;
+                        false
+                    }
+                    egui::Event::Copy => {
+                        c.1 = true;
+                        false
+                    }
+                    egui::Event::Paste(_) => {
+                        c.2 = true;
+                        false
+                    }
+                    _ => true,
+                });
+                c
+            })
+        };
+        if cut {
+            self.cut_selected();
+        } else if copy {
+            self.copy_selected();
+        } else if paste {
+            self.paste();
+        }
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.quit {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.request_quit();
@@ -152,6 +201,40 @@ impl App {
                         self.redo();
                     }
                     ui.separator();
+                    let shortcut = |k| {
+                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                    };
+                    if ui
+                        .add_enabled(
+                            self.can_cut(),
+                            egui::Button::new("Cut").shortcut_text(shortcut(Key::X)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.cut_selected();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.can_copy(),
+                            egui::Button::new("Copy").shortcut_text(shortcut(Key::C)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.copy_selected();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.can_paste(),
+                            egui::Button::new("Paste").shortcut_text(shortcut(Key::V)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.paste();
+                    }
+                    ui.separator();
                     if ui
                         .add_enabled(has_doc, egui::Button::new("Primary events..."))
                         .clicked()
@@ -177,7 +260,6 @@ impl App {
                         self.delete_selected();
                     }
                 });
-                self.view_menu(ui);
                 ui.menu_button("Report", |ui| {
                     ui.menu_button("View", |ui| {
                         for (k, label) in [
@@ -218,9 +300,60 @@ impl App {
                 {
                     self.redo();
                 }
+                ui.menu_button("View", |ui| {
+                    let shortcut = |k| {
+                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                    };
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.overview_open = true;
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_in();
+                    }
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.zoom_out();
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.set_zoom_percent = self.zoom_percent() as f32;
+                        self.set_zoom_open = true;
+                    }
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.fit_next = true;
+                    }
+                });
                 ui.separator();
                 if ui.button("Fit").clicked() {
                     self.fit_next = true;
+                }
+                if has_doc {
+                    ui.label(format!("{}%", self.zoom_percent()));
                 }
                 ui.label(self.title());
                 if has_doc {
@@ -339,6 +472,104 @@ impl App {
 
     /// The primary event editor, laid out like OpenPED: the events on the left,
     /// the selected event's fields on the right, Apply / Clear / Delete below.
+    /// View > Set Zoom: OpenFTA's preset percentages, or any value.
+    fn set_zoom_window(&mut self, ctx: &egui::Context) {
+        if !self.set_zoom_open || self.doc.is_none() {
+            return;
+        }
+        let mut open = true;
+        let mut apply = false;
+        egui::Window::new("Set Zoom")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    for p in [25.0, 50.0, 100.0, 150.0, 200.0] {
+                        if ui
+                            .selectable_label(self.set_zoom_percent == p, format!("{p}%"))
+                            .clicked()
+                        {
+                            self.set_zoom_percent = p;
+                            apply = true;
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("zoom");
+                    let r = ui.add(
+                        egui::DragValue::new(&mut self.set_zoom_percent)
+                            .range(App::ZOOM_RANGE.0 * 100.0..=App::ZOOM_RANGE.1 * 100.0)
+                            .suffix("%"),
+                    );
+                    if r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                        apply = true;
+                    }
+                    if ui.button("Apply").clicked() {
+                        apply = true;
+                    }
+                });
+            });
+        if apply {
+            self.set_zoom(self.set_zoom_percent / 100.0);
+        }
+        self.set_zoom_open = open;
+    }
+
+    /// View > Tree Overview: the whole tree, with the part the canvas shows
+    /// outlined; click or drag to move the view there.
+    fn overview_window(&mut self, ctx: &egui::Context) {
+        if !self.overview_open {
+            return;
+        }
+        let Some(scene) = self.scene() else {
+            self.overview_open = false;
+            return;
+        };
+        let mut open = true;
+        let mut target = None;
+        egui::Window::new("Tree Overview")
+            .open(&mut open)
+            .default_size([300.0, 200.0])
+            .resizable(true)
+            .show(ctx, |ui| {
+                let size = ui.available_size().max(Vec2::new(120.0, 80.0));
+                let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
+                let r = resp.rect;
+                let z = (r.width() / scene.width).min(r.height() / scene.height);
+                let origin = r.center() - Vec2::new(scene.width, scene.height) * z / 2.0;
+                paint_scene(
+                    &painter.with_clip_rect(r),
+                    &scene,
+                    origin,
+                    z,
+                    None,
+                    &self.prefs,
+                );
+                let seen = self.visible_world();
+                let frame = Rect::from_min_max(
+                    origin + seen.min.to_vec2() * z,
+                    origin + seen.max.to_vec2() * z,
+                )
+                .intersect(r);
+                painter.rect_stroke(
+                    frame,
+                    0.0,
+                    Stroke::new(2.0, Color32::from_rgb(0, 120, 215)),
+                    egui::StrokeKind::Inside,
+                );
+                if resp.clicked() || resp.dragged() {
+                    if let Some(p) = resp.interact_pointer_pos() {
+                        target = Some((p - origin) / z);
+                    }
+                }
+            });
+        if let Some(w) = target {
+            self.centre_on(w);
+        }
+        self.overview_open = open;
+    }
+
     fn events_window(&mut self, ctx: &egui::Context) {
         if !self.events_open {
             return;
@@ -679,29 +910,12 @@ fn kind_name(k: EventType) -> &'static str {
     }
 }
 
-pub(crate) const NODE_W: f32 = 116.0;
-/// Size of one symbol unit: a basic event is this wide.
-pub(crate) const SYM_U: f32 = 88.0;
-/// Room above a row for ids.
-pub(crate) const ID_SPACE: f32 = 16.0;
-pub(crate) const GAP_X: f32 = 124.0;
-pub(crate) const GAP_Y: f32 = 96.0;
-/// Room under a node for its caption, in tree units.
-const CAPTION: f32 = 18.0;
 /// Empty border around the fitted tree, in screen pixels.
 const MARGIN: f32 = 12.0;
 
-/// Size of the whole drawing (nodes and captions) in tree units.
-pub(crate) fn content_size(max_x: f32, max_y: f32) -> Vec2 {
-    Vec2::new(
-        (max_x * GAP_X + NODE_W).max(1.0),
-        (max_y * GAP_Y + ID_SPACE + SYM_U + CAPTION).max(1.0),
-    )
-}
-
-/// Zoom and pan that centre the whole tree in a canvas of `size`, with a margin.
-pub(crate) fn fit(size: Vec2, max_x: f32, max_y: f32) -> (f32, Vec2) {
-    let c = content_size(max_x, max_y);
+/// Zoom and pan that centre a drawing of `content` size in a canvas of `size`, with a margin.
+pub(crate) fn fit(size: Vec2, content: Vec2) -> (f32, Vec2) {
+    let c = content.max(Vec2::splat(1.0));
     let avail = (size - Vec2::splat(2.0 * MARGIN)).max(Vec2::splat(1.0));
     let z = (avail.x / c.x).min(avail.y / c.y).clamp(0.02, 1.5);
     (
@@ -713,15 +927,123 @@ pub(crate) fn fit(size: Vec2, max_x: f32, max_y: f32) -> (f32, Vec2) {
     )
 }
 
+fn rgb(c: Rgb) -> Color32 {
+    Color32::from_rgb(c.0, c.1, c.2)
+}
+
+/// Paint `scene` on white paper with its origin at `origin` and scale `z`;
+/// the selected item is outlined in OpenFTA's highlight colour.
+fn paint_scene(
+    painter: &egui::Painter,
+    scene: &Scene,
+    origin: Pos2,
+    z: f32,
+    selected: Option<&[usize]>,
+    prefs: &Preferences,
+) {
+    let to = |p: [f32; 2]| origin + Vec2::new(p[0], p[1]) * z;
+    painter.rect_filled(
+        Rect::from_min_size(origin, Vec2::new(scene.width, scene.height) * z),
+        0.0,
+        rgb32(prefs.background_colour()),
+    );
+    let pen = Stroke::new((1.2 * z).max(0.6), rgb32(prefs.pen_colour()));
+    let highlight = selected
+        .and_then(|path| scene.items.iter().find(|it| it.path == path))
+        .map(|it| it.prims.clone());
+    let clip = painter.clip_rect();
+    for (i, prim) in scene.prims.iter().enumerate() {
+        match prim {
+            Prim::Path {
+                pts,
+                closed,
+                fill,
+                dashed,
+            } => {
+                let pts: Vec<Pos2> = pts.iter().map(|&p| to(p)).collect();
+                if !Rect::from_points(&pts).expand(4.0).intersects(clip) {
+                    continue;
+                }
+                if let Some(f) = fill {
+                    let mut mesh = egui::Mesh::default();
+                    for &p in &pts {
+                        mesh.colored_vertex(p, rgb(*f));
+                    }
+                    let flat: Vec<[f32; 2]> = pts.iter().map(|p| [p.x, p.y]).collect();
+                    for [a, b, c] in triangulate(&flat) {
+                        mesh.add_triangle(a as u32, b as u32, c as u32);
+                    }
+                    painter.add(Shape::mesh(mesh));
+                }
+                let stroke = if highlight.as_ref().is_some_and(|r| r.contains(&i)) {
+                    Stroke::new((2.5 * z).max(2.0), rgb32(prefs.highlight_colour()))
+                } else {
+                    pen
+                };
+                let mut line = pts;
+                if *closed {
+                    line.push(line[0]);
+                }
+                if *dashed {
+                    painter.extend(Shape::dashed_line(&line, stroke, 5.0 * z, 3.0 * z));
+                } else {
+                    painter.add(Shape::line(line, stroke));
+                }
+            }
+            Prim::Text {
+                pos,
+                size,
+                anchor,
+                bold: _,
+                text,
+            } => {
+                let px = size * z;
+                if px < 5.0 {
+                    continue; // too small to read, as OpenFTA hides text when zoomed out
+                }
+                let p = to(*pos);
+                if !clip.expand(300.0).contains(p) {
+                    continue;
+                }
+                let align = match anchor {
+                    Anchor::Start => Align2::LEFT_CENTER,
+                    Anchor::Middle => Align2::CENTER_CENTER,
+                };
+                painter.text(
+                    p,
+                    align,
+                    text,
+                    FontId::proportional(px),
+                    rgb32(prefs.pen_colour()),
+                );
+            }
+        }
+    }
+}
+
 impl App {
-    /// Where the whole drawing (nodes and captions) currently is on screen.
-    pub fn content_bounds(&self) -> Option<Rect> {
+    /// The tree as the canvas draws it.
+    pub fn scene(&self) -> Option<Scene> {
         let doc = self.doc.as_ref()?;
-        let (mx, my) = layout::layout(&doc.tree.root)
-            .iter()
-            .fold((0.0f32, 0.0f32), |a, p| (a.0.max(p.x), a.1.max(p.y)));
+        Some(tree_scene(
+            &doc.tree,
+            &doc.db,
+            &SceneOptions {
+                title: self.tree_name(),
+                probabilities: true,
+                prefs: self.prefs.clone(),
+            },
+        ))
+    }
+
+    /// Where the whole drawing currently is on screen.
+    pub fn content_bounds(&self) -> Option<Rect> {
+        let scene = self.scene()?;
         let min = self.canvas.min + self.pan;
-        Some(Rect::from_min_size(min, content_size(mx, my) * self.zoom))
+        Some(Rect::from_min_size(
+            min,
+            Vec2::new(scene.width, scene.height) * self.zoom,
+        ))
     }
 }
 
@@ -942,23 +1264,18 @@ impl eframe::App for App {
         self.preview_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
-            let Some(doc) = &self.doc else {
+            let Some(scene) = self.scene() else {
                 ui.centered_and_justified(|ui| {
                     ui.label("Open a .fta file (Open...), or start a New tree.")
                 });
                 return;
             };
-            let placed = layout::layout(&doc.tree.root);
             let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
             let rect = resp.rect;
 
-            // world -> screen
-            let (max_x, max_y) = placed
-                .iter()
-                .fold((0.0f32, 0.0f32), |a, p| (a.0.max(p.x), a.1.max(p.y)));
-            let key = (rect.size(), max_x, max_y);
+            let key = (rect.size(), scene.width, scene.height);
             if self.fit_next || (self.auto_fit && self.fit_key != Some(key)) {
-                let (z, pan) = fit(rect.size(), max_x, max_y);
+                let (z, pan) = fit(rect.size(), Vec2::new(scene.width, scene.height));
                 self.zoom = z;
                 self.pan = pan;
                 self.fit_next = false;
@@ -985,153 +1302,21 @@ impl eframe::App for App {
             }
             let origin = rect.min + self.pan;
             let z = self.zoom;
-            // centre column and top of a node's symbol
-            let anchor = |p: &layout::Placed| {
-                origin + Vec2::new(p.x * GAP_X + NODE_W / 2.0, p.y * GAP_Y + ID_SPACE) * z
-            };
-
-            let pen = rgb32(self.prefs.pen_colour());
-            let bg = rgb32(self.prefs.background_colour());
-            painter.rect_filled(rect, 0.0, bg);
-            let line = Stroke::new(1.5 * z.max(0.5), pen);
-            let lum =
-                |c: Color32| 0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32;
-            let text_col = if lum(bg) < 128.0 {
-                Color32::WHITE
-            } else {
-                Color32::BLACK
-            };
-            let highlight = rgb32(self.prefs.highlight_colour());
-
-            // edges (elbow connectors), from the bottom of a symbol to the top of the next
-            for p in &placed {
-                if let Some(pi) = p.parent {
-                    let a = anchor(&placed[pi])
-                        + Vec2::new(0.0, symbol(placed[pi].node.kind).depth * SYM_U * z);
-                    let b = anchor(p);
-                    let mid = (a.y + b.y) / 2.0;
-                    painter.add(Shape::line(
-                        vec![a, Pos2::new(a.x, mid), Pos2::new(b.x, mid), b],
-                        line,
-                    ));
-                }
-            }
-
-            // nodes: OpenFTA's symbols, id above, description inside
-            let mut clicked: Option<Vec<usize>> = None;
-            let mut hit_any = false;
-            for p in placed.iter() {
-                let n = p.node;
-                let sym = symbol(n.kind);
-                let top = anchor(p);
-                let r = Rect::from_min_size(
-                    top - Vec2::new(sym.width * SYM_U / 2.0 * z, 0.0),
-                    Vec2::new(sym.width, sym.depth) * SYM_U * z,
-                );
-                // room for the id above and the probability below
-                if !r.expand(20.0 * z).intersects(rect) {
-                    continue;
-                }
-                let sel = self.selected.as_ref() == Some(&p.path);
-                let fill = rgb32(self.prefs.fill(n.kind));
-                let stroke = if sel {
-                    Stroke::new(3.0, highlight)
-                } else {
-                    line
-                };
-                let to_screen = |pt: &(f32, f32)| top + Vec2::new(pt.0, pt.1) * SYM_U * z;
-                for piece in &sym.fills {
-                    painter.add(Shape::convex_polygon(
-                        piece.iter().map(to_screen).collect(),
-                        fill,
-                        Stroke::NONE,
-                    ));
-                }
-                let outline: Vec<Pos2> = sym.outline.iter().map(to_screen).collect();
-                if sym.dashed {
-                    let mut closed = outline;
-                    closed.extend(closed.first().copied());
-                    painter.extend(Shape::dashed_line(
-                        &closed,
-                        stroke,
-                        6.0 * z.max(0.5),
-                        4.0 * z.max(0.5),
-                    ));
-                } else {
-                    painter.add(Shape::closed_line(outline, stroke));
-                }
-                for l in &sym.lines {
-                    painter.add(Shape::line(l.iter().map(to_screen).collect(), stroke));
-                }
-                if z > 0.22 {
-                    let lab = node_text(n, &doc.db);
-                    let fs = (11.0 * z).clamp(7.0, 22.0);
-                    if !lab.id.is_empty() {
-                        painter.text(
-                            top + Vec2::new(5.0 * z, -3.0 * z),
-                            Align2::LEFT_BOTTOM,
-                            &lab.id,
-                            FontId::proportional(fs),
-                            text_col,
-                        );
-                    }
-                    let (tw, th) = sym.text_size;
-                    if tw > 0.0 && !lab.inside.is_empty() {
-                        let (lines, font) = fit_text(&lab.inside, tw * SYM_U, th * SYM_U, 9.0);
-                        let fsz = font * z;
-                        // too small to read: leave the box empty rather than draw mush
-                        if fsz >= 3.5 {
-                            let lh = fsz * 1.2;
-                            let cy = top.y + sym.text_centre.1 * SYM_U * z;
-                            let y0 = cy - lh * lines.len() as f32 / 2.0;
-                            for (i, l) in lines.iter().enumerate() {
-                                painter.text(
-                                    Pos2::new(top.x, y0 + i as f32 * lh),
-                                    Align2::CENTER_TOP,
-                                    l,
-                                    FontId::proportional(fsz),
-                                    text_col,
-                                );
-                            }
-                        }
-                    }
-                    if let Some(pt) = &lab.prob {
-                        painter.text(
-                            top + Vec2::new(0.0, (sym.depth * SYM_U + 2.0) * z),
-                            Align2::CENTER_TOP,
-                            pt,
-                            FontId::proportional((10.0 * z).clamp(7.0, 16.0)),
-                            text_col,
-                        );
-                    }
-                }
-                if resp.clicked() {
-                    if let Some(pos) = resp.interact_pointer_pos() {
-                        if r.contains(pos) {
-                            clicked = Some(p.path.clone());
-                            hit_any = true;
-                        }
-                    }
-                }
-            }
-            // header, as in the top-left corner of OpenFTA's canvas
-            let header = header_lines(
-                &self.tree_name(),
-                doc.tree.db_name.as_deref(),
-                &doc.tree.note,
+            paint_scene(
+                &painter.with_clip_rect(rect),
+                &scene,
+                origin,
+                z,
+                self.selected.as_deref(),
+                &self.prefs,
             );
-            for (i, l) in header.iter().enumerate() {
-                painter.text(
-                    rect.min + Vec2::new(8.0, 6.0 + 14.0 * i as f32),
-                    Align2::LEFT_TOP,
-                    l,
-                    FontId::proportional(12.0),
-                    text_col,
-                );
-            }
+
             if resp.clicked() {
-                let _ = hit_any;
-                self.selected = clicked;
+                let hit = resp.interact_pointer_pos().and_then(|pos| {
+                    let w = (pos - origin) / z;
+                    scene.item_at([w.x, w.y]).map(|it| it.path.clone())
+                });
+                self.selected = hit;
                 self.version += 1;
             }
         });

@@ -1,7 +1,7 @@
 //! ftar-gui: egui front end for ftar-core.
 //!
 //! * [`App`] holds the state and every user operation (headless, testable)
-//! * `ui` draws it with egui; `layout` (from ftar-core) places the tree
+//! * `ui` draws it with egui; the tree drawing comes from `ftar_render::scene`
 
 mod app;
 mod help;
@@ -11,11 +11,10 @@ mod ped;
 mod prefs_ui;
 mod preview;
 mod ui;
-mod view;
 
 use std::path::PathBuf;
 
-pub use app::{ctime_text, App, Pending, Tab};
+pub use app::{ctime_text, App, Clip, Pending, Tab};
 use eframe::egui;
 pub use ped::PedWindow;
 pub use preview::PrintPreview;

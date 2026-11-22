@@ -60,7 +60,7 @@ fn report_view_reopens_the_last_saved_reports() {
     h.run();
     h.get_by_label("Report").click();
     h.run();
-    h.get_all_by_label("View").last().unwrap().click();
+    h.get_all_by_label("View").next().unwrap().click();
     h.run();
     h.get_by_label("Probability Report").click();
     h.run();
@@ -80,7 +80,7 @@ fn report_view_is_disabled_without_the_file() {
     h.run();
     h.get_by_label("Report").click();
     h.run();
-    h.get_all_by_label("View").last().unwrap().click();
+    h.get_all_by_label("View").next().unwrap().click();
     h.run();
     h.get_by_label("Monte Carlo Report").click();
     h.run();

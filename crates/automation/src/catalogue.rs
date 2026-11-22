@@ -44,10 +44,10 @@ pub fn tools() -> Vec<ToolInfo> {
           obj(json!({ "doc": doc, "path": path, "depth": {"type":"integer","minimum":0} }), &[])),
         t("tree_validate", "Structural problems that would stop an analysis (child counts, missing ids).",
           obj(json!({ "doc": doc }), &[])),
-        t("tree_edit", "Edit the tree. `op` is one of insert_child, delete, move, reorder, change_type, set_id, set_text, set_note, set_database (`name`: the .ped file the tree takes its events from: a file name, or a path relative to the tree such as ../library/sensors.ped so several trees share one; an existing file's events are read in; empty detaches). Each edit is undoable.",
+        t("tree_edit", "Edit the tree. `op` is one of insert_child, delete, move (cut and paste a branch: `path` to `new_parent`, at `index` or appended), copy (paste a copy of the branch at `path` under `new_parent`), reorder, change_type, set_id, set_text, set_note, set_database (`name`: the .ped file the tree takes its events from: a file name, or a path relative to the tree such as ../library/sensors.ped so several trees share one; an existing file's events are read in; empty detaches). Each edit is undoable.",
           obj(json!({
             "doc": doc,
-            "op": {"type":"string","enum":["insert_child","delete","move","reorder","change_type","set_id","set_text","set_note","set_database"]},
+            "op": {"type":"string","enum":["insert_child","delete","move","copy","reorder","change_type","set_id","set_text","set_note","set_database"]},
             "parent": path, "index": {"type":"integer","minimum":0}, "path": path, "new_parent": path,
             "kind": kind, "id": {"type":"string"}, "text": {"type":"string"}, "note": {"type":"string"}, "name": {"type":"string"}
           }), &["op"])),

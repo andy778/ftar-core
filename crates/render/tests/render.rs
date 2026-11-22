@@ -22,14 +22,11 @@ fn svg_names_every_event_and_gate() {
     for id in ["RELAY_FAIL", "GEN_FAIL", "MAINS_FAIL", "Backup_Fail", "Top"] {
         assert!(svg.contains(id), "{id}");
     }
-    // gate ids sit above the gate symbols, and gates are shapes, not labelled boxes
-    assert!(svg.contains(">AND1<") && svg.contains(">Or1<"));
-    assert!(!svg.contains(">AND<") && !svg.contains(">OR<"));
-    // descriptions from the tree and the database are inside the symbols
-    assert!(svg.contains("Mains") && svg.contains("Backup"), "{svg}");
-    // probabilities (GEN_FAIL is a failure rate)
-    assert!(svg.contains("p = 3.00E-2"), "{svg}");
-    assert!(svg.contains("rate 2.00E-2"), "{svg}");
+    // gates show their ids, as in OpenFTA
+    assert!(svg.contains(">AND1<") && svg.contains(">Or1<"), "{svg}");
+    // probabilities as OpenFTA prints them (%g), descriptions from the database
+    assert!(svg.contains(">0.03<") && svg.contains(">0.02<"), "{svg}");
+    assert!(svg.contains(">Mains Power<"), "{svg}");
     let off = tree_svg(
         &p.tree,
         &p.db,
@@ -38,7 +35,7 @@ fn svg_names_every_event_and_gate() {
             ..Default::default()
         },
     );
-    assert!(!off.contains("p = "));
+    assert!(!off.contains(">0.03<"));
 }
 
 #[test]
@@ -74,7 +71,7 @@ fn wrapping_respects_width_and_line_limit() {
     );
     assert_eq!(w.len(), 2);
     assert!(w.iter().all(|l| l.chars().count() <= 12));
-    assert!(w[1].ends_with('…'));
+    assert!(w[1].ends_with("..."));
     assert_eq!(wrap("", 10, 3), Vec::<String>::new());
     assert!(
         wrap("Supercalifragilisticexpialidocious", 10, 2)[0]
@@ -183,7 +180,7 @@ fn every_node_kind_can_be_drawn() {
         tree.root.children[0].children.push(n);
     }
     let svg = tree_svg(&tree, &PrimaryEventDb::default(), &SvgOptions::default());
-    for shape in ["<polygon", "<polyline"] {
+    for shape in ["<polygon", "<polyline", "stroke-dasharray"] {
         assert!(svg.contains(shape), "{shape}");
     }
     svg_to_png(&svg, 0.5).unwrap();
@@ -231,99 +228,7 @@ fn header_names_the_database_the_events_come_from() {
     assert!(!tree_svg(&p.tree, &p.db, &SvgOptions::default()).contains("Database:"));
 }
 
-#[test]
-fn symbols_are_closed_shapes_with_the_original_proportions() {
-    use ftar_render::symbols::symbol;
-    use EventType::*;
-    for k in [
-        Basic,
-        Dormant,
-        Undeveloped,
-        External,
-        Intermediate,
-        And,
-        Or,
-        Xor,
-        PriorityAnd,
-        Inhibit,
-        ConditionAnalysed,
-        ConditionNotAnalysed,
-        TransferIn,
-        TransferOut,
-        Unknown,
-    ] {
-        let s = symbol(k);
-        assert!(s.outline.len() >= 3, "{k:?}");
-        assert!(
-            !s.fills.is_empty() && s.fills.iter().all(|f| f.len() >= 3),
-            "{k:?}"
-        );
-        for &(x, y) in s.outline.iter().chain(s.lines.iter().flatten()) {
-            assert!(x.abs() <= s.width / 2.0 + 1e-3, "{k:?} x {x}");
-            assert!((-1e-3..=s.depth + 1e-3).contains(&y), "{k:?} y {y}");
-        }
-    }
-    // OpenFTA: AND is a dome on a rectangle, OR is narrower than it is tall, PAND/XOR add a V
-    assert_eq!(symbol(And).lines.len(), 0);
-    assert_eq!(symbol(PriorityAnd).lines.len(), 1);
-    assert_eq!(symbol(Xor).lines.len(), 1);
-    assert!(symbol(Dormant).dashed && symbol(ConditionNotAnalysed).dashed && !symbol(Basic).dashed);
-    assert!(symbol(Basic).text_size.0 > 0.0 && symbol(And).text_size.0 == 0.0);
-}
-
-#[test]
-fn labels_follow_openfta() {
-    use ftar_render::symbols::{header_lines, node_text};
-    let p = load("theatre.fta");
-    let top = node_text(&p.tree.root, &p.db);
-    assert_eq!(top.id, "Top");
-    assert!(top.inside.contains("Electrical Power") && top.prob.is_none());
-    let and = &p.tree.root.children[0];
-    let t = node_text(and, &p.db);
-    assert_eq!(
-        (t.id.as_str(), t.inside.as_str(), t.prob),
-        ("AND1", "", None)
-    );
-    let mains = p
-        .tree
-        .nodes()
-        .into_iter()
-        .find(|n| n.id == "MAINS_FAIL")
-        .unwrap();
-    let t = node_text(mains, &p.db);
-    assert_eq!(t.inside, "Mains Power Fails.");
-    assert_eq!(t.prob.as_deref(), Some("p = 3.00E-2"));
-    assert_eq!(
-        header_lines("theatre", Some("theatre.ped"), "Failure Of\nAn   Supply."),
-        [
-            "Tree: theatre",
-            "Database: theatre.ped",
-            "Failure Of An Supply."
-        ]
-    );
-    assert_eq!(header_lines("x", None, ""), ["Tree: x"]);
-}
-
-#[test]
-fn descriptions_shrink_to_fit_and_never_panic() {
-    use ftar_render::symbols::fit_text;
-    let (l, f) = fit_text("Mains Power Fails.", 120.0, 60.0, 10.0);
-    assert_eq!((l.len(), f), (1, 10.0));
-    let long = "word ".repeat(200);
-    let (l, f) = fit_text(&long, 80.0, 60.0, 10.0);
-    assert!((6.0 - 1e-3..10.0).contains(&f));
-    assert!(l.len() <= 8 && l.last().unwrap().ends_with('…'));
-    for (w, h, m) in [
-        (0.0, 10.0, 9.0),
-        (-1.0, 5.0, 9.0),
-        (f32::NAN, 1.0, 9.0),
-        (1.0, 1.0, 0.0),
-    ] {
-        let _ = fit_text("abc def", w, h, m);
-    }
-    assert!(fit_text("", 50.0, 50.0, 9.0).0.is_empty());
-    assert!(fit_text("", 50.0, 50.0, 9.0).0.is_empty());
-}
+// ---------------------------------------------------------- page setup (#56)
 
 mod page_setup {
     use super::*;

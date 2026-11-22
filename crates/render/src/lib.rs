@@ -1,5 +1,7 @@
 //! `ftar-render` - headless drawing of fault trees.
 //!
+//! * [`scene`] - the tree laid out and drawn as OpenFTA draws it, as shapes and text
+//!   that the SVG export and the GUI canvas both draw
 //! * [`svg`]  - the tree as a self-contained SVG (vector, printable, scalable)
 //! * [`png`]  - the same drawing rasterised with resvg
 //! * [`html`] - a printable page (title, note, drawing, optional report text) that can
@@ -13,8 +15,8 @@ pub mod html;
 pub mod page;
 pub mod png;
 pub mod prefs;
+pub mod scene;
 pub mod svg;
-pub mod symbols;
 
 pub use html::{print_html, print_html_with, PrintOptions};
 pub use page::{
@@ -23,4 +25,5 @@ pub use page::{
 };
 pub use png::{svg_to_png, svg_to_rgba, RenderError};
 pub use prefs::{Preferences, Symbol};
+pub use scene::{tree_scene, Scene, SceneOptions};
 pub use svg::{tree_svg, tree_svg_with, SvgOptions};

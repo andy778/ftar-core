@@ -319,6 +319,26 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             })?;
             json!({ "path": p })
         }
+        "copy" => {
+            // paste a copy of the branch at `path` under `new_parent` (default: append)
+            let (from, to, index) = (
+                a.path("path")?,
+                a.path("new_parent")?,
+                a.opt_usize("index")?,
+            );
+            let p = d.edit_tree(|t| {
+                let clip = edit::copy_subtree(t, &from)?;
+                let at = match index {
+                    Some(i) => i,
+                    None => edit::node_at(t, &to)
+                        .ok_or(edit::EditError::InvalidPath)?
+                        .children
+                        .len(),
+                };
+                edit::paste_subtree(t, &to, at, &clip)
+            })?;
+            json!({ "path": p })
+        }
         "reorder" => {
             let (path, index) = (
                 a.path("path")?,
