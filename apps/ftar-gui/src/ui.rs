@@ -260,6 +260,26 @@ impl App {
                         self.delete_selected();
                     }
                 });
+                ui.menu_button("Analysis", |ui| {
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Validate"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.validate();
+                    }
+                    ui.separator();
+                    for (tab, label) in [
+                        (Tab::CutSets, "Minimal Cut Sets..."),
+                        (Tab::Probability, "Numerical Probability..."),
+                        (Tab::MonteCarlo, "Monte Carlo Simulation..."),
+                    ] {
+                        if ui.add_enabled(has_doc, egui::Button::new(label)).clicked() {
+                            ui.close();
+                            self.show_analysis(tab);
+                        }
+                    }
+                });
                 ui.menu_button("Report", |ui| {
                     ui.menu_button("View", |ui| {
                         for (k, label) in [
@@ -570,6 +590,63 @@ impl App {
         self.overview_open = open;
     }
 
+    /// Analysis > Validate: the structural problems of the tree; click one to
+    /// select its node.
+    fn validate_window(&mut self, ctx: &egui::Context) {
+        if !self.validate_open {
+            return;
+        }
+        let mut open = true;
+        let mut pick = None;
+        let issues = self.issues();
+        let names: Vec<String> = match &self.doc {
+            Some(doc) => issues
+                .iter()
+                .map(|i| match ftar_core::edit::node_at(&doc.tree, &i.path) {
+                    Some(n) if !n.id.is_empty() => n.id.clone(),
+                    Some(n) => kind_name(n.kind).to_string(),
+                    None => String::new(),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        egui::Window::new("Validate")
+            .open(&mut open)
+            .default_size([420.0, 240.0])
+            .show(ctx, |ui| {
+                if issues.is_empty() {
+                    ui.label("No structural problems found.");
+                    return;
+                }
+                ui.label(format!(
+                    "{} problem(s); click one to select it.",
+                    issues.len()
+                ));
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, (issue, name)) in issues.iter().zip(&names).enumerate() {
+                        let (tag, colour) = match issue.severity {
+                            ftar_core::edit::Severity::Error => {
+                                ("Error", Color32::from_rgb(230, 90, 90))
+                            }
+                            ftar_core::edit::Severity::Warning => {
+                                ("Warning", Color32::from_rgb(230, 170, 60))
+                            }
+                        };
+                        ui.horizontal(|ui| {
+                            ui.colored_label(colour, tag);
+                            if ui.link(format!("{name}: {}", issue.message)).clicked() {
+                                pick = Some(i);
+                            }
+                        });
+                    }
+                });
+            });
+        if let Some(i) = pick {
+            self.select_issue(i);
+        }
+        self.validate_open = open;
+    }
+
     fn events_window(&mut self, ctx: &egui::Context) {
         if !self.events_open {
             return;
@@ -737,7 +814,7 @@ impl App {
                 if n > 0 {
                     ui.colored_label(
                         Color32::from_rgb(230, 170, 60),
-                        format!("{n} structural problem(s): see Validate"),
+                        format!("{n} structural problem(s): see Analysis > Validate"),
                     );
                 }
             });
@@ -1256,6 +1333,7 @@ impl eframe::App for App {
         self.status_bar(ui);
         self.details_panel(ui);
         self.events_window(ui.ctx());
+        self.validate_window(ui.ctx());
         self.ped_window(ui.ctx());
         self.report_window(ui.ctx());
         self.overview_window(ui.ctx());

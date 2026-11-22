@@ -86,6 +86,8 @@ pub struct App {
     pub preview: crate::preview::PrintPreview,
     /// The primary event editor window is shown.
     pub events_open: bool,
+    /// Analysis > Validate window is shown.
+    pub validate_open: bool,
     /// Help window (user guide and about page).
     pub help: crate::help::HelpState,
     /// The primary event database window (OpenPED), independent of the tree.
@@ -173,6 +175,7 @@ impl Default for App {
             buf: Buffers::default(),
             preview: Default::default(),
             events_open: false,
+            validate_open: false,
             help: crate::help::HelpState::default(),
             ped: Default::default(),
             report_view: None,
@@ -1108,6 +1111,34 @@ impl App {
             seed: self.seed,
             method: self.mc_method,
         }
+    }
+
+    /// Analysis > Validate: check the tree's structure and show the problems
+    /// in a window, with the result in the status line.
+    pub fn validate(&mut self) {
+        if self.doc.is_none() {
+            return;
+        }
+        let issues = self.issues();
+        self.status = Some(match issues.len() {
+            0 => "Validate: no structural problems".to_string(),
+            n => format!("Validate: {n} problem(s)"),
+        });
+        self.validate_open = true;
+    }
+
+    /// Select the node a validation problem is about.
+    pub fn select_issue(&mut self, index: usize) {
+        if let Some(i) = self.issues().get(index) {
+            self.select(Some(i.path.clone()));
+        }
+    }
+
+    /// Analysis > Minimal Cut Sets / Numerical Probability / Monte Carlo
+    /// Simulation: show that analysis and its report.
+    pub fn show_analysis(&mut self, tab: Tab) {
+        self.tab = tab;
+        self.report_kind = Self::kind_for_tab(tab);
     }
 
     /// The report kind that matches an analysis tab.
