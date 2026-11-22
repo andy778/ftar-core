@@ -1,0 +1,54 @@
+# cargo-deny: supply-chain checks for the whole workspace.
+# Run locally with `cargo deny check`; CI runs it on every PR and weekly
+# (.github/workflows/deny.yml) so new RustSec advisories surface without a push.
+
+[graph]
+all-features = true
+
+[advisories]
+# Known vulnerabilities always fail. "Unmaintained" notices fail only for
+# crates the workspace depends on directly; transitive ones (from egui/winit)
+# are for upstream to replace.
+unmaintained = "workspace"
+yanked = "deny"
+ignore = [
+    # chrono is used only for the report timestamp in ftar-gui.
+    # Replacing it is tracked in #36; remove this entry when done.
+    { id = "RUSTSEC-2026-0543", reason = "chrono only formats a local timestamp in ftar-gui; replacement tracked in #36" },
+]
+
+[licenses]
+# ftar is GPL-2.0-or-later (AGENTS.md §1): every dependency must be
+# compatible with it. Apache-2.0 deps mean the combined binaries are
+# distributed under GPL-3.0, which "or later" allows. Only licences that
+# actually occur in the dependency graph are listed; add new ones deliberately.
+confidence-threshold = 0.9
+allow = [
+    "GPL-2.0-or-later",
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+
+# Unpublished workspace crates (publish = false, e.g. xtask) are not checked.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+# Internal path dependencies have no version yet; switch to "deny" once the
+# crates are published to crates.io (#25) and path deps carry versions.
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
