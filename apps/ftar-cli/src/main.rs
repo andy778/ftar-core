@@ -46,20 +46,20 @@ fn run() -> Result<(), String> {
         print!("{USAGE}");
         return Ok(());
     }
-    if args[0] == "draw" {
-        return draw(&args[1..]);
+    let Some((cmd, rest)) = args.split_first() else {
+        eprint!("{USAGE}");
+        return Err("missing command".into());
+    };
+    match cmd.as_str() {
+        "draw" => return draw(rest),
+        "mcp" => return mcp(rest),
+        "tools" | "call" | "run" => return automation(&args),
+        _ => {}
     }
-    if args[0] == "mcp" {
-        return mcp(&args[1..]);
-    }
-    if matches!(args[0].as_str(), "tools" | "call" | "run") {
-        return automation(&args);
-    }
-    if args.len() < 2 {
-        print!("{USAGE}");
+    let Some(file) = rest.first() else {
+        eprint!("{USAGE}");
         return Err("missing arguments".into());
-    }
-    let (cmd, file) = (&args[0], &args[1]);
+    };
     let mut order = usize::MAX;
     let mut terms = ftar_core::analysis::DEFAULT_TERMS;
     let mut time = 1.0f64;
