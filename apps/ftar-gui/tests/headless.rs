@@ -1295,3 +1295,30 @@ fn edit_menu_and_shortcuts_cut_copy_paste() {
         assert!(found.next().is_some(), "{item} in the Edit menu");
     }
 }
+
+#[test]
+fn view_theme_menu_switches_and_saves_the_theme() {
+    use ftar_render::Theme;
+    let dir = std::env::temp_dir().join(format!("ftar_gui_theme_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let file = dir.join("prefs.txt");
+    let mut app = App::default();
+    app.use_prefs_file(file.clone());
+    assert_eq!(app.prefs.theme, Theme::Light, "light like OpenFTA");
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    assert!(!h.ctx.global_style().visuals.dark_mode);
+    h.get_by_label("View").click();
+    h.run();
+    h.get_by_label("Theme").click();
+    h.run();
+    h.get_by_label("Dark").click();
+    h.run();
+    h.run();
+    assert_eq!(h.state().prefs.theme, Theme::Dark);
+    assert!(h.ctx.global_style().visuals.dark_mode);
+    assert_eq!(ftar_render::Preferences::load(&file).theme, Theme::Dark);
+    let _ = std::fs::remove_dir_all(&dir);
+}
