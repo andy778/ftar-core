@@ -703,17 +703,35 @@ fn tree_export(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         .map(str::to_string)
         .unwrap_or_else(|| d.name.clone());
     let probabilities = a.opt_bool("probabilities")?.unwrap_or(true);
+    let setup = ftar_render::PageSetup::from_options(
+        a.opt_str("page_size")?,
+        a.opt_str("orientation")?,
+        a.opt_str("fit")?,
+        a.opt_f64("scale_percent")?,
+        a.opt_f64("margin_mm")?,
+    )
+    .map_err(ToolError::args)?;
+    let sheet = a.opt_f64("sheet")?;
     let bytes: Vec<u8> = match format.as_str() {
         "svg" | "png" => {
-            let svg = ftar_render::tree_svg(
-                &d.tree,
-                &d.db,
-                &ftar_render::SvgOptions {
-                    title,
-                    probabilities,
-                    background: true,
-                },
-            );
+            let svg = if let Some(n) = sheet {
+                // one printed sheet of the page layout (print preview)
+                let pages = ftar_render::print_pages(&d.tree, &d.db, &title, probabilities, &setup);
+                let idx = (n as usize).checked_sub(1).filter(|_| n >= 1.0);
+                idx.and_then(|i| pages.get(i).cloned()).ok_or_else(|| {
+                    ToolError::args(format!("`sheet` must be 1..={} (got {n})", pages.len()))
+                })?
+            } else {
+                ftar_render::tree_svg(
+                    &d.tree,
+                    &d.db,
+                    &ftar_render::SvgOptions {
+                        title,
+                        probabilities,
+                        background: true,
+                    },
+                )
+            };
             if format == "svg" {
                 svg.into_bytes()
             } else {
@@ -729,6 +747,7 @@ fn tree_export(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                 probabilities,
                 report: None,
                 auto_print: false,
+                page: setup,
             },
         )
         .into_bytes(),
@@ -740,5 +759,8 @@ fn tree_export(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     };
     std::fs::write(&path, &bytes)
         .map_err(|e| ToolError::new("io", format!("{}: {e}", path.display())))?;
-    Ok(json!({ "written": display_path(&path), "format": format, "bytes": bytes.len() }))
+    let sheets = ftar_render::page_count(&d.tree, &d.db, probabilities, &setup);
+    Ok(
+        json!({ "written": display_path(&path), "format": format, "bytes": bytes.len(), "sheets": sheets }),
+    )
 }

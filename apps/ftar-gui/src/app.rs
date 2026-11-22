@@ -82,6 +82,8 @@ pub struct App {
     pub prefs_path: Option<PathBuf>,
     /// The preferences window is shown.
     pub prefs_open: bool,
+    /// Page setup and print preview window state.
+    pub preview: crate::preview::PrintPreview,
     /// The primary event editor window is shown.
     pub events_open: bool,
     /// Help window (user guide and about page).
@@ -158,6 +160,7 @@ impl Default for App {
             add_kind: EventType::Basic,
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
+            preview: Default::default(),
             events_open: false,
             help: crate::help::HelpState::default(),
             ped: Default::default(),
@@ -892,6 +895,7 @@ impl App {
                 probabilities: self.image_probabilities,
                 report,
                 auto_print,
+                page: self.preview.setup,
             },
             &self.prefs,
         ))
