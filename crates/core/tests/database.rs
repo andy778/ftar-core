@@ -186,3 +186,82 @@ fn event_usage_stays_inside_the_root() {
     assert!(trees_using_event(&base, "X", Some("s.ped"), &opts).is_err());
     assert!(trees_using_event(&base.join("missing"), "X", None, &LoadOptions::default()).is_err());
 }
+
+#[test]
+fn export_text_follows_openped_layout() {
+    use ftar_core::database::export_text;
+    let mut db = ftar_core::PrimaryEventDb::default();
+    let mut b = event("B");
+    b.modifier = Some('D');
+    b.lambda = Some('L');
+    db.events.insert("B".into(), b);
+    db.events.insert("A".into(), event("A"));
+    let t = export_text(&db, "");
+    assert!(t.starts_with(
+        "Primary Events Database\n=======================\n\nDatabase Filename: Unnamed\n\nID: A\n"
+    ));
+    assert!(t.contains("Probability: 0.5\nType: Basic\nDormant: No\nDescription: d\n\nID: B\n"));
+    assert!(t.ends_with(
+        "Probability: 0.5 (Constant failure rate/Unit time)\nType: Basic\nDormant: Yes\nDescription: d"
+    ));
+    assert!(export_text(&db, "x.ped").contains("Filename: x.ped\n"));
+}
+
+#[test]
+fn copy_events_between_databases() {
+    use ftar_core::database::copy_events;
+    let mut src = ftar_core::PrimaryEventDb::default();
+    src.events.insert("A".into(), event("A"));
+    src.events.insert("B".into(), event("B"));
+    let mut dst = ftar_core::PrimaryEventDb::default();
+    let mut old = event("A");
+    old.probability = 0.1;
+    dst.events.insert("A".into(), old);
+    let ids: Vec<String> = ["A", "B", "Z"].iter().map(|s| s.to_string()).collect();
+    let o = copy_events(&src, &mut dst, &ids, false).unwrap();
+    assert_eq!(o.copied, vec!["B".to_string()]);
+    assert_eq!(o.skipped, vec!["A".to_string()]);
+    assert_eq!(o.missing, vec!["Z".to_string()]);
+    assert_eq!(dst.events["A"].probability, 0.1);
+    let o = copy_events(&src, &mut dst, &ids, true).unwrap();
+    assert_eq!(o.copied.len(), 2);
+    assert_eq!(dst.events["A"].probability, 0.5);
+    // an invalid event leaves the destination untouched
+    src.events.get_mut("B").unwrap().probability = 7.0;
+    let mut d2 = ftar_core::PrimaryEventDb::default();
+    assert!(copy_events(&src, &mut d2, &ids, true).is_err());
+    assert!(d2.events.is_empty());
+}
+
+#[test]
+fn link_node_takes_id_and_type_and_asks_when_types_differ() {
+    use ftar_core::database::{link_node, LinkOutcome};
+    let mut p = lift();
+    let leaf = ftar_core::edit::all_paths(&p.tree)
+        .into_iter()
+        .find(|q| {
+            ftar_core::edit::node_at(&p.tree, q)
+                .is_some_and(|n| n.children.is_empty() && n.kind == EventType::Basic)
+        })
+        .unwrap();
+    let mut ev = event("NEWEV");
+    ev.kind = EventType::External;
+    p.db.events.insert("NEWEV".into(), ev);
+    assert_eq!(
+        link_node(&mut p.tree, &p.db, &leaf, "NEWEV", false).unwrap(),
+        LinkOutcome::TypesDiffer
+    );
+    assert_ne!(
+        ftar_core::edit::node_at(&p.tree, &leaf).unwrap().id,
+        "NEWEV"
+    );
+    assert_eq!(
+        link_node(&mut p.tree, &p.db, &leaf, "NEWEV", true).unwrap(),
+        LinkOutcome::Linked
+    );
+    let n = ftar_core::edit::node_at(&p.tree, &leaf).unwrap();
+    assert_eq!((n.id.as_str(), n.kind), ("NEWEV", EventType::External));
+    assert!(link_node(&mut p.tree, &p.db, &leaf, "NOPE", true).is_err());
+    assert!(link_node(&mut p.tree, &p.db, &[], "NEWEV", true).is_err());
+    assert!(link_node(&mut p.tree, &p.db, &[99, 99], "NEWEV", true).is_err());
+}

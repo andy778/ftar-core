@@ -219,3 +219,53 @@ fn no_arguments_prints_usage_and_fails() {
     assert!(!err.contains("panicked"), "{err}");
     assert!(err.contains("usage: ftar <command>"), "{err}");
 }
+
+#[test]
+fn draw_takes_page_setup_options() {
+    let dir = std::env::temp_dir().join(format!("ftar_draw_page_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let tree = format!("{DATA}/theatre.fta");
+    let out = dir.join("p.html");
+    let (ok, _) = ftar(&[
+        "draw",
+        &tree,
+        out.to_str().unwrap(),
+        "--page-size",
+        "Legal",
+        "--orientation",
+        "portrait",
+        "--fit",
+        "split",
+        "--page-scale",
+        "150",
+        "--margin",
+        "10",
+    ]);
+    assert!(ok);
+    let html = std::fs::read_to_string(&out).unwrap();
+    assert!(html.contains("size: 215.9mm 355.6mm"));
+    let png = dir.join("s.png");
+    let (ok, _) = ftar(&[
+        "draw",
+        &tree,
+        png.to_str().unwrap(),
+        "--sheet",
+        "1",
+        "--scale",
+        "0.5",
+    ]);
+    assert!(ok);
+    assert!(std::fs::read(&png).unwrap().starts_with(b"\x89PNG"));
+    for bad in [
+        &["--page-size", "A9"][..],
+        &["--orientation", "x"],
+        &["--sheet", "99"],
+        &["--sheet", "0"],
+        &["--margin", "wide"],
+    ] {
+        let mut args = vec!["draw", &tree, png.to_str().unwrap()];
+        args.extend_from_slice(bad);
+        assert!(!ftar(&args).0, "{bad:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

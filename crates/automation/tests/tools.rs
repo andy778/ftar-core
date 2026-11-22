@@ -789,6 +789,58 @@ fn event_usage_lists_other_trees_on_the_same_database() {
 }
 
 #[test]
+fn tree_export_honours_page_setup_and_sheet_preview() {
+    let dir = std::env::temp_dir().join(format!("ftar_export_page_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::with_root(&dir).unwrap();
+    std::fs::copy(format!("{DATA}/theatre.fta"), dir.join("theatre.fta")).unwrap();
+    std::fs::copy(format!("{DATA}/theatre.ped"), dir.join("theatre.ped")).unwrap();
+    s.call("tree_open", &json!({ "path": "theatre.fta" }))
+        .unwrap();
+    let r = s
+        .call(
+            "tree_export",
+            &json!({ "path": "p.html", "page_size": "Letter", "orientation": "portrait" }),
+        )
+        .unwrap();
+    assert_eq!(r["sheets"], 1);
+    assert!(std::fs::read_to_string(dir.join("p.html"))
+        .unwrap()
+        .contains("size: 215.9mm 279.4mm"));
+    let r = s
+        .call(
+            "tree_export",
+            &json!({ "path": "p2.html", "page_size": "A5", "fit": "split", "scale_percent": 200 }),
+        )
+        .unwrap();
+    let n = r["sheets"].as_u64().unwrap();
+    assert!(n > 1);
+    // one printed sheet as an image
+    s.call(
+        "tree_export",
+        &json!({ "path": "sheet.png", "page_size": "A5", "fit": "split", "scale_percent": 200, "sheet": 2, "scale": 0.5 }),
+    )
+    .unwrap();
+    assert_eq!(
+        &std::fs::read(dir.join("sheet.png")).unwrap()[..4],
+        b"\x89PNG"
+    );
+    for args in [
+        json!({ "path": "x.svg", "sheet": 0 }),
+        json!({ "path": "x.svg", "sheet": 99 }),
+        json!({ "path": "x.html", "page_size": "A9" }),
+        json!({ "path": "x.html", "orientation": "tilted" }),
+    ] {
+        assert_eq!(
+            s.call("tree_export", &args).unwrap_err().code,
+            "invalid_args",
+            "{args}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn copy_and_move_paste_branches() {
     let mut s = session();
     s.call("tree_open", &json!({ "path": "theatre.fta" }))

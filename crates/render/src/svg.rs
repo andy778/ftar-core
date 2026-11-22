@@ -5,7 +5,8 @@ use std::fmt::Write as _;
 
 use ftar_core::{PrimaryEventDb, Tree};
 
-use crate::scene::{tree_scene, Anchor, Prim, SceneOptions, PAPER, PEN};
+use crate::prefs::{hex, Preferences};
+use crate::scene::{tree_scene, Anchor, Prim, SceneOptions};
 
 pub use crate::scene::wrap;
 
@@ -59,14 +60,26 @@ fn points(pts: &[[f32; 2]]) -> String {
 
 /// Draw `tree` as an SVG document. `db` supplies descriptions and probabilities.
 pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
+    tree_svg_with(tree, db, opts, &Preferences::default())
+}
+
+/// Like [`tree_svg`], with the user's colours and monochrome mode.
+pub fn tree_svg_with(
+    tree: &Tree,
+    db: &PrimaryEventDb,
+    opts: &SvgOptions,
+    prefs: &Preferences,
+) -> String {
     let scene = tree_scene(
         tree,
         db,
         &SceneOptions {
             title: opts.title.clone(),
             probabilities: opts.probabilities,
+            prefs: prefs.clone(),
         },
     );
+    let (pen, paper) = (hex(prefs.pen_colour()), hex(prefs.background_colour()));
     let mut o = String::new();
     let _ = writeln!(
         o,
@@ -75,16 +88,12 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
         h = scene.height.ceil()
     );
     if opts.background {
-        let _ = writeln!(
-            o,
-            r#"<rect width="100%" height="100%" fill="{}"/>"#,
-            PAPER.hex()
-        );
+        let _ = writeln!(o, r#"<rect width="100%" height="100%" fill="{}"/>"#, paper);
     }
     let _ = writeln!(
         o,
         r#"<g stroke="{}" stroke-width="1.2" stroke-linejoin="round">"#,
-        PEN.hex()
+        pen
     );
     for prim in &scene.prims {
         match prim {
@@ -124,7 +133,7 @@ pub fn tree_svg(tree: &Tree, db: &PrimaryEventDb, opts: &SvgOptions) -> String {
                     r#"<text x="{:.1}" y="{:.1}" font-size="{size}" text-anchor="{anchor}" stroke="none" fill="{}"{}>{}</text>"#,
                     pos[0],
                     pos[1] + size * 0.36,
-                    PEN.hex(),
+                    pen,
                     if *bold { r#" font-weight="bold""# } else { "" },
                     xml_escape(text)
                 );

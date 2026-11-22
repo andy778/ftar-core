@@ -39,6 +39,7 @@ fn theatre_has_openfta_labels_and_header() {
         &SceneOptions {
             title: "theatre.fta".into(),
             probabilities: true,
+            ..Default::default()
         },
     );
     let t = texts(&s);

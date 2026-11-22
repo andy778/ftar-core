@@ -197,6 +197,7 @@ fn print_page_contains_drawing_title_note_and_report() {
             probabilities: true,
             report: Some("Cut sets: A < B & C".into()),
             auto_print: true,
+            ..Default::default()
         },
     );
     assert!(html.contains("<svg ") && html.contains("window.print()"));
@@ -225,4 +226,114 @@ fn header_names_the_database_the_events_come_from() {
     let svg = tree_svg(&p.tree, &p.db, &titled);
     assert!(svg.contains("Database: lift.ped"));
     assert!(!tree_svg(&p.tree, &p.db, &SvgOptions::default()).contains("Database:"));
+}
+
+// ---------------------------------------------------------- page setup (#56)
+
+mod page_setup {
+    use super::*;
+    use ftar_render::{page_count, print_pages, Fit, Orientation, PageSetup, PageSize, MAX_PAGES};
+
+    fn sheet_size(svg: &str) -> (String, String) {
+        let w = svg
+            .split("width=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+        let h = svg
+            .split("height=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+        (w.to_string(), h.to_string())
+    }
+
+    #[test]
+    fn size_and_orientation_set_the_sheet() {
+        let p = load("theatre.fta");
+        let mut s = PageSetup::default();
+        let pages = print_pages(&p.tree, &p.db, "t", true, &s);
+        assert_eq!(pages.len(), 1);
+        assert_eq!(sheet_size(&pages[0]), ("297.0mm".into(), "210.0mm".into()));
+        s.orientation = Orientation::Portrait;
+        s.size = PageSize::Letter;
+        let pages = print_pages(&p.tree, &p.db, "t", true, &s);
+        assert_eq!(sheet_size(&pages[0]), ("215.9mm".into(), "279.4mm".into()));
+        assert!(pages[0].contains("RELAY_FAIL"));
+        let html = print_html(
+            &p.tree,
+            &p.db,
+            &PrintOptions {
+                page: s,
+                ..Default::default()
+            },
+        );
+        assert!(html.contains("size: 215.9mm 279.4mm"));
+    }
+
+    #[test]
+    fn split_spreads_the_drawing_over_sheets_and_fit_keeps_one() {
+        let p = load("theatre.fta");
+        let mut s = PageSetup {
+            size: PageSize::A5,
+            scale_percent: 200.0,
+            ..Default::default()
+        };
+        assert_eq!(
+            page_count(&p.tree, &p.db, true, &s),
+            1,
+            "fit mode is one sheet"
+        );
+        s.fit = Fit::SplitPages;
+        let n = page_count(&p.tree, &p.db, true, &s);
+        assert!(n > 1);
+        let pages = print_pages(&p.tree, &p.db, "t", true, &s);
+        assert_eq!(pages.len(), n);
+        assert!(pages[1].contains(&format!("Page 2 of {n}")));
+        // every sheet rasterises
+        for pg in &pages {
+            svg_to_png(pg, 0.3).unwrap();
+        }
+        // smaller scale needs no more sheets
+        s.scale_percent = 50.0;
+        assert!(page_count(&p.tree, &p.db, true, &s) <= n);
+    }
+
+    #[test]
+    fn hostile_settings_never_panic_and_cap_the_page_count() {
+        let p = load("theatre.fta");
+        let s = PageSetup {
+            size: PageSize::A5,
+            fit: Fit::SplitPages,
+            margin_mm: f64::NAN,
+            scale_percent: f64::INFINITY,
+            ..Default::default()
+        };
+        assert!(print_pages(&p.tree, &p.db, "t", true, &s).len() <= MAX_PAGES);
+        let s = PageSetup {
+            margin_mm: 1e9,
+            scale_percent: -5.0,
+            ..s
+        };
+        assert!(print_pages(&p.tree, &p.db, "t", true, &s).len() <= MAX_PAGES);
+        assert!(PageSetup::from_options(Some("A9"), None, None, None, None).is_err());
+        assert!(PageSetup::from_options(None, Some("sideways"), None, None, None).is_err());
+        assert!(PageSetup::from_options(None, None, Some("zoom"), None, None).is_err());
+        let ok = PageSetup::from_options(
+            Some("a3"),
+            Some("Portrait"),
+            Some("split"),
+            Some(50.0),
+            Some(5.0),
+        )
+        .unwrap();
+        assert_eq!(
+            (ok.size, ok.orientation, ok.fit),
+            (PageSize::A3, Orientation::Portrait, Fit::SplitPages)
+        );
+    }
 }

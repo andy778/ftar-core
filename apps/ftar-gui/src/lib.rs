@@ -4,13 +4,20 @@
 //! * `ui` draws it with egui; the tree drawing comes from `ftar_render::scene`
 
 mod app;
+mod help;
 pub use ftar_core::layout;
+pub use help::HelpState;
+mod ped;
+mod prefs_ui;
+mod preview;
 mod ui;
 
 use std::path::PathBuf;
 
 pub use app::{ctime_text, App, Clip, Pending, Tab};
 use eframe::egui;
+pub use ped::PedWindow;
+pub use preview::PrintPreview;
 
 /// Start the desktop app, optionally opening `path`.
 pub fn run(path: Option<PathBuf>) -> eframe::Result {
@@ -22,6 +29,9 @@ pub fn run(path: Option<PathBuf>) -> eframe::Result {
         },
         Box::new(move |_cc| {
             let mut app = App::default();
+            if let Some(p) = ftar_render::Preferences::default_path() {
+                app.use_prefs_file(p);
+            }
             if let Some(p) = path {
                 app.open(p);
             }

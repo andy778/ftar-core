@@ -9,9 +9,8 @@ use ftar_core::report::ReportKind;
 use ftar_core::EventType;
 
 use crate::app::{App, Pending, Tab};
-use ftar_render::scene::{
-    tree_scene, triangulate, Anchor, Prim, Rgb, Scene, SceneOptions, HIGHLIGHT, PAPER, PEN,
-};
+use ftar_render::scene::{tree_scene, triangulate, Anchor, Prim, Rgb, Scene, SceneOptions};
+use ftar_render::Preferences;
 
 const GATES: &[EventType] = &[
     EventType::And,
@@ -165,6 +164,16 @@ impl App {
                         ui.close();
                         self.print_now();
                     }
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Page setup and print preview..."),
+                        )
+                        .clicked()
+                    {
+                        ui.close();
+                        self.preview.open = true;
+                    }
                     ui.checkbox(
                         &mut self.image_probabilities,
                         "Probabilities in images and prints",
@@ -233,6 +242,14 @@ impl App {
                         ui.close();
                         self.events_open = true;
                     }
+                    if ui.button("Primary event database...").clicked() {
+                        ui.close();
+                        self.ped.open = true;
+                    }
+                    if ui.button("Preferences...").clicked() {
+                        ui.close();
+                        self.prefs_open = true;
+                    }
                     ui.separator();
                     let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
                     if ui
@@ -241,6 +258,51 @@ impl App {
                     {
                         ui.close();
                         self.delete_selected();
+                    }
+                });
+                ui.menu_button("Analysis", |ui| {
+                    if ui
+                        .add_enabled(has_doc, egui::Button::new("Validate"))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.validate();
+                    }
+                    ui.separator();
+                    for (tab, label) in [
+                        (Tab::CutSets, "Minimal Cut Sets..."),
+                        (Tab::Probability, "Numerical Probability..."),
+                        (Tab::MonteCarlo, "Monte Carlo Simulation..."),
+                    ] {
+                        if ui.add_enabled(has_doc, egui::Button::new(label)).clicked() {
+                            ui.close();
+                            self.show_analysis(tab);
+                        }
+                    }
+                });
+                ui.menu_button("Report", |ui| {
+                    ui.menu_button("View", |ui| {
+                        for (k, label) in [
+                            (ReportKind::CutSets, "Qualitative Report"),
+                            (ReportKind::Probability, "Probability Report"),
+                            (ReportKind::MonteCarlo, "Monte Carlo Report"),
+                        ] {
+                            let on = self.saved_report_exists(k);
+                            if ui.add_enabled(on, egui::Button::new(label)).clicked() {
+                                ui.close();
+                                let _ = self.view_saved_report(k);
+                            }
+                        }
+                    });
+                });
+                ui.menu_button("Help", |ui| {
+                    if ui.button("User guide").clicked() {
+                        ui.close();
+                        self.show_help(None);
+                    }
+                    if ui.button("About ftar").clicked() {
+                        ui.close();
+                        self.show_help(Some(crate::help::ABOUT));
                     }
                 });
                 ui.separator();
@@ -374,7 +436,7 @@ impl App {
     }
 
     /// Open the browser's print dialog for the tree (and report).
-    fn print_now(&mut self) {
+    pub(crate) fn print_now(&mut self) {
         if let Ok(path) = self.prepare_print() {
             if let Err(e) = open_with_default_app(&path) {
                 self.error = Some(format!("could not open the print page: {e}"));
@@ -496,7 +558,14 @@ impl App {
                 let r = resp.rect;
                 let z = (r.width() / scene.width).min(r.height() / scene.height);
                 let origin = r.center() - Vec2::new(scene.width, scene.height) * z / 2.0;
-                paint_scene(&painter.with_clip_rect(r), &scene, origin, z, None);
+                paint_scene(
+                    &painter.with_clip_rect(r),
+                    &scene,
+                    origin,
+                    z,
+                    None,
+                    &self.prefs,
+                );
                 let seen = self.visible_world();
                 let frame = Rect::from_min_max(
                     origin + seen.min.to_vec2() * z,
@@ -519,6 +588,63 @@ impl App {
             self.centre_on(w);
         }
         self.overview_open = open;
+    }
+
+    /// Analysis > Validate: the structural problems of the tree; click one to
+    /// select its node.
+    fn validate_window(&mut self, ctx: &egui::Context) {
+        if !self.validate_open {
+            return;
+        }
+        let mut open = true;
+        let mut pick = None;
+        let issues = self.issues();
+        let names: Vec<String> = match &self.doc {
+            Some(doc) => issues
+                .iter()
+                .map(|i| match ftar_core::edit::node_at(&doc.tree, &i.path) {
+                    Some(n) if !n.id.is_empty() => n.id.clone(),
+                    Some(n) => kind_name(n.kind).to_string(),
+                    None => String::new(),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        egui::Window::new("Validate")
+            .open(&mut open)
+            .default_size([420.0, 240.0])
+            .show(ctx, |ui| {
+                if issues.is_empty() {
+                    ui.label("No structural problems found.");
+                    return;
+                }
+                ui.label(format!(
+                    "{} problem(s); click one to select it.",
+                    issues.len()
+                ));
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, (issue, name)) in issues.iter().zip(&names).enumerate() {
+                        let (tag, colour) = match issue.severity {
+                            ftar_core::edit::Severity::Error => {
+                                ("Error", Color32::from_rgb(230, 90, 90))
+                            }
+                            ftar_core::edit::Severity::Warning => {
+                                ("Warning", Color32::from_rgb(230, 170, 60))
+                            }
+                        };
+                        ui.horizontal(|ui| {
+                            ui.colored_label(colour, tag);
+                            if ui.link(format!("{name}: {}", issue.message)).clicked() {
+                                pick = Some(i);
+                            }
+                        });
+                    }
+                });
+            });
+        if let Some(i) = pick {
+            self.select_issue(i);
+        }
+        self.validate_open = open;
     }
 
     fn events_window(&mut self, ctx: &egui::Context) {
@@ -616,6 +742,28 @@ impl App {
         self.events_open = open;
     }
 
+    /// The saved report opened by Report > View.
+    fn report_window(&mut self, ctx: &egui::Context) {
+        let Some((kind, text)) = &self.report_view else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new("Report")
+            .open(&mut open)
+            .default_size([640.0, 480.0])
+            .show(ctx, |ui| {
+                ui.label(kind.label());
+                egui::ScrollArea::both().show(ui, |ui| {
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(text).monospace()).selectable(true),
+                    );
+                });
+            });
+        if !open {
+            self.report_view = None;
+        }
+    }
+
     fn unsaved_prompt(&mut self, ctx: &egui::Context) {
         let Some(p) = self.pending.clone() else {
             return;
@@ -666,7 +814,7 @@ impl App {
                 if n > 0 {
                     ui.colored_label(
                         Color32::from_rgb(230, 170, 60),
-                        format!("{n} structural problem(s): see Validate"),
+                        format!("{n} structural problem(s): see Analysis > Validate"),
                     );
                 }
             });
@@ -868,14 +1016,15 @@ fn paint_scene(
     origin: Pos2,
     z: f32,
     selected: Option<&[usize]>,
+    prefs: &Preferences,
 ) {
     let to = |p: [f32; 2]| origin + Vec2::new(p[0], p[1]) * z;
     painter.rect_filled(
         Rect::from_min_size(origin, Vec2::new(scene.width, scene.height) * z),
         0.0,
-        rgb(PAPER),
+        rgb32(prefs.background_colour()),
     );
-    let pen = Stroke::new((1.2 * z).max(0.6), rgb(PEN));
+    let pen = Stroke::new((1.2 * z).max(0.6), rgb32(prefs.pen_colour()));
     let highlight = selected
         .and_then(|path| scene.items.iter().find(|it| it.path == path))
         .map(|it| it.prims.clone());
@@ -904,7 +1053,7 @@ fn paint_scene(
                     painter.add(Shape::mesh(mesh));
                 }
                 let stroke = if highlight.as_ref().is_some_and(|r| r.contains(&i)) {
-                    Stroke::new((2.5 * z).max(2.0), rgb(HIGHLIGHT))
+                    Stroke::new((2.5 * z).max(2.0), rgb32(prefs.highlight_colour()))
                 } else {
                     pen
                 };
@@ -937,7 +1086,13 @@ fn paint_scene(
                     Anchor::Start => Align2::LEFT_CENTER,
                     Anchor::Middle => Align2::CENTER_CENTER,
                 };
-                painter.text(p, align, text, FontId::proportional(px), rgb(PEN));
+                painter.text(
+                    p,
+                    align,
+                    text,
+                    FontId::proportional(px),
+                    rgb32(prefs.pen_colour()),
+                );
             }
         }
     }
@@ -953,6 +1108,7 @@ impl App {
             &SceneOptions {
                 title: self.tree_name(),
                 probabilities: true,
+                prefs: self.prefs.clone(),
             },
         ))
     }
@@ -974,6 +1130,7 @@ impl eframe::App for App {
 
         self.top_bar(ui);
         self.unsaved_prompt(&ctx);
+        self.help_window(&ctx);
 
         egui::Panel::right("analysis")
             .default_size(420.0)
@@ -1176,8 +1333,13 @@ impl eframe::App for App {
         self.status_bar(ui);
         self.details_panel(ui);
         self.events_window(ui.ctx());
-        self.set_zoom_window(ui.ctx());
+        self.validate_window(ui.ctx());
+        self.ped_window(ui.ctx());
+        self.report_window(ui.ctx());
         self.overview_window(ui.ctx());
+        self.set_zoom_window(ui.ctx());
+        self.prefs_window(ui.ctx());
+        self.preview_window(ui.ctx());
 
         egui::CentralPanel::default().show(ui, |ui| {
             let Some(scene) = self.scene() else {
@@ -1224,6 +1386,7 @@ impl eframe::App for App {
                 origin,
                 z,
                 self.selected.as_deref(),
+                &self.prefs,
             );
 
             if resp.clicked() {
@@ -1236,6 +1399,10 @@ impl eframe::App for App {
             }
         });
     }
+}
+
+fn rgb32(c: ftar_render::prefs::Rgb) -> Color32 {
+    Color32::from_rgb(c[0], c[1], c[2])
 }
 
 /// Open a file with the system's default application (the browser, for HTML).

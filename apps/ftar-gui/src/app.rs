@@ -13,7 +13,9 @@ use ftar_core::project::Document;
 use ftar_core::report::{self, ReportKind, ReportParams};
 use ftar_core::write::{write_fta_with, write_ped, LineEnding};
 use ftar_core::{EventType, PrimaryEvent, PrimaryEventDb, Tree};
-use ftar_render::{print_html, svg_to_png, tree_svg, PrintOptions, SvgOptions};
+use ftar_render::{
+    print_html_with, svg_to_png, tree_svg_with, Preferences, PrintOptions, SvgOptions,
+};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Tab {
@@ -74,8 +76,24 @@ impl Default for EventForm {
 }
 
 pub struct App {
+    /// Drawing colours and monochrome mode (Edit > Preferences).
+    pub prefs: Preferences,
+    /// Where `prefs` are saved between sessions (`None`: not persisted).
+    pub prefs_path: Option<PathBuf>,
+    /// The preferences window is shown.
+    pub prefs_open: bool,
+    /// Page setup and print preview window state.
+    pub preview: crate::preview::PrintPreview,
     /// The primary event editor window is shown.
     pub events_open: bool,
+    /// Analysis > Validate window is shown.
+    pub validate_open: bool,
+    /// Help window (user guide and about page).
+    pub help: crate::help::HelpState,
+    /// The primary event database window (OpenPED), independent of the tree.
+    pub ped: crate::ped::PedWindow,
+    /// Report window (Report > View): the report kind and its text.
+    pub report_view: Option<(ReportKind, String)>,
     pub event_form: EventForm,
     pub doc: Option<Document>,
     pub history: History<Snapshot>,
@@ -94,16 +112,16 @@ pub struct App {
     pub zoom: f32,
     pub pan: Vec2,
     pub fit_next: bool,
-    /// Keep the tree fitted while the canvas or the tree changes size, until the user pans or zooms.
-    pub auto_fit: bool,
-    pub(crate) fit_key: Option<(Vec2, f32, f32)>,
-    /// Canvas rectangle of the last frame.
-    pub canvas: eframe::egui::Rect,
     /// View > Tree Overview window is shown.
     pub overview_open: bool,
     /// View > Set Zoom window is shown, with the percentage being edited.
     pub set_zoom_open: bool,
     pub set_zoom_percent: f32,
+    /// Keep the tree fitted while the canvas or the tree changes size, until the user pans or zooms.
+    pub auto_fit: bool,
+    pub(crate) fit_key: Option<(Vec2, f32, f32)>,
+    /// Canvas rectangle of the last frame.
+    pub canvas: eframe::egui::Rect,
     // analysis
     pub tab: Tab,
     pub order: usize,
@@ -140,6 +158,9 @@ type UsageKey = (Option<PathBuf>, Option<String>, String);
 impl Default for App {
     fn default() -> Self {
         Self {
+            prefs: Preferences::default(),
+            prefs_path: None,
+            prefs_open: false,
             doc: None,
             history: History::new(),
             dirty: false,
@@ -152,17 +173,22 @@ impl Default for App {
             add_kind: EventType::Basic,
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
+            preview: Default::default(),
             events_open: false,
+            validate_open: false,
+            help: crate::help::HelpState::default(),
+            ped: Default::default(),
+            report_view: None,
             event_form: EventForm::default(),
             zoom: 1.0,
             pan: Vec2::ZERO,
             fit_next: true,
-            auto_fit: true,
-            fit_key: None,
-            canvas: eframe::egui::Rect::ZERO,
             overview_open: false,
             set_zoom_open: false,
             set_zoom_percent: 100.0,
+            auto_fit: true,
+            fit_key: None,
+            canvas: eframe::egui::Rect::ZERO,
             tab: Tab::CutSets,
             order: 0,
             terms: ftar_core::analysis::DEFAULT_TERMS,
@@ -424,7 +450,10 @@ impl App {
 
     /// Run an edit on the document. On success it is recorded for undo; on
     /// failure the document is restored and the error shown.
-    fn edit<R>(&mut self, f: impl FnOnce(&mut Document) -> Result<R, String>) -> Option<R> {
+    pub(crate) fn edit<R>(
+        &mut self,
+        f: impl FnOnce(&mut Document) -> Result<R, String>,
+    ) -> Option<R> {
         let doc = self.doc.as_mut()?;
         let before: Snapshot = (doc.tree.clone(), doc.db.clone());
         match f(doc) {
@@ -958,6 +987,24 @@ impl App {
             .unwrap_or_default()
     }
 
+    // ------------------------------------------------------------ preferences
+
+    /// Load the saved preferences from `path` and keep saving there.
+    pub fn use_prefs_file(&mut self, path: PathBuf) {
+        self.prefs = Preferences::load(&path);
+        self.prefs_path = Some(path);
+    }
+
+    /// Replace the preferences and save them (when a file is set).
+    pub fn set_prefs(&mut self, prefs: Preferences) {
+        self.prefs = prefs;
+        if let Some(p) = &self.prefs_path {
+            if let Err(e) = self.prefs.save(p) {
+                self.error = Some(format!("could not save preferences {}: {e}", p.display()));
+            }
+        }
+    }
+
     // ------------------------------------------------- images and printing
 
     fn svg_options(&self) -> SvgOptions {
@@ -971,7 +1018,12 @@ impl App {
     /// Draw the tree as shown in the editor (transfer gates stay as symbols) as SVG.
     pub fn svg_text(&self) -> Result<String, String> {
         let doc = self.doc.as_ref().ok_or("no tree open")?;
-        Ok(tree_svg(&doc.tree, &doc.db, &self.svg_options()))
+        Ok(tree_svg_with(
+            &doc.tree,
+            &doc.db,
+            &self.svg_options(),
+            &self.prefs,
+        ))
     }
 
     pub fn default_image_name(&self) -> String {
@@ -1012,7 +1064,7 @@ impl App {
         } else {
             None
         };
-        Ok(print_html(
+        Ok(print_html_with(
             &doc.tree,
             &doc.db,
             &PrintOptions {
@@ -1020,7 +1072,9 @@ impl App {
                 probabilities: self.image_probabilities,
                 report,
                 auto_print,
+                page: self.preview.setup,
             },
+            &self.prefs,
         ))
     }
 
@@ -1057,6 +1111,34 @@ impl App {
             seed: self.seed,
             method: self.mc_method,
         }
+    }
+
+    /// Analysis > Validate: check the tree's structure and show the problems
+    /// in a window, with the result in the status line.
+    pub fn validate(&mut self) {
+        if self.doc.is_none() {
+            return;
+        }
+        let issues = self.issues();
+        self.status = Some(match issues.len() {
+            0 => "Validate: no structural problems".to_string(),
+            n => format!("Validate: {n} problem(s)"),
+        });
+        self.validate_open = true;
+    }
+
+    /// Select the node a validation problem is about.
+    pub fn select_issue(&mut self, index: usize) {
+        if let Some(i) = self.issues().get(index) {
+            self.select(Some(i.path.clone()));
+        }
+    }
+
+    /// Analysis > Minimal Cut Sets / Numerical Probability / Monte Carlo
+    /// Simulation: show that analysis and its report.
+    pub fn show_analysis(&mut self, tab: Tab) {
+        self.tab = tab;
+        self.report_kind = Self::kind_for_tab(tab);
     }
 
     /// The report kind that matches an analysis tab.
@@ -1214,8 +1296,54 @@ impl App {
                 self.cut_sets = c.or(self.cut_sets.take());
                 self.prob = p.or(self.prob.take());
                 self.mc = m.or(self.mc.take());
+                self.save_last_report(Self::kind_for_tab(self.tab));
             }
             Err(e) => self.error = Some(e.to_string()),
+        }
+    }
+
+    /// Path of the tree file, when it has been saved.
+    fn tree_path(&self) -> Option<&Path> {
+        self.doc.as_ref().and_then(|d| d.path.as_deref())
+    }
+
+    /// Write the report of the analysis just run next to the tree, like OpenFTA
+    /// (`.crp`, `.prp`, `.mrp`). Trees without a file have nowhere to put it.
+    fn save_last_report(&mut self, kind: ReportKind) {
+        let Some(tree) = self.tree_path().map(Path::to_path_buf) else {
+            return;
+        };
+        let res = self
+            .report_text(kind, &Self::now_text())
+            .and_then(|text| ftar_core::report_files::write(&tree, kind, &text));
+        if let Err(e) = res {
+            self.status = Some(format!("Could not save the report: {e}"));
+        }
+    }
+
+    /// Whether Report > View has a saved report of `kind` to show.
+    pub fn saved_report_exists(&self, kind: ReportKind) -> bool {
+        self.tree_path()
+            .is_some_and(|t| ftar_core::report_files::exists(t, kind))
+    }
+
+    /// Open the last saved report of `kind` in the report window without
+    /// running the analysis again.
+    pub fn view_saved_report(&mut self, kind: ReportKind) -> Result<(), String> {
+        let res = self
+            .tree_path()
+            .ok_or_else(|| "save the tree and run the analysis first".to_string())
+            .and_then(|t| ftar_core::report_files::read(t, kind));
+        match res {
+            Ok(text) => {
+                self.error = None;
+                self.report_view = Some((kind, text));
+                Ok(())
+            }
+            Err(e) => {
+                self.error = Some(e.clone());
+                Err(e)
+            }
         }
     }
 }

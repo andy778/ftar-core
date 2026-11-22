@@ -56,17 +56,6 @@ pub const PAPER: Rgb = Rgb(255, 255, 255);
 /// The pen colour OpenFTA highlights the selected item with.
 pub const HIGHLIGHT: Rgb = Rgb(0, 160, 0);
 
-fn fill(kind: EventType) -> Rgb {
-    use EventType::*;
-    match kind {
-        Intermediate | Unknown => Rgb(250, 250, 200),
-        Basic | Dormant | Undeveloped | External => Rgb(210, 250, 200),
-        ConditionAnalysed | ConditionNotAnalysed => Rgb(200, 245, 250),
-        And | Or | PriorityAnd | Xor | Inhibit => Rgb(250, 200, 200),
-        TransferIn | TransferOut => Rgb(230, 230, 230),
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Anchor {
     Start,
@@ -118,6 +107,8 @@ pub struct SceneOptions {
     pub title: String,
     /// Show primary event probabilities.
     pub probabilities: bool,
+    /// Fill colours and monochrome mode (Edit > Preferences).
+    pub prefs: crate::prefs::Preferences,
 }
 
 impl Default for SceneOptions {
@@ -125,6 +116,7 @@ impl Default for SceneOptions {
         Self {
             title: String::new(),
             probabilities: true,
+            prefs: crate::prefs::Preferences::default(),
         }
     }
 }
@@ -540,7 +532,10 @@ pub fn tree_scene(tree: &Tree, db: &PrimaryEventDb, opts: &SceneOptions) -> Scen
         let sym = symbol(n.kind);
         let start = b.prims.len();
         let at = |q: [f32; 2]| [p.x + q[0] * UNIT, p.top + q[1] * UNIT];
-        let f = fill(n.kind);
+        let f = {
+            let c = opts.prefs.fill(n.kind);
+            Rgb(c[0], c[1], c[2])
+        };
         if is_dormant(n) {
             // a ring 1.1 times the size behind the circle
             let r = 0.55 * UNIT;
