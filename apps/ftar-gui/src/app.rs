@@ -118,6 +118,16 @@ pub struct App {
     pub mc: Option<MonteCarloReport>,
     /// Last answer of [`App::other_trees_using`]: (tree file, database, event id) and the text.
     usage_cache: Option<(UsageKey, String)>,
+    /// The branch last cut or copied (Edit > Cut/Copy); kept when another tree is opened.
+    pub clipboard: Option<Clip>,
+}
+
+/// A cut or copied branch, with the database entries of its primary events so
+/// that pasting it into another tree keeps their probabilities.
+#[derive(Debug, Clone)]
+pub struct Clip {
+    pub node: ftar_core::Node,
+    pub events: Vec<PrimaryEvent>,
 }
 
 type UsageKey = (Option<PathBuf>, Option<String>, String);
@@ -159,7 +169,31 @@ impl Default for App {
             prob: None,
             mc: None,
             usage_cache: None,
+            clipboard: None,
         }
+    }
+}
+
+/// "GATE1 (3 events)" for status messages.
+fn describe(n: &ftar_core::Node) -> String {
+    let count = {
+        let mut k = 0;
+        let mut stack = vec![n];
+        while let Some(m) = stack.pop() {
+            k += 1;
+            stack.extend(m.children.iter());
+        }
+        k
+    };
+    let name = if n.id.is_empty() {
+        "branch"
+    } else {
+        n.id.as_str()
+    };
+    if count == 1 {
+        name.to_string()
+    } else {
+        format!("{name} ({count} events)")
     }
 }
 
@@ -431,6 +465,97 @@ impl App {
             let mut parent = path;
             parent.pop();
             self.select(Some(parent));
+        }
+    }
+
+    // ------------------------------------------------- cut, copy and paste
+
+    /// Something is selected that can be copied (any node, the top event included).
+    pub fn can_copy(&self) -> bool {
+        self.selected_node().is_some()
+    }
+
+    /// Something is selected that can be cut (any node but the top event).
+    pub fn can_cut(&self) -> bool {
+        self.can_copy() && self.selected.as_ref().is_some_and(|p| !p.is_empty())
+    }
+
+    pub fn can_paste(&self) -> bool {
+        self.doc.is_some() && self.clipboard.is_some()
+    }
+
+    /// Copy the selected branch, with its primary events' database entries.
+    pub fn copy_selected(&mut self) {
+        let (Some(doc), Some(path)) = (self.doc.as_ref(), self.selected.as_ref()) else {
+            return;
+        };
+        let Ok(node) = edit::copy_subtree(&doc.tree, path) else {
+            return;
+        };
+        let mut ids: Vec<&str> = Vec::new();
+        let mut stack = vec![&node];
+        while let Some(n) = stack.pop() {
+            if !ids.contains(&n.id.as_str()) {
+                ids.push(&n.id);
+            }
+            stack.extend(n.children.iter());
+        }
+        let events = ids
+            .iter()
+            .filter_map(|id| doc.db.events.get(*id).cloned())
+            .collect();
+        self.status = Some(format!("Copied {}", describe(&node)));
+        self.clipboard = Some(Clip {
+            node: node.clone(),
+            events,
+        });
+    }
+
+    /// Copy the selected branch and remove it from the tree (one undo step).
+    pub fn cut_selected(&mut self) {
+        if !self.can_cut() {
+            return;
+        }
+        self.copy_selected();
+        self.delete_selected();
+        if self.error.is_none() {
+            if let Some(c) = &self.clipboard {
+                self.status = Some(format!("Cut {}", describe(&c.node)));
+            }
+        }
+    }
+
+    /// Paste the clipboard as the last child of the selected gate or
+    /// intermediate event (the top event when nothing is selected), or after
+    /// the selected event when it cannot have children. Primary events the
+    /// tree's database does not have yet are added; existing ones are kept.
+    pub fn paste(&mut self) {
+        let Some(clip) = self.clipboard.clone() else {
+            return;
+        };
+        let sel = self.selected.clone().unwrap_or_default();
+        let new_path = self.edit(|doc| {
+            let target = edit::node_at(&doc.tree, &sel).ok_or("no such node")?;
+            let (parent, index) = if accepts_children(target.kind) {
+                (sel.clone(), target.children.len())
+            } else if let Some((&i, parent)) = sel.split_last() {
+                (parent.to_vec(), i + 1)
+            } else {
+                return Err("select a gate or an intermediate event to paste into".to_string());
+            };
+            let p = edit::paste_subtree(&mut doc.tree, &parent, index, &clip.node)
+                .map_err(|e| format!("cannot paste here: {e}"))?;
+            for e in &clip.events {
+                doc.db
+                    .events
+                    .entry(e.id.clone())
+                    .or_insert_with(|| e.clone());
+            }
+            Ok(p)
+        });
+        if let Some(p) = new_path {
+            self.status = Some(format!("Pasted {}", describe(&clip.node)));
+            self.select(Some(p));
         }
     }
 
