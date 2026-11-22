@@ -747,3 +747,43 @@ fn event_set_validates_sets_dormant_and_event_delete_undoes() {
         .iter()
         .any(|e| e["id"] == "DOD_1"));
 }
+
+/// Before changing a shared event, an agent can see which other trees use it.
+#[test]
+fn event_usage_lists_other_trees_on_the_same_database() {
+    let base = std::env::temp_dir().join(format!("ftar_usage_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    for f in ["lift.fta", "lift.ped"] {
+        std::fs::copy(format!("{DATA}/{f}"), base.join(f)).unwrap();
+    }
+    std::fs::copy(format!("{DATA}/lift.fta"), base.join("lift_b.fta")).unwrap();
+    // same ids, another database: not a use of lift.ped's events
+    let other = std::fs::read_to_string(base.join("lift.fta"))
+        .unwrap()
+        .replacen("lift.ped", "other.ped", 1);
+    std::fs::write(base.join("other.fta"), other).unwrap();
+
+    let mut s = Session::with_root(&base).unwrap();
+    s.call("tree_open", &json!({ "path": "lift.fta", "raw": true }))
+        .unwrap();
+    let r = s.call("event_usage", &json!({ "id": "DOD_1" })).unwrap();
+    assert_eq!(r["database"], "lift.ped", "{r}");
+    assert_eq!(r["in_database"], true);
+    assert!(r["this_tree_nodes"].as_u64().unwrap() >= 1, "{r}");
+    let others = r["other_trees"].as_array().unwrap();
+    assert_eq!(others.len(), 1, "{r}");
+    assert!(others[0]["path"].as_str().unwrap().ends_with("lift_b.fta"));
+    assert_eq!(others[0]["nodes"], r["this_tree_nodes"]);
+
+    let none = s.call("event_usage", &json!({ "id": "NO_SUCH" })).unwrap();
+    assert_eq!(none["this_tree_nodes"], 0);
+    assert!(none["other_trees"].as_array().unwrap().is_empty());
+
+    s.call("tree_new", &json!({})).unwrap();
+    let e = s
+        .call("event_usage", &json!({ "id": "DOD_1" }))
+        .unwrap_err();
+    assert_eq!(e.code, "invalid_args");
+    let _ = std::fs::remove_dir_all(base);
+}

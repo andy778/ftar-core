@@ -364,6 +364,10 @@ impl App {
                                 .desired_width(280.0),
                         )
                         .labelled_by(l.id);
+                        if let Some(id) = self.event_form.original.clone() {
+                            let used = self.other_trees_using(&id);
+                            ui.label(used);
+                        }
                         ui.horizontal(|ui| {
                             if ui.button("Apply").clicked() {
                                 self.event_form_apply();
@@ -544,6 +548,7 @@ impl App {
             {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(self.event_origin(&node.id));
+                    ui.label(self.other_trees_using(&node.id));
                     let l = ui.label("probability");
                     let pr = ui
                         .add(egui::TextEdit::singleline(&mut self.buf.prob).desired_width(90.0))

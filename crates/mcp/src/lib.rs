@@ -172,6 +172,7 @@ const READ_ONLY: &[&str] = &[
     "tree_get",
     "tree_validate",
     "event_list",
+    "event_usage",
     "analysis_cutsets",
     "analysis_probability",
     "analysis_montecarlo",
