@@ -146,6 +146,14 @@ impl App {
     }
 
     /// Select event `id` and load it into the form.
+    /// Empty the form for a new event; the database is not changed.
+    pub fn ped_clear(&mut self) {
+        self.ped.selected = None;
+        self.ped.form = EventForm::default();
+        self.ped.error = None;
+        self.ped.status = None;
+    }
+
     pub fn ped_select(&mut self, id: &str) {
         let Some(e) = self.ped.db.events.get(id).cloned() else {
             return;
@@ -418,19 +426,16 @@ impl App {
                         )
                         .labelled_by(l.id);
                         ui.checkbox(&mut self.ped.form.rate, "Event is a failure rate");
-                        egui::ComboBox::from_label("Event type")
-                            .selected_text(kind_label(self.ped.form.kind))
-                            .show_ui(ui, |ui| {
-                                for k in [
-                                    EventType::Basic,
-                                    EventType::External,
-                                    EventType::Undeveloped,
-                                    EventType::ConditionNotAnalysed,
-                                    EventType::ConditionAnalysed,
-                                ] {
-                                    ui.selectable_value(&mut self.ped.form.kind, k, kind_label(k));
-                                }
-                            });
+                        ui.label("Event type");
+                        for k in [
+                            EventType::Basic,
+                            EventType::External,
+                            EventType::Undeveloped,
+                            EventType::ConditionNotAnalysed,
+                            EventType::ConditionAnalysed,
+                        ] {
+                            ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
+                        }
                         ui.checkbox(&mut self.ped.form.dormant, "Event is dormant");
                         let l = ui.label("Event description");
                         ui.add(
@@ -443,8 +448,14 @@ impl App {
                             if ui.button("Apply event").clicked() {
                                 self.ped_apply();
                             }
+                            if ui.button("Clear").clicked() {
+                                self.ped_clear();
+                            }
                             if ui.button("Delete event").clicked() {
                                 self.ped_delete();
+                            }
+                            if ui.button("Help").clicked() {
+                                self.show_help(Some("Primary events"));
                             }
                         });
                         ui.horizontal(|ui| {

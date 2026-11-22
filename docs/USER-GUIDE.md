@@ -42,6 +42,11 @@ the automation tools are described in the repository README and docs/mcp.md.
 - Edit > Primary events... opens the primary event editor. It lists the entries of the
   database, with id, probability or failure rate, type, dormant flag and description.
   Apply saves the form to the entry, Clear empties the form and Delete removes the entry.
+- The Primary event database window (File > Primary event database..., or the database icon on the toolbar)
+  works without a tree: the list of events is on the left and the form on the right, with the
+  type chosen among Basic, External, Undeveloped and the two Conditional kinds. Apply saves
+  the form to the entry, Clear empties the form without touching the database, Delete removes
+  the entry, and Help opens this page.
 - The editor also lists the other trees in the same folder that use the selected event,
   so you can see what a change will affect.
 
