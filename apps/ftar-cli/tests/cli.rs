@@ -206,3 +206,16 @@ fn draw_writes_png_svg_and_html() {
     assert!(!ok);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Regression: `ftar` with no arguments indexed `args[0]` and panicked.
+#[test]
+fn no_arguments_prints_usage_and_fails() {
+    let o = Command::new(env!("CARGO_BIN_EXE_ftar"))
+        .output()
+        .expect("run ftar");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(!o.status.success(), "{err}");
+    assert_eq!(o.status.code(), Some(1), "{err}");
+    assert!(!err.contains("panicked"), "{err}");
+    assert!(err.contains("usage: ftar <command>"), "{err}");
+}
