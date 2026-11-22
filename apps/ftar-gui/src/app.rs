@@ -76,6 +76,8 @@ impl Default for EventForm {
 pub struct App {
     /// The primary event editor window is shown.
     pub events_open: bool,
+    /// Report window (Report > View): the report kind and its text.
+    pub report_view: Option<(ReportKind, String)>,
     pub event_form: EventForm,
     pub doc: Option<Document>,
     pub history: History<Snapshot>,
@@ -138,6 +140,7 @@ impl Default for App {
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
             events_open: false,
+            report_view: None,
             event_form: EventForm::default(),
             zoom: 1.0,
             pan: Vec2::ZERO,
@@ -1034,8 +1037,54 @@ impl App {
                 self.cut_sets = c.or(self.cut_sets.take());
                 self.prob = p.or(self.prob.take());
                 self.mc = m.or(self.mc.take());
+                self.save_last_report(Self::kind_for_tab(self.tab));
             }
             Err(e) => self.error = Some(e.to_string()),
+        }
+    }
+
+    /// Path of the tree file, when it has been saved.
+    fn tree_path(&self) -> Option<&Path> {
+        self.doc.as_ref().and_then(|d| d.path.as_deref())
+    }
+
+    /// Write the report of the analysis just run next to the tree, like OpenFTA
+    /// (`.crp`, `.prp`, `.mrp`). Trees without a file have nowhere to put it.
+    fn save_last_report(&mut self, kind: ReportKind) {
+        let Some(tree) = self.tree_path().map(Path::to_path_buf) else {
+            return;
+        };
+        let res = self
+            .report_text(kind, &Self::now_text())
+            .and_then(|text| ftar_core::report_files::write(&tree, kind, &text));
+        if let Err(e) = res {
+            self.status = Some(format!("Could not save the report: {e}"));
+        }
+    }
+
+    /// Whether Report > View has a saved report of `kind` to show.
+    pub fn saved_report_exists(&self, kind: ReportKind) -> bool {
+        self.tree_path()
+            .is_some_and(|t| ftar_core::report_files::exists(t, kind))
+    }
+
+    /// Open the last saved report of `kind` in the report window without
+    /// running the analysis again.
+    pub fn view_saved_report(&mut self, kind: ReportKind) -> Result<(), String> {
+        let res = self
+            .tree_path()
+            .ok_or_else(|| "save the tree and run the analysis first".to_string())
+            .and_then(|t| ftar_core::report_files::read(t, kind));
+        match res {
+            Ok(text) => {
+                self.error = None;
+                self.report_view = Some((kind, text));
+                Ok(())
+            }
+            Err(e) => {
+                self.error = Some(e.clone());
+                Err(e)
+            }
         }
     }
 }

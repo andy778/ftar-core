@@ -1,0 +1,44 @@
+Monte Carlo Simulation
+======================
+
+Tree   : theatre.fta
+Time   : Sun Nov 22 17:17:39 2026
+
+Note: Only runs with at least one component failure are simulated
+
+Number of primary events  = 3
+Number of tests           = 20000
+Unit Time span used       = 1.000000
+
+Number of system failures = 405
+
+Probability of at least   = 9.674692E-02  ( exact )
+one component failure
+
+Probability of top event  = 1.959125E-03  ( +/- 9.734971E-05 )
+
+Rank   Failure mode         Failures  Estimated Probability         Importance
+
+  1    MAINS_FAIL           294       1.422180E-03 ( +/- 8.294321E-05 )  72.59%
+       RELAY_FAIL         
+  2    GEN_FAIL MAINS_FAIL  108       5.224334E-04 ( +/- 5.027118E-05 )  26.67%
+  3    GEN_FAIL MAINS_FAIL  3         1.451204E-05 ( +/- 8.378529E-06 )   0.74%
+       RELAY_FAIL         
+
+
+Compressed:
+
+Rank   Failure mode         Failures  Estimated Probability    Importance
+
+  1    GEN_FAIL MAINS_FAIL  111       5.369454E-04 ( +/- 5.096460E-05 )  27.41%
+  2    MAINS_FAIL           297       1.436692E-03 ( +/- 8.336531E-05 )  73.33%
+       RELAY_FAIL         
+
+
+Primary Event Analysis:
+
+ Event          Failure contrib.    Importance
+
+ GEN_FAIL       5.369454E-04            27.41%
+ MAINS_FAIL     1.973637E-03            100.74%
+ RELAY_FAIL     1.436692E-03            73.33%
