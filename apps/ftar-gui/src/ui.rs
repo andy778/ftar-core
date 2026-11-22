@@ -157,6 +157,16 @@ impl App {
                         self.delete_selected();
                     }
                 });
+                ui.menu_button("Help", |ui| {
+                    if ui.button("User guide").clicked() {
+                        ui.close();
+                        self.show_help(None);
+                    }
+                    if ui.button("About ftar").clicked() {
+                        ui.close();
+                        self.show_help(Some(crate::help::ABOUT));
+                    }
+                });
                 ui.separator();
                 if ui
                     .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
@@ -672,6 +682,7 @@ impl eframe::App for App {
 
         self.top_bar(ui);
         self.unsaved_prompt(&ctx);
+        self.help_window(&ctx);
 
         egui::Panel::right("analysis")
             .default_size(420.0)

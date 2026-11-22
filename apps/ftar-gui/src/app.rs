@@ -76,6 +76,8 @@ impl Default for EventForm {
 pub struct App {
     /// The primary event editor window is shown.
     pub events_open: bool,
+    /// Help window (user guide and about page).
+    pub help: crate::help::HelpState,
     pub event_form: EventForm,
     pub doc: Option<Document>,
     pub history: History<Snapshot>,
@@ -138,6 +140,7 @@ impl Default for App {
             report_kind: ReportKind::CutSets,
             buf: Buffers::default(),
             events_open: false,
+            help: crate::help::HelpState::default(),
             event_form: EventForm::default(),
             zoom: 1.0,
             pan: Vec2::ZERO,
