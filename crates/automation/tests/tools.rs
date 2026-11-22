@@ -787,3 +787,52 @@ fn event_usage_lists_other_trees_on_the_same_database() {
     assert_eq!(e.code, "invalid_args");
     let _ = std::fs::remove_dir_all(base);
 }
+
+#[test]
+fn copy_and_move_paste_branches() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "theatre.fta" }))
+        .unwrap();
+    // Top -> AND1 -> [Backup_Fail -> Or1 -> [RELAY_FAIL, GEN_FAIL], MAINS_FAIL]
+    let p = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "copy", "path": [0, 1], "new_parent": [0, 0, 0] }),
+        )
+        .unwrap();
+    assert_eq!(p["path"], json!([0, 0, 0, 2]));
+    // MAINS_FAIL now also under the OR gate: it alone fails the AND
+    assert_eq!(s.call("analysis_cutsets", &json!({})).unwrap()["count"], 1);
+    // the original is still there
+    assert_eq!(
+        s.call("tree_get", &json!({ "path": [0, 1] })).unwrap()["id"],
+        "MAINS_FAIL"
+    );
+    s.call("tree_undo", &json!({})).unwrap();
+    assert_eq!(s.call("analysis_cutsets", &json!({})).unwrap()["count"], 2);
+
+    // structural rules apply to copies: no gate directly under a gate
+    let before = s.call("tree_get", &json!({})).unwrap();
+    let e = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "copy", "path": [0, 0, 0], "new_parent": [0] }),
+        )
+        .unwrap_err();
+    assert_ne!(e.code, "unknown_tool");
+    assert_eq!(s.call("tree_get", &json!({})).unwrap(), before);
+    assert!(s
+        .call(
+            "tree_edit",
+            &json!({ "op": "copy", "path": [9], "new_parent": [0] })
+        )
+        .is_err());
+    // a copy at an explicit index
+    let p = s
+        .call(
+            "tree_edit",
+            &json!({ "op": "copy", "path": [0, 1], "new_parent": [0], "index": 0 }),
+        )
+        .unwrap();
+    assert_eq!(p["path"], json!([0, 0]));
+}

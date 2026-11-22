@@ -9,7 +9,7 @@ mod ui;
 
 use std::path::PathBuf;
 
-pub use app::{ctime_text, App, Pending, Tab};
+pub use app::{ctime_text, App, Clip, Pending, Tab};
 use eframe::egui;
 
 /// Start the desktop app, optionally opening `path`.
