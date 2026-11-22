@@ -14,7 +14,7 @@ ftar-core = { path = "../../crates/core" }
 ftar-render = { path = "../../crates/render" }
 eframe = "0.37"
 rfd = "0.18"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+jiff = "1"
 
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["eframe"] }
