@@ -337,3 +337,21 @@ mod page_setup {
         );
     }
 }
+
+#[test]
+fn report_page_holds_only_the_escaped_report_and_prints_on_load() {
+    use ftar_render::page::PageSetup;
+    use ftar_render::report_html;
+    let html = report_html(
+        "T <1> - Probability report",
+        "p < 1 & q",
+        true,
+        &PageSetup::default(),
+    );
+    assert!(html.contains("<title>T &lt;1&gt; - Probability report</title>"));
+    assert!(html.contains("<pre class=\"report\">p &lt; 1 &amp; q</pre>"));
+    assert!(html.contains("window.print()") && html.contains("@page"));
+    assert!(!html.contains("<svg"), "no drawing on a report page");
+    let quiet = report_html("T", "x", false, &PageSetup::default());
+    assert!(!quiet.contains("window.print()"));
+}

@@ -368,6 +368,19 @@ impl App {
                     }
                 });
                 ui.menu_button("Report", |ui| {
+                    ui.menu_button("Print", |ui| {
+                        for (k, label) in [
+                            (ReportKind::CutSets, "Qualitative Report"),
+                            (ReportKind::Probability, "Probability Report"),
+                            (ReportKind::MonteCarlo, "Monte Carlo Report"),
+                        ] {
+                            let on = self.saved_report_exists(k);
+                            if ui.add_enabled(on, egui::Button::new(label)).clicked() {
+                                ui.close();
+                                self.print_report_now(k);
+                            }
+                        }
+                    });
                     ui.menu_button("View", |ui| {
                         for (k, label) in [
                             (ReportKind::CutSets, "Qualitative Report"),
@@ -471,6 +484,15 @@ impl App {
             .save_file()
         {
             let _ = self.export_image(&p);
+        }
+    }
+
+    /// Report > Print: open the browser's print dialog for a saved report.
+    pub(crate) fn print_report_now(&mut self, kind: ReportKind) {
+        if let Ok(path) = self.prepare_report_print(kind) {
+            if let Err(e) = open_with_default_app(&path) {
+                self.error = Some(format!("could not open the print page: {e}"));
+            }
         }
     }
 

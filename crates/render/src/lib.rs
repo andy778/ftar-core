@@ -18,7 +18,7 @@ pub mod prefs;
 pub mod scene;
 pub mod svg;
 
-pub use html::{print_html, print_html_with, PrintOptions};
+pub use html::{print_html, print_html_with, report_html, PrintOptions};
 pub use page::{
     page_count, page_grid, print_pages, print_pages_with, Fit, Orientation, PageSetup, PageSize,
     MAX_PAGES,
