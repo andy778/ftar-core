@@ -4,7 +4,9 @@
 //! * `ui` draws it with egui; `layout` (from ftar-core) places the tree
 
 mod app;
+mod help;
 pub use ftar_core::layout;
+pub use help::HelpState;
 mod ui;
 
 use std::path::PathBuf;
