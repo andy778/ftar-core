@@ -406,26 +406,11 @@ impl App {
                     }
                 });
                 ui.separator();
-                if ui
-                    .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
-                    .clicked()
-                    || (undo && self.history.can_undo())
-                {
+                if undo && self.history.can_undo() {
                     self.undo();
                 }
-                if ui
-                    .add_enabled(self.history.can_redo(), egui::Button::new("Redo"))
-                    .clicked()
-                    || (redo && self.history.can_redo())
-                {
+                if redo && self.history.can_redo() {
                     self.redo();
-                }
-                ui.separator();
-                if ui.button("Fit").clicked() {
-                    self.fit_next = true;
-                }
-                if has_doc {
-                    ui.label(format!("{}%", self.zoom_percent()));
                 }
                 ui.label(self.title());
                 if has_doc {
@@ -515,7 +500,7 @@ impl App {
         }
     }
 
-    fn open_dialog(&mut self) {
+    pub(crate) fn open_dialog(&mut self) {
         if let Some(p) = rfd::FileDialog::new()
             .add_filter("OpenFTA tree", &["fta"])
             .pick_file()
@@ -524,7 +509,7 @@ impl App {
         }
     }
 
-    fn save_or_save_as(&mut self) {
+    pub(crate) fn save_or_save_as(&mut self) {
         if self.doc.as_ref().is_some_and(|d| d.path.is_some()) {
             let _ = self.save();
         } else {
@@ -1193,8 +1178,11 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
 
         self.top_bar(ui);
+        self.toolbar(ui);
         self.unsaved_prompt(&ctx);
         self.help_window(&ctx);
+
+        self.palette(ui);
 
         egui::Panel::right("analysis")
             .default_size(420.0)

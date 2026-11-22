@@ -191,7 +191,7 @@ fn arc(cx: f32, cy: f32, rx: f32, ry: f32, a0: f32, a1: f32) -> Vec<[f32; 2]> {
 
 /// The outline(s) of a symbol in layout units relative to its top centre:
 /// (points, closed, filled).
-fn outlines(kind: EventType) -> Vec<(Vec<[f32; 2]>, bool, bool)> {
+fn outlines(kind: EventType) -> Vec<Outline> {
     use EventType::*;
     let dome = || {
         // AND: half ellipse over a short rectangle
@@ -265,6 +265,17 @@ fn outlines(kind: EventType) -> Vec<(Vec<[f32; 2]>, bool, bool)> {
             true,
         )],
     }
+}
+
+/// One shape of a symbol: its points, whether it is closed and whether it is filled.
+pub type Outline = (Vec<[f32; 2]>, bool, bool);
+
+/// A symbol's outline as drawn in the tree, for palettes and icons: the shapes
+/// (points, closed, filled) in layout units from the symbol's top centre, and
+/// its size (width, depth).
+pub fn symbol_outline(kind: EventType) -> (Vec<Outline>, [f32; 2]) {
+    let s = symbol(kind);
+    (outlines(kind), [s.width, s.depth])
 }
 
 /// Split `text` into lines of at most `width` characters, at most `max_lines`
