@@ -500,6 +500,17 @@ impl App {
     /// Add a child of `kind` to the selected gate/intermediate event (the
     /// root when nothing is selected) and select it. New primary events get a
     /// database entry with probability 0.
+    /// Whether a new node can go under the selection (the top event when
+    /// nothing is selected): a tree is open and the target is a gate or an
+    /// intermediate event.
+    pub fn can_add_child(&self) -> bool {
+        let Some(doc) = &self.doc else {
+            return false;
+        };
+        let parent = self.selected.clone().unwrap_or_default();
+        edit::node_at(&doc.tree, &parent).is_some_and(|n| accepts_children(n.kind))
+    }
+
     pub fn add_child(&mut self, kind: EventType) {
         let parent = self.selected.clone().unwrap_or_default();
         let new_path = self.edit(|doc| {
