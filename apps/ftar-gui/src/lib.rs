@@ -6,6 +6,7 @@
 mod app;
 pub use ftar_core::layout;
 mod ui;
+mod view;
 
 use std::path::PathBuf;
 
