@@ -46,7 +46,7 @@ the automation tools are described in the repository README and docs/mcp.md.
   works without a tree: the Primary Events list is on the left and the form on the right (Id, Probability with Constant Failure Rate/Unit Time, Type, Dormant and Description, as in OpenPED), with the
   type chosen among Basic, External, Undeveloped and the two Conditional kinds. Apply saves
   the form to the entry, Clear empties the form without touching the database, Delete removes
-  the entry, and Help opens this page. The window has its own File, Edit and Help menus and an icon row (New, Open, Save, Print, Delete event, Copy to / from tree database, Link). Print writes the database as text on a page that opens the print dialog.
+  the entry, and Help opens this page. The database opens in its own window, which you can move next to the main one. It has its own File, Edit and Help menus and an icon row (New, Open, Save, Print, Delete event, Copy to / from tree database, Link). Print writes the database as text on a page that opens the print dialog.
 - The editor also lists the other trees in the same folder that use the selected event,
   so you can see what a change will affect.
 
