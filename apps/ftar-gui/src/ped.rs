@@ -587,6 +587,10 @@ impl App {
                             )
                             .labelled_by(l.id);
                             ui.checkbox(&mut self.ped.form.rate, "Constant Failure Rate/Unit Time");
+                            if let Some(h) = self.rate_hint(&self.ped.form.prob, self.ped.form.rate)
+                            {
+                                ui.weak(h);
+                            }
                         });
                     });
                 });

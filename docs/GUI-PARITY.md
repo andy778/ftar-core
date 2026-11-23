@@ -84,7 +84,7 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 |---|---|---|---|
 | Own window, File/Edit/Help menus | own window, same menus | same | `ped_window.rs` |
 | Toolbar: New, Open, Save, Print, cut/copy/paste, database | New, Open, Save, Print, Delete, copy to / from tree, Link | differs: events are copied between databases, not cut | `ped_window.rs` |
-| Primary Events list, Id, Probability, Constant Failure Rate/Unit Time, Type (5 radios), Dormant, Description | same labels and groups | same | `ped_window.rs` |
+| Primary Events list, Id, Probability, Constant Failure Rate/Unit Time, Type (5 radios), Dormant, Description | same labels and groups; a rate also shows the probability it gives at the unit time | same (extra hint) | `ped_window.rs`, `failure_rate.rs` |
 | Apply, Clear, Help | same | same | `ped_window.rs` |
 | Export text file | File > Export Text File... | same | `ped_window.rs` |
 

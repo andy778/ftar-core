@@ -74,7 +74,10 @@ enough that an estimate is not needed. The panel is always open, so it has no Ca
   cut sets, with the per-term bounds shown. Event importance is listed with the results.
 - Monte Carlo: a simulation with a number of trials, a random seed (the same seed gives the
   same result) and a method. It reports the estimate, its uncertainty and the failure modes seen.
-- Unit time is the time used to turn failure rates into probabilities.
+- Unit time is the time used to turn failure rates into probabilities: an event with
+  Constant Failure Rate/Unit Time set gets `1 - e^(-rate * unit time)`. At the default unit
+  time of 1 a small rate gives almost the same number, so set the unit time to your mission
+  time. Each failure-rate checkbox shows the probability the rate gives at the current unit time.
 - The report menu selects the text report. Export report... saves it as a `.txt` file,
   Copy report copies it to the clipboard, and Export failure modes (CSV)... saves the Monte
   Carlo failure modes as a spreadsheet-friendly file.

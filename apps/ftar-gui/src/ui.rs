@@ -837,6 +837,10 @@ impl App {
                         )
                         .labelled_by(l.id);
                         ui.checkbox(&mut self.event_form.rate, "Constant Failure Rate/Unit Time");
+                        if let Some(h) = self.rate_hint(&self.event_form.prob, self.event_form.rate)
+                        {
+                            ui.weak(h);
+                        }
                         ui.add_space(4.0);
                         ui.strong("Type");
                         for (k, label) in [
@@ -1078,6 +1082,9 @@ impl App {
                         .add(egui::TextEdit::singleline(&mut self.buf.desc).desired_width(240.0))
                         .labelled_by(l.id);
                     let rr = ui.checkbox(&mut self.buf.rate, "failure rate");
+                    if let Some(h) = self.rate_hint(&self.buf.prob, self.buf.rate) {
+                        ui.weak(h);
+                    }
                     if pr.lost_focus() || dr.lost_focus() || rr.changed() {
                         match self.buf.prob.trim().parse::<f64>() {
                             Ok(p) => {
