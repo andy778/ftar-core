@@ -87,8 +87,33 @@ enough that an estimate is not needed. The panel is always open, so it has no Ca
 
 ## Help menu
 
-- User guide opens this guide inside the app.
-- About ftar shows the version, the licence and where the code and the original OpenFTA come from.
+The Help menu has the same five pages as OpenFTA's, plus the two ftar had before:
+
+- Help on Help (this page) explains the help window: the list on the left picks a page, the text is on the right.
+- Index opens the overview, the first page, which lists what this guide covers.
+- User Support says where to ask for help and report problems.
+- History tells where ftar and OpenFTA come from.
+- Copyright gives the licence and attributions.
+- User guide opens this guide at the first page; About ftar shows the version and where the code lives.
+
+## User support
+
+Questions, problems and ideas go to the issue tracker at https://github.com/andy778/ftar-core/issues.
+Say which version you run (Help > About ftar), what you did, what you expected and what happened,
+and attach the `.fta` and `.ped` files if the problem depends on a tree.
+
+## History
+
+OpenFTA was written by FSC Limited and released in 2005 as free software: a Java window on a C
+analysis library. It has been unmaintained for years. ftar is a port to Rust that keeps OpenFTA's
+file formats, menus and analysis results, checked against a native build of OpenFTA's C core, and adds
+command-line and automation interfaces. The GUI parity list in docs/GUI-PARITY.md tracks what still differs.
+
+## Copyright
+
+ftar is free software, licensed under the GNU General Public Licence version 2 or later
+(GPL-2.0-or-later). OpenFTA is copyright FSC Limited 2005 and was released under the same licence.
+The full licence text is the LICENSE file in the installation or repository; NOTICE lists the attributions.
 
 ## Troubleshooting
 
