@@ -15,7 +15,9 @@ the automation tools are described in the repository README and docs/mcp.md.
 ## Looking at the tree
 
 - Click a node to select it. Its details appear in the panel at the bottom.
-- Scroll the mouse wheel to zoom, and drag on the canvas to pan.
+- Scroll the mouse wheel to zoom, and drag on the canvas to pan. The canvas fills the
+  whole drawing area in the background colour from Preferences. Scrollbars appear on
+  the right and bottom when the tree is larger than the window; drag them to scroll.
 - Fit (toolbar) scales the whole tree to the window. Panning or zooming by hand
   turns automatic fitting off until you press Fit again.
 - Gates (AND, OR, XOR, priority AND, inhibit) and events (basic, undeveloped, external,
@@ -43,10 +45,10 @@ the automation tools are described in the repository README and docs/mcp.md.
   database, with id, probability or failure rate, type, dormant flag and description.
   Apply saves the form to the entry, Clear empties the form and Delete removes the entry.
 - The Primary event database window (File > Primary event database..., or the database icon on the toolbar)
-  works without a tree: the list of events is on the left and the form on the right, with the
+  works without a tree: the Primary Events list is on the left and the form on the right (Id, Probability with Constant Failure Rate/Unit Time, Type, Dormant and Description, as in OpenPED), with the
   type chosen among Basic, External, Undeveloped and the two Conditional kinds. Apply saves
   the form to the entry, Clear empties the form without touching the database, Delete removes
-  the entry, and Help opens this page.
+  the entry, and Help opens this page. The database opens in its own window, which you can move next to the main one. It has its own File, Edit and Help menus and an icon row (New, Open, Save, Print, Delete event, Copy to / from tree database, Link). Print writes the database as text on a page that opens the print dialog.
 - The editor also lists the other trees in the same folder that use the selected event,
   so you can see what a change will affect.
 
