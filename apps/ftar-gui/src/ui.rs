@@ -310,6 +310,23 @@ impl App {
                         ui.close();
                         self.overview_open = true;
                     }
+                    ui.menu_button("Theme", |ui| {
+                        for (t, label) in [
+                            (ftar_render::Theme::System, "System"),
+                            (ftar_render::Theme::Light, "Light"),
+                            (ftar_render::Theme::Dark, "Dark"),
+                        ] {
+                            if ui
+                                .selectable_label(self.prefs.theme == t, label)
+                                .clicked()
+                            {
+                                ui.close();
+                                let mut p = self.prefs.clone();
+                                p.theme = t;
+                                self.set_prefs(p);
+                            }
+                        }
+                    });
                     ui.separator();
                     if ui
                         .add_enabled(
@@ -846,7 +863,7 @@ impl App {
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         egui::Panel::bottom("status").show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if let Some(e) = &self.error {
                     ui.colored_label(Color32::LIGHT_RED, e);
                 } else if let Some(s) = &self.status {
@@ -908,7 +925,7 @@ impl App {
             let Some(node) = self.selected_node().cloned() else {
                 ui.label("Click a node to edit it. Scroll to zoom, drag to pan.");
                 if self.doc.is_some() {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label("Nothing selected: new nodes go under the top event.");
                         self.add_controls(ui, true);
                     });
@@ -1176,6 +1193,11 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        ctx.set_theme(match self.prefs.theme {
+            ftar_render::Theme::Light => egui::ThemePreference::Light,
+            ftar_render::Theme::Dark => egui::ThemePreference::Dark,
+            ftar_render::Theme::System => egui::ThemePreference::System,
+        });
 
         self.top_bar(ui);
         self.toolbar(ui);

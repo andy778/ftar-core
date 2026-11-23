@@ -19,6 +19,7 @@ enum Icon {
     Paste,
     Delete,
     Link,
+    Database,
     Undo,
     Redo,
     ZoomIn,
@@ -106,6 +107,26 @@ fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
         Link => {
             circle(0.36, 0.5, 0.22);
             circle(0.64, 0.5, 0.22);
+        }
+        Database => {
+            // a cylinder: the primary event database
+            line(&[(0.25, 0.22), (0.25, 0.78)], false);
+            line(&[(0.75, 0.22), (0.75, 0.78)], false);
+            line(
+                &[
+                    (0.25, 0.22),
+                    (0.4, 0.12),
+                    (0.6, 0.12),
+                    (0.75, 0.22),
+                    (0.6, 0.32),
+                    (0.4, 0.32),
+                ],
+                true,
+            );
+            line(
+                &[(0.25, 0.78), (0.4, 0.88), (0.6, 0.88), (0.75, 0.78)],
+                false,
+            );
         }
         Undo | Redo => {
             let m = if icon == Undo { 1.0 } else { -1.0 };
@@ -220,6 +241,10 @@ impl App {
                     self.edit_link();
                 }
                 ui.separator();
+                if icon_button(ui, Icon::Database, "Primary event database", true) {
+                    self.ped.open = true;
+                }
+                ui.separator();
                 if icon_button(ui, Icon::Undo, "Undo", self.history.can_undo()) {
                     self.undo();
                 }
@@ -247,7 +272,7 @@ impl App {
     /// intermediate event (the top event when nothing is selected). The one
     /// added last stays highlighted.
     pub(crate) fn palette(&mut self, ui: &mut egui::Ui) {
-        let has_doc = self.doc.is_some();
+        let can_add = self.can_add_child();
         egui::Panel::left("palette")
             .resizable(false)
             .exact_size(44.0)
@@ -258,7 +283,7 @@ impl App {
                         ui.separator();
                     }
                     for &(kind, name) in *group {
-                        if self.palette_button(ui, kind, name, has_doc) {
+                        if self.palette_button(ui, kind, name, can_add) {
                             self.add_kind = kind;
                             self.add_child(kind);
                         }

@@ -156,12 +156,10 @@ fn palette_adds_the_clicked_symbol_to_the_selection() {
         EventType::Undeveloped,
         "shown as the current symbol"
     );
-    // a symbol the selection cannot take says why and changes nothing
+    // a selection that cannot take children disables the palette (#80)
     h.state_mut().select(Some(vec![0, 0, 0, 0])); // a basic event
     h.run();
-    h.get_by_label("Add AND gate").click();
-    h.run();
-    assert!(h.state().error.is_some());
+    assert!(disabled(&h, "Add AND gate"));
 }
 
 #[test]
@@ -190,4 +188,72 @@ fn palette_has_every_openfta_symbol_and_is_disabled_without_a_tree() {
     for n in names {
         assert!(!disabled(&h, &format!("Add {n}")), "{n}");
     }
+}
+
+// ------------------------------------------------ #80 palette, #81 database icon, #82 narrow
+
+#[test]
+fn palette_follows_what_can_take_a_child() {
+    let mut app = theatre();
+    assert!(app.can_add_child(), "nothing selected: the top event");
+    let leaf = ftar_core::edit::all_paths(&app.doc.as_ref().unwrap().tree)
+        .into_iter()
+        .find(|p| {
+            node_at(&app.doc.as_ref().unwrap().tree, p)
+                .is_some_and(|n| n.children.is_empty() && n.kind == EventType::Basic)
+        })
+        .unwrap();
+    app.select(Some(leaf));
+    assert!(!app.can_add_child(), "a basic event takes no children");
+    let mut h = harness_for(app);
+    h.run();
+    assert!(disabled(&h, "Add Basic event"));
+    h.state_mut().select(Some(vec![]));
+    h.run();
+    assert!(!disabled(&h, "Add Basic event"));
+    assert!(!App::default().can_add_child());
+}
+
+#[test]
+fn toolbar_database_icon_opens_the_database_window() {
+    let mut h = harness_for(App::default());
+    h.run();
+    assert!(
+        !disabled(&h, "Primary event database"),
+        "works without a tree"
+    );
+    h.get_all_by_label("Primary event database")
+        .next()
+        .unwrap()
+        .click();
+    h.run();
+    assert!(h.state().ped.open);
+}
+
+#[test]
+fn details_and_status_stay_inside_the_window_at_900_px() {
+    let mut app = theatre();
+    app.status = Some(
+        "Opened /home/andy/Development/ftar-core/crates/core/tests/data/theatre.fta and more text"
+            .into(),
+    );
+    let mut h = Harness::builder()
+        .with_size(vec2(900.0, 750.0))
+        .build_eframe(move |_| app);
+    h.run();
+    // the analysis panel starts at its first tab; nothing may run under it
+    let edge = h.get_by_label("Cut sets").rect().min.x;
+    let r = h
+        .get_by_label("Nothing selected: new nodes go under the top event.")
+        .rect();
+    assert!(
+        r.max.x <= edge,
+        "details row runs under the panel: {r:?} vs {edge}"
+    );
+    let r = h.get_by_label_contains("Opened /home").rect();
+    assert!(
+        r.max.x <= edge,
+        "status runs under the panel: {r:?} vs {edge}"
+    );
+    assert!(r.max.y <= 750.0);
 }

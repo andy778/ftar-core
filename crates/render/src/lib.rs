@@ -24,6 +24,6 @@ pub use page::{
     MAX_PAGES,
 };
 pub use png::{svg_to_png, svg_to_rgba, RenderError};
-pub use prefs::{Preferences, Symbol};
+pub use prefs::{Preferences, Symbol, Theme};
 pub use scene::{tree_scene, Scene, SceneOptions};
 pub use svg::{tree_svg, tree_svg_with, SvgOptions};

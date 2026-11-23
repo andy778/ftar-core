@@ -232,3 +232,45 @@ fn edit_menu_link_asks_when_types_differ_even_with_the_window_closed() {
     assert_eq!(h.state().selected_node().unwrap().id, "FRESH");
     assert!(h.state().ped.confirm_link.is_none());
 }
+
+// ------------------------------------------------ #87 radios, #88 Clear, #89 Help
+
+#[test]
+fn database_window_has_type_radios_clear_and_help() {
+    let mut app = App::default();
+    app.ped_new();
+    app.ped.open = true;
+    fill(&mut app, "PUMP", "1e-3", EventType::Basic);
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    for label in [
+        "Basic",
+        "External",
+        "Undeveloped",
+        "Conditional (not analysed)",
+        "Conditional (analysed)",
+    ] {
+        h.get_by_label(label);
+    }
+    h.get_by_label("Undeveloped").click();
+    h.run();
+    assert_eq!(h.state().ped.form.kind, EventType::Undeveloped);
+
+    h.get_by_label("Clear").click();
+    h.run();
+    assert!(h.state().ped.selected.is_none());
+    assert!(h.state().ped.form.id.is_empty());
+    assert_eq!(
+        h.state().ped.event_ids(),
+        vec!["PUMP"],
+        "database unchanged"
+    );
+
+    h.get_all_by_label("Help").last().unwrap().click(); // the menu bar has a Help too
+    h.run();
+    assert!(h.state().help.open);
+    let t = h.state().help.topic;
+    assert_eq!(h.state().help.topics[t].title, "Primary events");
+}
