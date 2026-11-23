@@ -17,9 +17,9 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 | Save | Ctrl+S | File > Save, Ctrl+S, toolbar | same | `headless.rs` |
 | Save As... | Ctrl+A | File > Save As..., Ctrl+A | same | Ctrl+A not tested (opens a file dialog) |
 | Export Image... | | File > Export image... | same: JPEG (also PNG and SVG) | `headless.rs` |
-| Printer Setup... | | File > Page setup and print preview... | differs: one window for the three OpenFTA entries (#78) | `print_preview.rs` |
-| Page Setup... | | (same window) | differs (#78) | `print_preview.rs` |
-| Print Preview... | | (same window) | differs (#78) | `print_preview.rs` |
+| Printer Setup... | | File > Page setup and print preview... | differs on purpose (#78): the browser's print dialog picks the printer | `print_preview.rs` |
+| Page Setup... | | (same window) | differs on purpose (#78): one window for page setup and preview | `print_preview.rs` |
+| Print Preview... | | (same window) | differs on purpose (#78): one window for page setup and preview | `print_preview.rs` |
 | Print... | Ctrl+P | File > Print..., Ctrl+P, toolbar | same | `print_preview.rs` |
 | Database | | File > Primary event database... | same (its own window, #94) | `ped_window.rs` |
 | Exit | Ctrl+Q | File > Quit, Ctrl+Q | differs: the name | `headless.rs` |
@@ -103,11 +103,9 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 Same behaviour for the editing, analysis, report and database commands, the shortcuts, the Help pages, JPEG
 export and the browser launch command (#101 to #105 are done). What is left:
 
-1. **Print dialogs (#78):** printer setup, page setup and print preview are one window in ftar, three entries in
-   OpenFTA. Undecided.
-2. **Omitted on purpose** (see the Analysis dialogs table): "use minimal cut sets on file", the estimated run time
+1. **Omitted on purpose** (see the Analysis dialogs table): "use minimal cut sets on file", the estimated run time
    and Cancel in the analysis panel.
-3. **Names:** File > Quit, where OpenFTA says Exit.
+2. **Names:** File > Quit, where OpenFTA says Exit.
 
-Items that stay different on purpose: the analysis tabs instead of dialogs, symbol editing in the details panel,
+Items that stay different on purpose: one window for page setup and print preview with no separate printer setup (#78: the browser's print dialog picks the printer), the analysis tabs instead of dialogs, symbol editing in the details panel,
 Redo, the theme choice, CSV export.

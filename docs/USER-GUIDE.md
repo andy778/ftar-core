@@ -84,6 +84,9 @@ enough that an estimate is not needed. The panel is always open, so it has no Ca
 - File > Export image... saves the tree as a JPEG (like OpenFTA), PNG or SVG drawing; the file name's ending picks the format. The file dialog asks before replacing an existing file.
 - File > Print... opens the tree in your browser's print dialog (Ctrl+P). The printout
   can include the selected report and the event probabilities; both are options in the File menu.
+- File > Page setup and print preview... sets the paper size, orientation, margins and scale and shows the pages.
+  OpenFTA has separate Printer Setup, Page Setup and Print Preview entries; ftar has no printer setup of its own
+  because the browser's print dialog, which opens when you print, is where you choose the printer.
 
 ## Preferences
 
