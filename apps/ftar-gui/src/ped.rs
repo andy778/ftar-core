@@ -182,7 +182,7 @@ impl App {
 
     fn ped_print_now(&mut self) {
         if let Ok(p) = self.ped_prepare_print() {
-            if let Err(e) = open_with_default_app(&p) {
+            if let Err(e) = open_with_default_app(&p, &self.prefs.browser) {
                 self.ped.error = Some(format!("could not open the print page: {e}"));
             }
         }

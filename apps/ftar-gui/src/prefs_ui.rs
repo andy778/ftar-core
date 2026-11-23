@@ -50,9 +50,33 @@ impl App {
                         }
                     });
                 });
+                ui.group(|ui| {
+                    ui.strong("Web Browser Launch Command");
+                    ui.horizontal(|ui| {
+                        let l = ui.label("command");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut p.browser)
+                                .hint_text("empty: the system's default")
+                                .desired_width(220.0),
+                        )
+                        .labelled_by(l.id);
+                        if ui.button("Browse...").clicked() {
+                            if let Some(f) = rfd::FileDialog::new().pick_file() {
+                                let name = f.to_string_lossy();
+                                p.browser = if name.contains(' ') {
+                                    format!("\"{name}\"")
+                                } else {
+                                    name.into_owned()
+                                };
+                            }
+                        }
+                    });
+                    ui.weak("Help and print pages open with this command; the page is added at the end.");
+                });
                 if ui.button("Reset to defaults").clicked() {
                     p = Preferences {
                         monochrome: p.monochrome,
+                        browser: p.browser.clone(),
                         ..Preferences::default()
                     };
                 }
