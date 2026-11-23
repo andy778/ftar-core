@@ -15,14 +15,14 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 | New | Ctrl+N | File > New, Ctrl+N, toolbar | same | `headless.rs` |
 | Open... | Ctrl+O | File > Open..., Ctrl+O, toolbar | same | `headless.rs` |
 | Save | Ctrl+S | File > Save, Ctrl+S, toolbar | same | `headless.rs` |
-| Save As... | Ctrl+A | File > Save As... | differs: no Ctrl+A | `headless.rs` |
-| Export Image... | | File > Export image... | differs: OpenFTA writes JPEG, ftar PNG or SVG | `headless.rs` |
+| Save As... | Ctrl+A | File > Save As..., Ctrl+A | same | Ctrl+A not tested (opens a file dialog) |
+| Export Image... | | File > Export image... | same: JPEG (also PNG and SVG) | `headless.rs` |
 | Printer Setup... | | File > Page setup and print preview... | differs: one window for the three OpenFTA entries (#78) | `print_preview.rs` |
 | Page Setup... | | (same window) | differs (#78) | `print_preview.rs` |
 | Print Preview... | | (same window) | differs (#78) | `print_preview.rs` |
 | Print... | Ctrl+P | File > Print..., Ctrl+P, toolbar | same | `print_preview.rs` |
 | Database | | File > Primary event database... | same (its own window, #94) | `ped_window.rs` |
-| Exit | Ctrl+Q | File > Quit | differs: name, no Ctrl+Q | |
+| Exit | Ctrl+Q | File > Quit, Ctrl+Q | differs: the name | `headless.rs` |
 | | | Export report..., failure-mode CSV | extra | `headless.rs` |
 
 ## Edit menu
@@ -31,8 +31,8 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 |---|---|---|---|---|
 | Undo | Ctrl+Z | Edit > Undo, Ctrl+Z, toolbar | same | `headless.rs` |
 | Cut / Copy / Paste | Ctrl+X/C/V | Edit menu, shortcuts, toolbar | same | `headless.rs` |
-| Delete | Ctrl+D | Edit > Delete selected, Delete key, toolbar | differs: Delete key, not Ctrl+D | `toolbar.rs` |
-| Shift Left / Right | Ctrl+L / Ctrl+R | Edit menu, details panel | differs: no shortcuts | `selected_shift.rs` |
+| Delete | Ctrl+D | Edit > Delete selected, Ctrl+D, Delete key, toolbar | same | `headless.rs`, `toolbar.rs` |
+| Shift Left / Right | Ctrl+L / Ctrl+R | Edit menu, Ctrl+L / Ctrl+R, details panel | same | `headless.rs`, `selected_shift.rs` |
 | Link | Ctrl+I | Edit > Link, Ctrl+I, toolbar | same | `ped_window.rs` |
 | Selected... | | Edit > Selected..., double-click | same | `selected_shift.rs` |
 | Preferences... | | Edit > Preferences... | same | `preferences.rs` |
@@ -51,7 +51,7 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 | Analysis > Monte Carlo Simulation... (dialog) | Monte Carlo tab | differs: panel | `headless.rs` |
 | Report > View > Qualitative / Probability / Monte Carlo | same menu | same | `report_view.rs` |
 | Report > Print > the three reports | same menu | same | `report_view.rs` |
-| Help > Help on Help, Index, User Support, History, Copyright | Help > User guide, About ftar | differs: different pages | `help.rs` |
+| Help > Help on Help, Index, User Support, History, Copyright | Help > the same five pages, then User guide, About ftar | same (pages written for ftar) | `help.rs` |
 | | View > Theme | extra | `headless.rs` |
 
 ## Analysis dialogs
@@ -59,13 +59,13 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 | OpenFTA control | ftar | Status |
 |---|---|---|
 | Cut sets: "Generate all" / "Limit order" | max order (0 = all) | same |
-| Cut sets: "Use minimal cut sets on file" | none | missing |
-| Cut sets: "There are n basic events in the tree" | none | missing |
+| Cut sets: "Use minimal cut sets on file" | none: every run uses the current tree | omitted on purpose |
+| Cut sets: "There are n basic events in the tree" | same text on every analysis tab | same |
 | Probability: number of terms, unit time, limit order | terms, unit time, max order | same |
-| Probability: "Use minimal cut sets on file" | none | missing |
-| Probability / Monte Carlo: "Estimated run time" | none | missing |
+| Probability: "Use minimal cut sets on file" | none: every run uses the current tree | omitted on purpose |
+| Probability / Monte Carlo: "Estimated run time" | none: OpenFTA's comes from a benchmark of its own engine | omitted on purpose |
 | Monte Carlo: number of simulations, unit time | trials, unit time (plus seed, method) | same (extra seed) |
-| OK, Cancel, Help in each dialog | Run, no Cancel or Help | differs |
+| OK, Cancel, Help in each dialog | Run, Analysis help; no Cancel (the panel is not modal) | differs |
 
 ## Symbol dialogs and canvas
 
@@ -96,19 +96,18 @@ The analysis results themselves are proven equal in [VERIFICATION.md](VERIFICATI
 | Symbol colours (Edit...) | per-symbol colours | same | `preferences.rs` |
 | View: Colour / Monochrome | monochrome switch | same | `preferences.rs` |
 | Defaults | Reset to defaults | same | `preferences.rs` |
-| Web Browser Launch Command | none (ftar opens the system default) | missing | |
+| Web Browser Launch Command | same field with Browse...; empty = system default | same | `preferences.rs` |
 
 ## What the matrix shows
 
-Same behaviour for the core editing, analysis, report and database commands. The remaining gaps are:
+Same behaviour for the editing, analysis, report and database commands, the shortcuts, the Help pages, JPEG
+export and the browser launch command (#101 to #105 are done). What is left:
 
-1. **Shortcuts (#101):** Ctrl+A (Save As), Ctrl+D (Delete), Ctrl+L / Ctrl+R (Shift Left/Right), Ctrl+Q (Exit).
-2. **Analysis dialogs (#102):** "Use minimal cut sets on file", the basic-event count, the estimated run time, and
-   Cancel/Help.
-3. **Export Image format (#103):** OpenFTA writes JPEG, ftar PNG and SVG.
-4. **Help pages (#104):** OpenFTA has five pages (Help on Help, Index, User Support, History, Copyright).
-5. **Web browser launch command (#105)** in Preferences.
-6. **#78:** printer setup, page setup and print preview as three entries.
+1. **Print dialogs (#78):** printer setup, page setup and print preview are one window in ftar, three entries in
+   OpenFTA. Undecided.
+2. **Omitted on purpose** (see the Analysis dialogs table): "use minimal cut sets on file", the estimated run time
+   and Cancel in the analysis panel.
+3. **Names:** File > Quit, where OpenFTA says Exit.
 
 Items that stay different on purpose: the analysis tabs instead of dialogs, symbol editing in the details panel,
 Redo, the theme choice, CSV export.
