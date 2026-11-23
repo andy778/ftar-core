@@ -1412,11 +1412,7 @@ impl eframe::App for App {
                         if let Some(cs) = &self.cut_sets {
                             ui.label(format!("{} minimal cut sets", cs.len()));
                             for (i, s) in cs.iter().enumerate() {
-                                ui.monospace(format!(
-                                    "{:>4}  {}",
-                                    i + 1,
-                                    s.iter().cloned().collect::<Vec<_>>().join(" ")
-                                ));
+                                ui.monospace(format!("{:>4}  {}", i + 1, s.join(" ")));
                             }
                         }
                     }
@@ -1427,7 +1423,7 @@ impl eframe::App for App {
                                 ui.monospace(format!(
                                     "{:>3} {:<28} {:.3E}",
                                     i + 1,
-                                    cs.iter().cloned().collect::<Vec<_>>().join(" "),
+                                    cs.join(" "),
                                     p
                                 ));
                             }
@@ -1479,7 +1475,7 @@ impl eframe::App for App {
                                     "{:>8}  {:.3E}  {}",
                                     n,
                                     r.bas_prob * *n as f64 / r.trials.max(1) as f64,
-                                    cs.iter().cloned().collect::<Vec<_>>().join(" ")
+                                    cs.join(" ")
                                 ));
                             }
                             if r.modes.len() > 40 {

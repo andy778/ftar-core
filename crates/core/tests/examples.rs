@@ -24,7 +24,7 @@ fn theatre_note_and_cut_sets() {
     // TOP = MAINS_FAIL-ish AND ...; every cut set must reference known events
     assert!(!cs.is_empty());
     for s in &cs {
-        for id in s {
+        for id in s.iter() {
             assert!(p.events.contains_key(id), "unknown event {id}");
         }
     }
@@ -65,7 +65,7 @@ fn transfer_in_trees_are_inlined() {
     let cs = minimal_cut_sets(&p.tree).unwrap();
     let names: Vec<_> = cs
         .iter()
-        .map(|s| s.iter().cloned().collect::<Vec<_>>())
+        .map(|s| s.iter().map(str::to_string).collect::<Vec<_>>())
         .collect();
     assert_eq!(names, vec![vec!["a".to_string()], vec!["b".to_string()]]);
     let r = probability_report(&p.tree, &p.db, &ProbabilityOptions::default()).unwrap();

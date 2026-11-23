@@ -128,15 +128,7 @@ fn compress_absorbs_supersets() {
     fs.record_n(&set(&["b", "c"]), 2);
     fs.record_n(&set(&["a", "b", "c"]), 1);
     let c = fs.compress();
-    let got: Vec<_> = c
-        .iter()
-        .map(|m| {
-            (
-                m.events.iter().cloned().collect::<Vec<_>>().join(""),
-                m.count,
-            )
-        })
-        .collect();
+    let got: Vec<_> = c.iter().map(|m| (m.events.join(""), m.count)).collect();
     // {a} absorbs {a,b} (+3) and {a,b,c} (+1); {b,c} absorbs {a,b,c} (+1)
     assert_eq!(got, vec![("a".to_string(), 9), ("bc".to_string(), 3)]);
 }

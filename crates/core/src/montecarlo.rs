@@ -125,7 +125,7 @@ pub fn simulate(
         .iter()
         .map(|s| {
             s.iter()
-                .filter_map(|id| ids.iter().position(|x| x == id))
+                .filter_map(|id| ids.iter().position(|x| x.as_str() == id))
                 .collect()
         })
         .collect();
