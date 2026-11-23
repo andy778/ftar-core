@@ -1465,6 +1465,18 @@ impl eframe::App for App {
                 }
             }
 
+            // The drawing goes under the scrollbars, so it is painted first.
+            let origin = rect.min + self.pan;
+            let z = self.zoom;
+            paint_scene(
+                &ui.painter_at(rect),
+                &scene,
+                origin,
+                z,
+                self.selected.as_deref(),
+                &self.prefs,
+            );
+
             // Scrollbars: an invisible scroll area sized to the drawing plus a margin
             // carries them; the pan is mirrored to its offset and back.
             let content = Vec2::new(scene.width, scene.height) * self.zoom;
@@ -1483,6 +1495,7 @@ impl eframe::App for App {
                 .show(&mut child, |ui| {
                     ui.allocate_exact_size(extent, Sense::hover());
                 });
+            let pan_before = self.pan;
             let got = out.state.clamped_offset();
             if (got.x - want.x).abs() > 0.5 && extent.x > rect.width() {
                 self.pan.x = SCROLL_MARGIN - got.x;
@@ -1493,16 +1506,9 @@ impl eframe::App for App {
                 self.auto_fit = false;
             }
 
-            let origin = rect.min + self.pan;
-            let z = self.zoom;
-            paint_scene(
-                &ui.painter_at(rect),
-                &scene,
-                origin,
-                z,
-                self.selected.as_deref(),
-                &self.prefs,
-            );
+            if self.pan != pan_before {
+                ctx.request_repaint();
+            }
 
             if resp.clicked() {
                 let hit = resp.interact_pointer_pos().and_then(|pos| {
