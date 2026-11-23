@@ -31,6 +31,7 @@ the automation tools are described in the repository README and docs/mcp.md.
 - Change a node's type, id, description or probability in the details panel.
 - The icon toolbar has New, Open, Save, Print, Cut, Copy, Paste, Delete, Link, Primary event database, Undo, Redo, Zoom In, Zoom Out and Fit. The symbol palette on the left adds the clicked symbol to the selected gate or intermediate event (the top event when nothing is selected); it is greyed out when the selection cannot take children.
 - View > Theme chooses System, Light or Dark for the window (Light by default, like OpenFTA); the choice is saved with the preferences.
+- Shortcuts as in OpenFTA: Ctrl+N New, Ctrl+O Open, Ctrl+S Save, Ctrl+A Save As, Ctrl+P Print, Ctrl+Q Quit, Ctrl+Z Undo, Ctrl+X/C/V Cut/Copy/Paste, Ctrl+D Delete, Ctrl+L / Ctrl+R Shift Left/Right, Ctrl+I Link (Ctrl+Y is Redo, an ftar extra). They are shown in the menus and do not fire while you type in a text field.
 - Edit > Shift Left / Shift Right (or the Shift left / Shift right buttons) move a node one place among its siblings; conditions and transfer-out symbols stay in place. Edit > Selected... (or a double-click) edits the selected symbol: primary events open in the Primary events editor, anything else puts the cursor in the id field.
 - Delete (the Delete key, the details panel or Edit > Delete selected) removes the
   selected node and its subtree.
@@ -60,7 +61,12 @@ the automation tools are described in the repository README and docs/mcp.md.
 
 ## Analysis
 
-The panel on the right runs analyses on the current tree. Press Run to start one.
+The panel on the right runs analyses on the current tree. Press Run to start one. The panel shows how many
+basic events the tree has, and its Analysis help button opens this page.
+
+Unlike OpenFTA's analysis dialogs there is no "use minimal cut sets on file" option and no run-time estimate:
+every run uses the current tree (so it cannot read out-of-date cut sets from an old file), and runs are quick
+enough that an estimate is not needed. The panel is always open, so it has no Cancel button.
 
 - Cut sets: the minimal cut sets of the top event. Max order limits the size of the sets
   shown (0 means no limit). Terms sets how many terms the exact calculation keeps.
@@ -75,14 +81,39 @@ The panel on the right runs analyses on the current tree. Press Run to start one
 
 ## Pictures and printing
 
-- File > Export image... saves the tree as a PNG or SVG drawing.
+- File > Export image... saves the tree as a JPEG (like OpenFTA), PNG or SVG drawing; the file name's ending picks the format. The file dialog asks before replacing an existing file.
 - File > Print... opens the tree in your browser's print dialog (Ctrl+P). The printout
   can include the selected report and the event probabilities; both are options in the File menu.
 
 ## Help menu
 
-- User guide opens this guide inside the app.
-- About ftar shows the version, the licence and where the code and the original OpenFTA come from.
+The Help menu has the same five pages as OpenFTA's, plus the two ftar had before:
+
+- Help on Help (this page) explains the help window: the list on the left picks a page, the text is on the right.
+- Index opens the overview, the first page, which lists what this guide covers.
+- User Support says where to ask for help and report problems.
+- History tells where ftar and OpenFTA come from.
+- Copyright gives the licence and attributions.
+- User guide opens this guide at the first page; About ftar shows the version and where the code lives.
+
+## User support
+
+Questions, problems and ideas go to the issue tracker at https://github.com/andy778/ftar-core/issues.
+Say which version you run (Help > About ftar), what you did, what you expected and what happened,
+and attach the `.fta` and `.ped` files if the problem depends on a tree.
+
+## History
+
+OpenFTA was written by FSC Limited and released in 2005 as free software: a Java window on a C
+analysis library. It has been unmaintained for years. ftar is a port to Rust that keeps OpenFTA's
+file formats, menus and analysis results, checked against a native build of OpenFTA's C core, and adds
+command-line and automation interfaces. The GUI parity list in docs/GUI-PARITY.md tracks what still differs.
+
+## Copyright
+
+ftar is free software, licensed under the GNU General Public Licence version 2 or later
+(GPL-2.0-or-later). OpenFTA is copyright FSC Limited 2005 and was released under the same licence.
+The full licence text is the LICENSE file in the installation or repository; NOTICE lists the attributions.
 
 ## Troubleshooting
 

@@ -522,7 +522,7 @@ fn file_menu_new_and_quit_with_the_unsaved_prompt() {
     h.run();
     h.get_by_label("File").click();
     h.run();
-    h.get_by_label("Quit").click();
+    h.get_by_label_contains("Quit").click(); // the label carries its shortcut
     h.run();
     assert_eq!(
         h.state().pending,
@@ -534,7 +534,7 @@ fn file_menu_new_and_quit_with_the_unsaved_prompt() {
     h.run();
     h.get_by_label("File").click();
     h.run();
-    h.get_all_by_label("New").last().unwrap().click(); // the menu item, after the toolbar button
+    h.query_all_by_label_contains("New").last().unwrap().click(); // the menu item, after the toolbar button
     h.run();
     assert_eq!(h.state().pending, Some(Pending::New));
 }
@@ -562,7 +562,7 @@ fn file_menu_save_and_exports_are_disabled_when_there_is_nothing_to_save() {
     h.run();
     // "Export report..." exists both in the menu and in the analysis panel: all instances
     for item in ["Save", "Save As...", "Export report..."] {
-        let all: Vec<_> = h.get_all_by_label(item).collect();
+        let all: Vec<_> = h.query_all_by_label_contains(item).collect(); // labels carry their shortcut
         assert!(!all.is_empty(), "{item} missing");
         for n in all {
             assert!(
@@ -748,7 +748,7 @@ fn image_export_reports_errors() {
     assert!(app.export_image(std::path::Path::new("x.png")).is_err());
     app.open(data("theatre.fta"));
     assert!(app.export_image(std::path::Path::new("x.bmp")).is_err());
-    assert!(app.error.as_deref().unwrap().contains(".png or .svg"));
+    assert!(app.error.as_deref().unwrap().contains(".png, .jpg or .svg"));
     app.image_scale = 0.0;
     assert!(app
         .export_image(&std::env::temp_dir().join("ftar_zero_scale.png"))
@@ -1321,4 +1321,80 @@ fn view_theme_menu_switches_and_saves_the_theme() {
     assert!(h.ctx.global_style().visuals.dark_mode);
     assert_eq!(ftar_render::Preferences::load(&file).theme, Theme::Dark);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ------------------------------------------------ #101 OpenFTA's shortcuts
+
+#[test]
+fn openftas_shortcuts_act_on_the_tree() {
+    use eframe::egui::{Key, Modifiers};
+    let mut app = App::default();
+    app.open(PathBuf::from(DATA).join("lift.fta"));
+    let before = app.doc.as_ref().unwrap().db.events.len();
+    let leaf = ftar_core::edit::all_paths(&app.doc.as_ref().unwrap().tree)
+        .into_iter()
+        .rfind(|p| !p.is_empty())
+        .unwrap();
+    app.select(Some(leaf));
+    let nodes = |a: &App| ftar_core::edit::all_paths(&a.doc.as_ref().unwrap().tree).len();
+    let n0 = nodes(&app);
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    // Ctrl+D deletes the selected node (like OpenFTA, not only the Delete key)
+    h.key_press_modifiers(Modifiers::COMMAND, Key::D);
+    h.run();
+    assert_eq!(nodes(h.state()), n0 - 1, "Ctrl+D deletes");
+    h.state_mut().undo();
+    // Ctrl+L / Ctrl+R move the node; the selection follows it
+    let sel0 = h.state().selected.clone();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::L);
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    h.run();
+    assert_eq!(h.state().selected, sel0, "left then right is where it was");
+    // Ctrl+Q asks to quit; a clean document quits at once
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Q);
+    h.run();
+    assert!(h.state().quit || h.state().pending.is_some());
+    let _ = before;
+}
+
+// ------------------------------------------------ #102 analysis panel facts and help
+
+#[test]
+fn analysis_panel_shows_the_basic_event_count_and_opens_help() {
+    let mut app = App::default();
+    assert_eq!(app.basic_event_count(), 0);
+    app.open(PathBuf::from(DATA).join("theatre.fta"));
+    // theatre: MAINS_FAIL, RELAY_FAIL and GEN_FAIL
+    assert_eq!(app.basic_event_count(), 3);
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_by_label("There are 3 basic events in the tree");
+    h.get_by_label("Analysis help").click();
+    h.run();
+    assert!(h.state().help.open);
+    let t = h.state().help.topic;
+    assert_eq!(h.state().help.topics[t].title, "Analysis");
+}
+
+#[test]
+fn export_jpeg_like_openftas_export_image() {
+    let dir = scratch("jpeg");
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.image_scale = 1.0;
+    for name in ["t.jpg", "t.JPEG"] {
+        let p = dir.join(name);
+        app.export_image(&p).unwrap();
+        let b = std::fs::read(&p).unwrap();
+        assert_eq!(&b[..2], &[0xff, 0xd8], "JPEG start marker");
+        assert_eq!(&b[b.len() - 2..], &[0xff, 0xd9], "JPEG end marker");
+        assert!(b.len() > 1000, "the drawing is in it");
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }

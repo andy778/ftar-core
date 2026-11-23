@@ -128,8 +128,8 @@ fn edit_menu_has_shift_and_selected_and_double_click_edits() {
     h.run();
     h.get_by_label("Edit").click();
     h.run();
-    h.get_by_label("Shift Left");
-    h.get_by_label("Shift Right");
+    h.get_by_label_contains("Shift Left");
+    h.get_by_label_contains("Shift Right");
     h.get_by_label("Selected...").click();
     h.run();
     assert!(

@@ -70,3 +70,30 @@ fn help_is_available_without_a_tree_and_help_menu_is_always_enabled() {
     assert!(!h.get_by_label("User guide").accesskit_node().is_disabled());
     assert!(!h.get_by_label("About ftar").accesskit_node().is_disabled());
 }
+
+// ------------------------------------------------ #104 OpenFTA's five Help pages
+
+#[test]
+fn help_menu_has_openftas_five_pages_that_open_their_guide_sections() {
+    use eframe::egui::vec2;
+    use egui_kittest::{kittest::Queryable, Harness};
+    for (label, topic) in [
+        ("Help on Help", "Help menu"),
+        ("Index", "Overview"),
+        ("User Support", "User support"),
+        ("History", "History"),
+        ("Copyright", "Copyright"),
+    ] {
+        let mut h = Harness::builder()
+            .with_size(vec2(1280.0, 800.0))
+            .build_eframe(|_| ftar_gui::App::default());
+        h.run();
+        h.get_by_label("Help").click();
+        h.run();
+        h.get_by_label(label).click();
+        h.run();
+        let s = h.state();
+        assert!(s.help.open, "{label}");
+        assert_eq!(s.help.topics[s.help.topic].title, topic, "{label}");
+    }
+}
