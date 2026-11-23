@@ -181,8 +181,14 @@ impl PrimaryEventDb {
     /// failure rate and give `1 - e^(-rate * t)` (as OpenFTA does).
     pub fn effective_probability(&self, id: &str, unit_time: f64) -> Option<f64> {
         self.events.get(id).map(|e| match e.lambda {
-            Some('L') => 1.0 - (-e.probability * unit_time).exp(),
+            Some('L') => rate_probability(e.probability, unit_time),
             _ => e.probability,
         })
     }
+}
+
+/// Probability of at least one failure within `unit_time` for a constant
+/// failure `rate`: `1 - e^(-rate * t)` (as OpenFTA does).
+pub fn rate_probability(rate: f64, unit_time: f64) -> f64 {
+    1.0 - (-rate * unit_time).exp()
 }

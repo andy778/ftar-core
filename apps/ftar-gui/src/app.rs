@@ -739,6 +739,23 @@ impl App {
         ids
     }
 
+    /// The probability analysis gives a failure rate typed as `text`, at the
+    /// unit time set on the Probability and Monte Carlo tabs. Shown by each
+    /// "failure rate" checkbox; `None` unless `rate` is set and `text` is a
+    /// rate (a number >= 0).
+    pub fn rate_hint(&self, text: &str, rate: bool) -> Option<String> {
+        let r = text.trim().parse::<f64>().ok()?;
+        if !rate || !r.is_finite() || r < 0.0 {
+            return None;
+        }
+        let p = ftar_core::model::rate_probability(r, self.unit_time);
+        Some(format!(
+            "probability {} at unit time {}",
+            ftar_render::scene::format_g(p),
+            ftar_render::scene::format_g(self.unit_time)
+        ))
+    }
+
     /// Fill the editor form from database event `id`.
     pub fn event_form_load(&mut self, id: &str) {
         let Some(e) = self.doc.as_ref().and_then(|d| d.db.events.get(id)).cloned() else {
