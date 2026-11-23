@@ -31,6 +31,8 @@ allow = [
     "Unicode-3.0",
     "BSL-1.0",
     "OFL-1.1",
+    # jpeg-encoder (JPEG export, #103): permissive libjpeg-style licence, free software and GPL-compatible
+    "IJG",
     "Ubuntu-font-1.0",
 ]
 
