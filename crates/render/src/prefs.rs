@@ -152,6 +152,10 @@ impl Theme {
 pub struct Preferences {
     /// GUI window theme (not used by image export or print).
     pub theme: Theme,
+    /// Command that opens help and print pages, like OpenFTA's "Web Browser
+    /// Launch Command"; the page is added as the last argument. Empty: the
+    /// system's default application.
+    pub browser: String,
     /// Draw in black on white (fills white) regardless of the colours below.
     pub monochrome: bool,
     pub pen: Rgb,
@@ -169,6 +173,7 @@ impl Default for Preferences {
         }
         Self {
             theme: Theme::default(),
+            browser: String::new(),
             monochrome: false,
             pen: [0, 0, 0],
             background: [0xff, 0xff, 0xff],
@@ -230,6 +235,11 @@ impl Preferences {
     pub fn to_text(&self) -> String {
         let mut s = String::from("# ftar drawing preferences\n");
         s.push_str(&format!("theme = {}\n", self.theme.key()));
+        // one line: a newline in the command would corrupt the file
+        s.push_str(&format!(
+            "browser = {}\n",
+            self.browser.replace(['\n', '\r'], " ")
+        ));
         s.push_str(&format!("monochrome = {}\n", self.monochrome));
         s.push_str(&format!("pen = {}\n", hex(self.pen)));
         s.push_str(&format!("background = {}\n", hex(self.background)));
@@ -257,6 +267,7 @@ impl Preferences {
             };
             let (k, v) = (k.trim(), v.trim());
             match k {
+                "browser" => p.browser = v.to_string(),
                 "theme" => {
                     if let Some(t) = Theme::ALL.into_iter().find(|t| t.key() == v) {
                         p.theme = t;

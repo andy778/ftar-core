@@ -94,3 +94,59 @@ fn preferences_window_opens_and_switches_to_monochrome() {
     assert!(h.state().prefs.monochrome);
     assert!(h.get_all_by_label("Basic event").count() >= 1);
 }
+
+// ------------------------------------------------ #105 web browser launch command
+
+#[test]
+fn browser_command_is_split_without_a_shell_and_gets_the_page_last() {
+    use ftar_gui::browser_command;
+    use std::path::Path;
+    let page = Path::new("/tmp/a b/page.html");
+    assert_eq!(browser_command("", page), None);
+    assert_eq!(browser_command("   ", page), None);
+    let (prog, args) = browser_command("firefox", page).unwrap();
+    assert_eq!(prog, "firefox");
+    assert_eq!(args, vec!["/tmp/a b/page.html"]);
+    let (prog, args) = browser_command("\"/opt/my browser/run\" --new-window  -p x", page).unwrap();
+    assert_eq!(prog, "/opt/my browser/run");
+    assert_eq!(args, vec!["--new-window", "-p", "x", "/tmp/a b/page.html"]);
+    // shell characters are just text: nothing is interpreted
+    let (prog, args) = browser_command("echo ; rm -rf ~", page).unwrap();
+    assert_eq!(prog, "echo");
+    assert_eq!(args[0], ";");
+}
+
+#[test]
+fn browser_command_is_saved_with_the_preferences() {
+    use ftar_render::Preferences;
+    let p = Preferences {
+        browser: "firefox --private-window".into(),
+        ..Preferences::default()
+    };
+    assert_eq!(Preferences::from_text(&p.to_text()).browser, p.browser);
+    assert_eq!(Preferences::default().browser, "");
+    // a newline cannot split the setting into two lines
+    let p = Preferences {
+        browser: "a\nfocus = x".into(),
+        ..Preferences::default()
+    };
+    assert_eq!(Preferences::from_text(&p.to_text()).browser, "a focus = x");
+}
+
+#[test]
+fn preferences_window_has_the_browser_command_field() {
+    let mut app = App::default();
+    app.prefs_open = true;
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_by_label("Web Browser Launch Command");
+    h.get_by_label("Browse...");
+    h.get_by_label("command").click();
+    h.run();
+    h.get_by_label("command").type_text("firefox");
+    h.run();
+    h.run();
+    assert_eq!(h.state().prefs.browser, "firefox");
+}
