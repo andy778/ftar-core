@@ -1472,9 +1472,12 @@ impl eframe::App for App {
             self.scroll_extent = extent;
             let want = scroll_offset_for(self.pan, rect.size(), extent);
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+            // Permanent (solid) scrollbars, as OpenFTA shows, only on an axis that overflows.
+            child.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
             let out = egui::ScrollArea::both()
                 .id_salt("canvas_scroll")
                 .auto_shrink(false)
+                .scroll([extent.x > rect.width(), extent.y > rect.height()])
                 .scroll_source(egui::containers::scroll_area::ScrollSource::SCROLL_BAR)
                 .scroll_offset(want)
                 .show(&mut child, |ui| {
