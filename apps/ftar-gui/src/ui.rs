@@ -94,6 +94,36 @@ impl App {
                 c
             })
         };
+        // OpenFTA's other shortcuts; a focused text field keeps Ctrl+A and the rest for itself.
+        let (save_as, delete_key, shift_left, shift_right) = if ctx.egui_wants_keyboard_input() {
+            (false, false, false, false)
+        } else {
+            ctx.input_mut(|i| {
+                (
+                    i.consume_key(Modifiers::COMMAND, Key::A),
+                    i.consume_key(Modifiers::COMMAND, Key::D),
+                    i.consume_key(Modifiers::COMMAND, Key::L),
+                    i.consume_key(Modifiers::COMMAND, Key::R),
+                )
+            })
+        };
+        let quit_key = ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Q));
+        let can_shift_now = self.selected.as_ref().is_some_and(|p| !p.is_empty());
+        if save_as && self.doc.is_some() {
+            self.save_as_dialog();
+        }
+        if delete_key && can_shift_now {
+            self.delete_selected();
+        }
+        if shift_left && can_shift_now {
+            self.move_selected(-1);
+        }
+        if shift_right && can_shift_now {
+            self.move_selected(1);
+        }
+        if quit_key {
+            self.request_quit();
+        }
         if cut {
             self.cut_selected();
         } else if copy {
@@ -114,22 +144,40 @@ impl App {
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 let has_doc = self.doc.is_some();
+                let shortcut = |k| {
+                    ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+                };
                 ui.menu_button("File", |ui| {
-                    if ui.button("New").clicked() {
+                    if ui
+                        .add(egui::Button::new("New").shortcut_text(shortcut(Key::N)))
+                        .clicked()
+                    {
                         self.request_new();
                         ui.close();
                     }
-                    if ui.button("Open...").clicked() {
+                    if ui
+                        .add(egui::Button::new("Open...").shortcut_text(shortcut(Key::O)))
+                        .clicked()
+                    {
                         ui.close();
                         self.open_dialog();
                     }
                     ui.separator();
-                    if ui.add_enabled(has_doc, egui::Button::new("Save")).clicked() {
+                    if ui
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Save").shortcut_text(shortcut(Key::S)),
+                        )
+                        .clicked()
+                    {
                         ui.close();
                         self.save_or_save_as();
                     }
                     if ui
-                        .add_enabled(has_doc, egui::Button::new("Save As..."))
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Save As...").shortcut_text(shortcut(Key::A)),
+                        )
                         .clicked()
                     {
                         ui.close();
@@ -161,7 +209,10 @@ impl App {
                         self.export_image_dialog();
                     }
                     if ui
-                        .add_enabled(has_doc, egui::Button::new("Print..."))
+                        .add_enabled(
+                            has_doc,
+                            egui::Button::new("Print...").shortcut_text(shortcut(Key::P)),
+                        )
                         .clicked()
                     {
                         ui.close();
@@ -183,30 +234,36 @@ impl App {
                     );
                     ui.checkbox(&mut self.print_report, "Include the report when printing");
                     ui.separator();
-                    if ui.button("Quit").clicked() {
+                    if ui
+                        .add(egui::Button::new("Quit").shortcut_text(shortcut(Key::Q)))
+                        .clicked()
+                    {
                         ui.close();
                         self.request_quit();
                     }
                 });
                 ui.menu_button("Edit", |ui| {
                     if ui
-                        .add_enabled(self.history.can_undo(), egui::Button::new("Undo"))
+                        .add_enabled(
+                            self.history.can_undo(),
+                            egui::Button::new("Undo").shortcut_text(shortcut(Key::Z)),
+                        )
                         .clicked()
                     {
                         ui.close();
                         self.undo();
                     }
                     if ui
-                        .add_enabled(self.history.can_redo(), egui::Button::new("Redo"))
+                        .add_enabled(
+                            self.history.can_redo(),
+                            egui::Button::new("Redo").shortcut_text(shortcut(Key::Y)),
+                        )
                         .clicked()
                     {
                         ui.close();
                         self.redo();
                     }
                     ui.separator();
-                    let shortcut = |k| {
-                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
-                    };
                     if ui
                         .add_enabled(
                             self.can_cut(),
@@ -240,14 +297,20 @@ impl App {
                     ui.separator();
                     let can_shift = self.selected.as_ref().is_some_and(|p| !p.is_empty());
                     if ui
-                        .add_enabled(can_shift, egui::Button::new("Shift Left"))
+                        .add_enabled(
+                            can_shift,
+                            egui::Button::new("Shift Left").shortcut_text(shortcut(Key::L)),
+                        )
                         .clicked()
                     {
                         ui.close();
                         self.move_selected(-1);
                     }
                     if ui
-                        .add_enabled(can_shift, egui::Button::new("Shift Right"))
+                        .add_enabled(
+                            can_shift,
+                            egui::Button::new("Shift Right").shortcut_text(shortcut(Key::R)),
+                        )
                         .clicked()
                     {
                         ui.close();
@@ -292,7 +355,10 @@ impl App {
                     ui.separator();
                     let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
                     if ui
-                        .add_enabled(can_delete, egui::Button::new("Delete selected"))
+                        .add_enabled(
+                            can_delete,
+                            egui::Button::new("Delete selected").shortcut_text(shortcut(Key::D)),
+                        )
                         .clicked()
                     {
                         ui.close();
@@ -300,9 +366,6 @@ impl App {
                     }
                 });
                 ui.menu_button("View", |ui| {
-                    let shortcut = |k| {
-                        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
-                    };
                     if ui
                         .add_enabled(has_doc, egui::Button::new("Tree Overview"))
                         .clicked()
