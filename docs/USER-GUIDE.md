@@ -31,6 +31,7 @@ the automation tools are described in the repository README and docs/mcp.md.
 - Change a node's type, id, description or probability in the details panel.
 - The icon toolbar has New, Open, Save, Print, Cut, Copy, Paste, Delete, Link, Primary event database, Undo, Redo, Zoom In, Zoom Out and Fit. The symbol palette on the left adds the clicked symbol to the selected gate or intermediate event (the top event when nothing is selected); it is greyed out when the selection cannot take children.
 - View > Theme chooses System, Light or Dark for the window (Light by default, like OpenFTA); the choice is saved with the preferences.
+- Shortcuts as in OpenFTA: Ctrl+N New, Ctrl+O Open, Ctrl+S Save, Ctrl+A Save As, Ctrl+P Print, Ctrl+Q Quit, Ctrl+Z Undo, Ctrl+X/C/V Cut/Copy/Paste, Ctrl+D Delete, Ctrl+L / Ctrl+R Shift Left/Right, Ctrl+I Link (Ctrl+Y is Redo, an ftar extra). They are shown in the menus and do not fire while you type in a text field.
 - Edit > Shift Left / Shift Right (or the Shift left / Shift right buttons) move a node one place among its siblings; conditions and transfer-out symbols stay in place. Edit > Selected... (or a double-click) edits the selected symbol: primary events open in the Primary events editor, anything else puts the cursor in the id field.
 - Delete (the Delete key, the details panel or Edit > Delete selected) removes the
   selected node and its subtree.
