@@ -398,11 +398,12 @@ impl App {
                     if self.ped.dirty { " *" } else { "" }
                 ));
                 ui.horizontal_top(|ui| {
-                    ui.vertical(|ui| {
-                        ui.strong("Events");
+                    ui.group(|ui| {
+                        ui.set_min_width(150.0);
+                        ui.strong("Primary Events");
                         egui::ScrollArea::vertical()
                             .id_salt("ped_list")
-                            .max_height(260.0)
+                            .max_height(300.0)
                             .show(ui, |ui| {
                                 for id in self.ped.event_ids() {
                                     let sel = self.ped.selected.as_deref() == Some(&id);
@@ -412,38 +413,55 @@ impl App {
                                 }
                             });
                     });
-                    ui.separator();
                     ui.vertical(|ui| {
-                        let l = ui.label("Event id");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.ped.form.id).desired_width(200.0),
-                        )
-                        .labelled_by(l.id);
-                        let l = ui.label("Event probability");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.ped.form.prob)
-                                .desired_width(120.0),
-                        )
-                        .labelled_by(l.id);
-                        ui.checkbox(&mut self.ped.form.rate, "Event is a failure rate");
-                        ui.label("Event type");
-                        for k in [
-                            EventType::Basic,
-                            EventType::External,
-                            EventType::Undeveloped,
-                            EventType::ConditionNotAnalysed,
-                            EventType::ConditionAnalysed,
-                        ] {
-                            ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
-                        }
-                        ui.checkbox(&mut self.ped.form.dormant, "Event is dormant");
-                        let l = ui.label("Event description");
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.ped.form.desc)
-                                .desired_rows(2)
-                                .desired_width(280.0),
-                        )
-                        .labelled_by(l.id);
+                        ui.horizontal_top(|ui| {
+                            ui.group(|ui| {
+                                let l = ui.strong("Id");
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.ped.form.id)
+                                        .desired_width(160.0),
+                                )
+                                .labelled_by(l.id);
+                            });
+                            ui.group(|ui| {
+                                ui.vertical(|ui| {
+                                    let l = ui.strong("Probability");
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut self.ped.form.prob)
+                                            .desired_width(120.0),
+                                    )
+                                    .labelled_by(l.id);
+                                    ui.checkbox(
+                                        &mut self.ped.form.rate,
+                                        "Constant Failure Rate/Unit Time",
+                                    );
+                                });
+                            });
+                        });
+                        ui.group(|ui| {
+                            ui.strong("Type");
+                            ui.horizontal_wrapped(|ui| {
+                                for k in [
+                                    EventType::Basic,
+                                    EventType::External,
+                                    EventType::Undeveloped,
+                                    EventType::ConditionNotAnalysed,
+                                    EventType::ConditionAnalysed,
+                                ] {
+                                    ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
+                                }
+                            });
+                        });
+                        ui.checkbox(&mut self.ped.form.dormant, "Dormant");
+                        ui.group(|ui| {
+                            let l = ui.strong("Description");
+                            ui.add(
+                                egui::TextEdit::multiline(&mut self.ped.form.desc)
+                                    .desired_rows(3)
+                                    .desired_width(300.0),
+                            )
+                            .labelled_by(l.id);
+                        });
                         ui.horizontal(|ui| {
                             if ui.button("Apply event").clicked() {
                                 self.ped_apply();
