@@ -336,3 +336,24 @@ fn database_window_edit_menu_acts_on_events() {
     h.run();
     assert!(h.state().ped.event_ids().is_empty());
 }
+
+#[test]
+fn database_window_is_a_viewport_that_keeps_its_state() {
+    // Headless there are no OS windows, so egui embeds it in a window; the
+    // contents, state and closing behave the same as in a real window.
+    let mut app = App::default();
+    app.ped_new();
+    app.ped.open = true;
+    fill(&mut app, "PUMP", "1e-3", EventType::Basic);
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_by_label("PUMP");
+    h.state_mut().ped.open = false;
+    h.run();
+    assert!(h.query_by_label("Primary Events").is_none());
+    h.state_mut().ped.open = true;
+    h.run();
+    h.get_by_label("PUMP"); // reopened with the same events
+}

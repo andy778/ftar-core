@@ -418,214 +418,224 @@ impl App {
     }
 
     /// The database window (draw once per frame).
+    /// The database window: its own OS window next to the main one (an
+    /// embedded window where the backend has no real windows, as in tests).
     pub(crate) fn ped_window(&mut self, ctx: &egui::Context) {
         if !self.ped.open {
             return;
         }
-        let mut open = true;
-        let title = "Primary event database";
-        egui::Window::new(title)
-            .open(&mut open)
-            .default_size([640.0, 420.0])
-            .show(ctx, |ui| {
-                let has_doc = self.doc.is_some();
-                egui::MenuBar::new().ui(ui, |ui| {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("New").clicked() {
-                            ui.close();
-                            self.ped_new();
-                        }
-                        if ui.button("Open...").clicked() {
-                            ui.close();
-                            self.ped_open_dialog();
-                        }
-                        if ui.button("Save").clicked() {
-                            ui.close();
-                            self.ped_save_or_dialog();
-                        }
-                        if ui.button("Save As...").clicked() {
-                            ui.close();
-                            self.ped_save_as_dialog();
-                        }
-                        if ui.button("Export Text File...").clicked() {
-                            ui.close();
-                            self.ped_export_dialog();
-                        }
-                        if ui.button("Print...").clicked() {
-                            ui.close();
-                            self.ped_print_now();
-                        }
-                        if ui.button("Close").clicked() {
-                            ui.close();
-                            self.ped.open = false;
-                        }
-                    });
-                    ui.menu_button("Edit", |ui| {
-                        if ui.button("Apply event").clicked() {
-                            ui.close();
-                            self.ped_apply();
-                        }
-                        if ui.button("Clear").clicked() {
-                            ui.close();
-                            self.ped_clear();
-                        }
-                        if ui.button("Delete event").clicked() {
-                            ui.close();
-                            self.ped_delete();
-                        }
-                        ui.separator();
-                        if ui
-                            .add_enabled(has_doc, egui::Button::new("Copy to tree database"))
-                            .clicked()
-                        {
-                            ui.close();
-                            self.ped_copy_to_tree(true);
-                        }
-                        if ui
-                            .add_enabled(has_doc, egui::Button::new("Copy from tree database"))
-                            .clicked()
-                        {
-                            ui.close();
-                            self.ped_copy_from_tree(true);
-                        }
-                        if ui
-                            .add_enabled(has_doc, egui::Button::new("Link tree event"))
-                            .clicked()
-                        {
-                            ui.close();
-                            self.ped_link();
-                        }
-                    });
-                    ui.menu_button("Help", |ui| {
-                        if ui.button("Primary events help").clicked() {
-                            ui.close();
-                            self.show_help(Some("Primary events"));
-                        }
-                    });
-                });
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    if icon_button(ui, Icon::New, "New", true) {
-                        self.ped_new();
+        let builder = egui::ViewportBuilder::default()
+            .with_title("Primary event database")
+            .with_inner_size([700.0, 500.0]);
+        ctx.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("ftar_primary_event_database"),
+            builder,
+            |ui, class| {
+                if class == egui::ViewportClass::EmbeddedWindow {
+                    self.ped_contents(ui);
+                } else {
+                    egui::CentralPanel::default().show(ui, |ui| self.ped_contents(ui));
+                    if ui.ctx().input(|i| i.viewport().close_requested()) {
+                        self.ped.open = false;
                     }
-                    if icon_button(ui, Icon::Open, "Open...", true) {
-                        self.ped_open_dialog();
-                    }
-                    if icon_button(ui, Icon::Save, "Save", true) {
-                        self.ped_save_or_dialog();
-                    }
-                    if icon_button(ui, Icon::Print, "Print...", true) {
-                        self.ped_print_now();
-                    }
-                    ui.separator();
-                    if icon_button(ui, Icon::Delete, "Delete event", true) {
-                        self.ped_delete();
-                    }
-                    if icon_button(ui, Icon::Copy, "Copy to tree database", has_doc) {
-                        self.ped_copy_to_tree(true);
-                    }
-                    if icon_button(ui, Icon::Paste, "Copy from tree database", has_doc) {
-                        self.ped_copy_from_tree(true);
-                    }
-                    if icon_button(ui, Icon::Link, "Link tree event", has_doc) {
-                        self.ped_link();
-                    }
-                });
-                let name = self.ped.name();
-                ui.label(format!(
-                    "Database: {}{}",
-                    if name.is_empty() { "(unnamed)" } else { &name },
-                    if self.ped.dirty { " *" } else { "" }
-                ));
-                ui.horizontal_top(|ui| {
-                    ui.group(|ui| {
-                        ui.set_min_width(150.0);
-                        ui.strong("Primary Events");
-                        egui::ScrollArea::vertical()
-                            .id_salt("ped_list")
-                            .max_height(300.0)
-                            .show(ui, |ui| {
-                                for id in self.ped.event_ids() {
-                                    let sel = self.ped.selected.as_deref() == Some(&id);
-                                    if ui.selectable_label(sel, &id).clicked() {
-                                        self.ped_select(&id);
-                                    }
-                                }
-                            });
-                    });
-                    ui.vertical(|ui| {
-                        ui.horizontal_top(|ui| {
-                            ui.group(|ui| {
-                                let l = ui.strong("Id");
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.ped.form.id)
-                                        .desired_width(160.0),
-                                )
-                                .labelled_by(l.id);
-                            });
-                            ui.group(|ui| {
-                                ui.vertical(|ui| {
-                                    let l = ui.strong("Probability");
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut self.ped.form.prob)
-                                            .desired_width(120.0),
-                                    )
-                                    .labelled_by(l.id);
-                                    ui.checkbox(
-                                        &mut self.ped.form.rate,
-                                        "Constant Failure Rate/Unit Time",
-                                    );
-                                });
-                            });
-                        });
-                        ui.group(|ui| {
-                            ui.strong("Type");
-                            ui.horizontal_wrapped(|ui| {
-                                for k in [
-                                    EventType::Basic,
-                                    EventType::External,
-                                    EventType::Undeveloped,
-                                    EventType::ConditionNotAnalysed,
-                                    EventType::ConditionAnalysed,
-                                ] {
-                                    ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
-                                }
-                            });
-                        });
-                        ui.checkbox(&mut self.ped.form.dormant, "Dormant");
-                        ui.group(|ui| {
-                            let l = ui.strong("Description");
-                            ui.add(
-                                egui::TextEdit::multiline(&mut self.ped.form.desc)
-                                    .desired_rows(3)
-                                    .desired_width(300.0),
-                            )
-                            .labelled_by(l.id);
-                        });
-                        ui.horizontal(|ui| {
-                            if ui.button("Apply event").clicked() {
-                                self.ped_apply();
-                            }
-                            if ui.button("Clear").clicked() {
-                                self.ped_clear();
-                            }
-                            if ui.button("Delete event").clicked() {
-                                self.ped_delete();
-                            }
-                            if ui.button("Help").clicked() {
-                                self.show_help(Some("Primary events"));
-                            }
-                        });
-                    });
-                });
-                if let Some(e) = &self.ped.error {
-                    ui.colored_label(Color32::LIGHT_RED, e);
                 }
-                if let Some(s) = &self.ped.status {
-                    ui.label(s);
+            },
+        );
+    }
+
+    fn ped_contents(&mut self, ui: &mut egui::Ui) {
+        let has_doc = self.doc.is_some();
+        egui::MenuBar::new().ui(ui, |ui| {
+            ui.menu_button("File", |ui| {
+                if ui.button("New").clicked() {
+                    ui.close();
+                    self.ped_new();
+                }
+                if ui.button("Open...").clicked() {
+                    ui.close();
+                    self.ped_open_dialog();
+                }
+                if ui.button("Save").clicked() {
+                    ui.close();
+                    self.ped_save_or_dialog();
+                }
+                if ui.button("Save As...").clicked() {
+                    ui.close();
+                    self.ped_save_as_dialog();
+                }
+                if ui.button("Export Text File...").clicked() {
+                    ui.close();
+                    self.ped_export_dialog();
+                }
+                if ui.button("Print...").clicked() {
+                    ui.close();
+                    self.ped_print_now();
+                }
+                if ui.button("Close").clicked() {
+                    ui.close();
+                    self.ped.open = false;
                 }
             });
-        self.ped.open = open && self.ped.open;
+            ui.menu_button("Edit", |ui| {
+                if ui.button("Apply event").clicked() {
+                    ui.close();
+                    self.ped_apply();
+                }
+                if ui.button("Clear").clicked() {
+                    ui.close();
+                    self.ped_clear();
+                }
+                if ui.button("Delete event").clicked() {
+                    ui.close();
+                    self.ped_delete();
+                }
+                ui.separator();
+                if ui
+                    .add_enabled(has_doc, egui::Button::new("Copy to tree database"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.ped_copy_to_tree(true);
+                }
+                if ui
+                    .add_enabled(has_doc, egui::Button::new("Copy from tree database"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.ped_copy_from_tree(true);
+                }
+                if ui
+                    .add_enabled(has_doc, egui::Button::new("Link tree event"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.ped_link();
+                }
+            });
+            ui.menu_button("Help", |ui| {
+                if ui.button("Primary events help").clicked() {
+                    ui.close();
+                    self.show_help(Some("Primary events"));
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            if icon_button(ui, Icon::New, "New", true) {
+                self.ped_new();
+            }
+            if icon_button(ui, Icon::Open, "Open...", true) {
+                self.ped_open_dialog();
+            }
+            if icon_button(ui, Icon::Save, "Save", true) {
+                self.ped_save_or_dialog();
+            }
+            if icon_button(ui, Icon::Print, "Print...", true) {
+                self.ped_print_now();
+            }
+            ui.separator();
+            if icon_button(ui, Icon::Delete, "Delete event", true) {
+                self.ped_delete();
+            }
+            if icon_button(ui, Icon::Copy, "Copy to tree database", has_doc) {
+                self.ped_copy_to_tree(true);
+            }
+            if icon_button(ui, Icon::Paste, "Copy from tree database", has_doc) {
+                self.ped_copy_from_tree(true);
+            }
+            if icon_button(ui, Icon::Link, "Link tree event", has_doc) {
+                self.ped_link();
+            }
+        });
+        let name = self.ped.name();
+        ui.label(format!(
+            "Database: {}{}",
+            if name.is_empty() { "(unnamed)" } else { &name },
+            if self.ped.dirty { " *" } else { "" }
+        ));
+        ui.horizontal_top(|ui| {
+            ui.group(|ui| {
+                ui.set_min_width(150.0);
+                ui.strong("Primary Events");
+                egui::ScrollArea::vertical()
+                    .id_salt("ped_list")
+                    .max_height(300.0)
+                    .show(ui, |ui| {
+                        for id in self.ped.event_ids() {
+                            let sel = self.ped.selected.as_deref() == Some(&id);
+                            if ui.selectable_label(sel, &id).clicked() {
+                                self.ped_select(&id);
+                            }
+                        }
+                    });
+            });
+            ui.vertical(|ui| {
+                ui.horizontal_top(|ui| {
+                    ui.group(|ui| {
+                        let l = ui.strong("Id");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.ped.form.id).desired_width(160.0),
+                        )
+                        .labelled_by(l.id);
+                    });
+                    ui.group(|ui| {
+                        ui.vertical(|ui| {
+                            let l = ui.strong("Probability");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.ped.form.prob)
+                                    .desired_width(120.0),
+                            )
+                            .labelled_by(l.id);
+                            ui.checkbox(&mut self.ped.form.rate, "Constant Failure Rate/Unit Time");
+                        });
+                    });
+                });
+                ui.group(|ui| {
+                    ui.strong("Type");
+                    ui.horizontal_wrapped(|ui| {
+                        for k in [
+                            EventType::Basic,
+                            EventType::External,
+                            EventType::Undeveloped,
+                            EventType::ConditionNotAnalysed,
+                            EventType::ConditionAnalysed,
+                        ] {
+                            ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
+                        }
+                    });
+                });
+                ui.checkbox(&mut self.ped.form.dormant, "Dormant");
+                ui.group(|ui| {
+                    let l = ui.strong("Description");
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.ped.form.desc)
+                            .desired_rows(3)
+                            .desired_width(300.0),
+                    )
+                    .labelled_by(l.id);
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("Apply event").clicked() {
+                        self.ped_apply();
+                    }
+                    if ui.button("Clear").clicked() {
+                        self.ped_clear();
+                    }
+                    if ui.button("Delete event").clicked() {
+                        self.ped_delete();
+                    }
+                    if ui.button("Help").clicked() {
+                        self.show_help(Some("Primary events"));
+                    }
+                });
+            });
+        });
+        if let Some(e) = &self.ped.error {
+            ui.colored_label(Color32::LIGHT_RED, e);
+        }
+        if let Some(s) = &self.ped.status {
+            ui.label(s);
+        }
     }
 
     fn ped_save_as_dialog(&mut self) {
