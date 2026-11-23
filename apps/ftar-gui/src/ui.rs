@@ -1416,15 +1416,26 @@ impl eframe::App for App {
         self.prefs_window(ui.ctx());
         self.preview_window(ui.ctx());
 
-        egui::CentralPanel::default().show(ui, |ui| {
+        // The canvas is the drawing area itself: no frame or margin, filled edge to
+        // edge with the preferences' background colour (#97).
+        let panel = egui::Frame::NONE.fill(if self.doc.is_some() {
+            rgb32(self.prefs.background_colour())
+        } else {
+            ctx.global_style().visuals.panel_fill
+        });
+        egui::CentralPanel::default().frame(panel).show(ui, |ui| {
             let Some(scene) = self.scene() else {
                 ui.centered_and_justified(|ui| {
                     ui.label("Open a .fta file (Open...), or start a New tree.")
                 });
                 return;
             };
-            let (resp, painter) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
-            let rect = resp.rect;
+            let rect = ui.available_rect_before_wrap();
+            let resp = ui.interact(
+                rect,
+                ui.scope_id().with("canvas_area"),
+                Sense::click_and_drag(),
+            );
 
             let key = (rect.size(), scene.width, scene.height);
             if self.fit_next || (self.auto_fit && self.fit_key != Some(key)) {
@@ -1453,16 +1464,51 @@ impl eframe::App for App {
                     }
                 }
             }
+
+            // The drawing goes under the scrollbars, so it is painted first.
             let origin = rect.min + self.pan;
             let z = self.zoom;
             paint_scene(
-                &painter.with_clip_rect(rect),
+                &ui.painter_at(rect),
                 &scene,
                 origin,
                 z,
                 self.selected.as_deref(),
                 &self.prefs,
             );
+
+            // Scrollbars: an invisible scroll area sized to the drawing plus a margin
+            // carries them; the pan is mirrored to its offset and back.
+            let content = Vec2::new(scene.width, scene.height) * self.zoom;
+            let extent = scroll_extent(rect.size(), content);
+            self.scroll_extent = extent;
+            let want = scroll_offset_for(self.pan, rect.size(), extent);
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+            // Permanent (solid) scrollbars, as OpenFTA shows, only on an axis that overflows.
+            child.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
+            let out = egui::ScrollArea::both()
+                .id_salt("canvas_scroll")
+                .auto_shrink(false)
+                .scroll([extent.x > rect.width(), extent.y > rect.height()])
+                .scroll_source(egui::containers::scroll_area::ScrollSource::SCROLL_BAR)
+                .scroll_offset(want)
+                .show(&mut child, |ui| {
+                    ui.allocate_exact_size(extent, Sense::hover());
+                });
+            let pan_before = self.pan;
+            let got = out.state.clamped_offset();
+            if (got.x - want.x).abs() > 0.5 && extent.x > rect.width() {
+                self.pan.x = SCROLL_MARGIN - got.x;
+                self.auto_fit = false;
+            }
+            if (got.y - want.y).abs() > 0.5 && extent.y > rect.height() {
+                self.pan.y = SCROLL_MARGIN - got.y;
+                self.auto_fit = false;
+            }
+
+            if self.pan != pan_before {
+                ctx.request_repaint();
+            }
 
             if resp.clicked() {
                 let hit = resp.interact_pointer_pos().and_then(|pos| {
@@ -1477,6 +1523,24 @@ impl eframe::App for App {
             }
         });
     }
+}
+
+/// Empty space kept around the drawing inside the scrollable extent, in screen pixels.
+const SCROLL_MARGIN: f32 = MARGIN;
+
+/// Size of the scrollable area for a drawing of `content` pixels in a canvas of `view`:
+/// the drawing plus a margin, never smaller than the canvas (then there is no scrollbar).
+pub(crate) fn scroll_extent(view: Vec2, content: Vec2) -> Vec2 {
+    (content + Vec2::splat(2.0 * SCROLL_MARGIN)).max(view)
+}
+
+/// Scroll offset showing the drawing at screen offset `pan`.
+fn scroll_offset_for(pan: Vec2, view: Vec2, extent: Vec2) -> Vec2 {
+    let off = Vec2::splat(SCROLL_MARGIN) - pan;
+    Vec2::new(
+        off.x.clamp(0.0, (extent.x - view.x).max(0.0)),
+        off.y.clamp(0.0, (extent.y - view.y).max(0.0)),
+    )
 }
 
 fn rgb32(c: ftar_render::prefs::Rgb) -> Color32 {
@@ -1505,4 +1569,31 @@ pub(crate) fn open_with_default_app(path: &std::path::Path) -> std::io::Result<(
         c
     };
     cmd.spawn().map(|_| ())
+}
+
+#[cfg(test)]
+mod scroll_tests {
+    use super::*;
+
+    #[test]
+    fn extent_never_smaller_than_the_view() {
+        let v = Vec2::new(800.0, 600.0);
+        assert_eq!(scroll_extent(v, Vec2::new(100.0, 100.0)), v);
+        let e = scroll_extent(v, Vec2::new(2000.0, 100.0));
+        assert_eq!(e.x, 2000.0 + 2.0 * SCROLL_MARGIN);
+        assert_eq!(e.y, 600.0);
+    }
+
+    #[test]
+    fn pan_and_offset_round_trip() {
+        let v = Vec2::new(800.0, 600.0);
+        let e = scroll_extent(v, Vec2::new(2000.0, 1500.0));
+        let pan = Vec2::new(-300.0, -50.0);
+        let off = scroll_offset_for(pan, v, e);
+        assert_eq!(SCROLL_MARGIN - off.x, pan.x);
+        assert_eq!(SCROLL_MARGIN - off.y, pan.y);
+        // a centred small drawing has nothing to scroll
+        let e = scroll_extent(v, Vec2::new(100.0, 100.0));
+        assert_eq!(scroll_offset_for(Vec2::new(350.0, 250.0), v, e), Vec2::ZERO);
+    }
 }

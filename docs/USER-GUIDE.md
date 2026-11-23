@@ -15,7 +15,9 @@ the automation tools are described in the repository README and docs/mcp.md.
 ## Looking at the tree
 
 - Click a node to select it. Its details appear in the panel at the bottom.
-- Scroll the mouse wheel to zoom, and drag on the canvas to pan.
+- Scroll the mouse wheel to zoom, and drag on the canvas to pan. The canvas fills the
+  whole drawing area in the background colour from Preferences. Scrollbars appear on
+  the right and bottom when the tree is larger than the window; drag them to scroll.
 - Fit (toolbar) scales the whole tree to the window. Panning or zooming by hand
   turns automatic fitting off until you press Fit again.
 - Gates (AND, OR, XOR, priority AND, inhibit) and events (basic, undeveloped, external,
