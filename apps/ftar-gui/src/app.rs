@@ -124,6 +124,8 @@ pub struct App {
     pub(crate) fit_key: Option<(Vec2, f32, f32)>,
     /// Canvas rectangle of the last frame.
     pub canvas: eframe::egui::Rect,
+    /// Size of the scrollable area behind the canvas scrollbars.
+    pub scroll_extent: eframe::egui::Vec2,
     // analysis
     pub tab: Tab,
     pub order: usize,
@@ -192,6 +194,7 @@ impl Default for App {
             auto_fit: true,
             fit_key: None,
             canvas: eframe::egui::Rect::ZERO,
+            scroll_extent: eframe::egui::Vec2::ZERO,
             tab: Tab::CutSets,
             order: 0,
             terms: ftar_core::analysis::DEFAULT_TERMS,
