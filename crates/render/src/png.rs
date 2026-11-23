@@ -23,7 +23,7 @@ impl fmt::Display for RenderError {
         match self {
             RenderError::Svg(m) => write!(f, "invalid SVG: {m}"),
             RenderError::Size(m) => write!(f, "image size: {m}"),
-            RenderError::Encode(m) => write!(f, "PNG encoding: {m}"),
+            RenderError::Encode(m) => write!(f, "image encoding: {m}"),
         }
     }
 }
@@ -47,6 +47,31 @@ pub fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, RenderError> {
     rasterise(svg, scale)?
         .encode_png()
         .map_err(|e| RenderError::Encode(e.to_string()))
+}
+
+/// Rasterise `svg` at `scale` and encode it as JPEG (quality 1..=100), on a white
+/// background because JPEG has no transparency. OpenFTA's image export is JPEG.
+pub fn svg_to_jpeg(svg: &str, scale: f32, quality: u8) -> Result<Vec<u8>, RenderError> {
+    let (w, h, rgba) = svg_to_rgba(svg, scale)?;
+    let (w16, h16) = (
+        u16::try_from(w).map_err(|_| RenderError::Size("too wide for JPEG".into()))?,
+        u16::try_from(h).map_err(|_| RenderError::Size("too tall for JPEG".into()))?,
+    );
+    let mut rgb = Vec::with_capacity(rgba.len() / 4 * 3);
+    for px in rgba.as_chunks::<4>().0 {
+        // premultiplied colour over white: c + (1 - a)
+        let back = 255 - px[3];
+        rgb.extend_from_slice(&[
+            px[0].saturating_add(back),
+            px[1].saturating_add(back),
+            px[2].saturating_add(back),
+        ]);
+    }
+    let mut out = Vec::new();
+    jpeg_encoder::Encoder::new(&mut out, quality.clamp(1, 100))
+        .encode(&rgb, w16, h16, jpeg_encoder::ColorType::Rgb)
+        .map_err(|e| RenderError::Encode(e.to_string()))?;
+    Ok(out)
 }
 
 /// Rasterise `svg` at `scale` into premultiplied RGBA: (width, height, bytes).

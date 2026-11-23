@@ -748,7 +748,7 @@ fn image_export_reports_errors() {
     assert!(app.export_image(std::path::Path::new("x.png")).is_err());
     app.open(data("theatre.fta"));
     assert!(app.export_image(std::path::Path::new("x.bmp")).is_err());
-    assert!(app.error.as_deref().unwrap().contains(".png or .svg"));
+    assert!(app.error.as_deref().unwrap().contains(".png, .jpg or .svg"));
     app.image_scale = 0.0;
     assert!(app
         .export_image(&std::env::temp_dir().join("ftar_zero_scale.png"))
@@ -1380,4 +1380,21 @@ fn analysis_panel_shows_the_basic_event_count_and_opens_help() {
     assert!(h.state().help.open);
     let t = h.state().help.topic;
     assert_eq!(h.state().help.topics[t].title, "Analysis");
+}
+
+#[test]
+fn export_jpeg_like_openftas_export_image() {
+    let dir = scratch("jpeg");
+    let mut app = App::default();
+    app.open(data("theatre.fta"));
+    app.image_scale = 1.0;
+    for name in ["t.jpg", "t.JPEG"] {
+        let p = dir.join(name);
+        app.export_image(&p).unwrap();
+        let b = std::fs::read(&p).unwrap();
+        assert_eq!(&b[..2], &[0xff, 0xd8], "JPEG start marker");
+        assert_eq!(&b[b.len() - 2..], &[0xff, 0xd9], "JPEG end marker");
+        assert!(b.len() > 1000, "the drawing is in it");
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }

@@ -81,7 +81,7 @@ enough that an estimate is not needed. The panel is always open, so it has no Ca
 
 ## Pictures and printing
 
-- File > Export image... saves the tree as a PNG or SVG drawing.
+- File > Export image... saves the tree as a JPEG (like OpenFTA), PNG or SVG drawing; the file name's ending picks the format. The file dialog asks before replacing an existing file.
 - File > Print... opens the tree in your browser's print dialog (Ctrl+P). The printout
   can include the selected report and the event probabilities; both are options in the File menu.
 

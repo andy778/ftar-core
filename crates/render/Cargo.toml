@@ -7,6 +7,7 @@ description = "Headless drawing of fault trees: SVG, PNG and printable HTML"
 
 [dependencies]
 ftar-core = { path = "../core" }
+jpeg-encoder = "0.6"
 resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }
 
 [lints]

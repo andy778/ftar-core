@@ -543,6 +543,7 @@ impl App {
 
     fn export_image_dialog(&mut self) {
         if let Some(p) = rfd::FileDialog::new()
+            .add_filter("JPEG image", &["jpg", "jpeg"])
             .add_filter("PNG image", &["png"])
             .add_filter("SVG drawing", &["svg"])
             .set_file_name(self.default_image_name())

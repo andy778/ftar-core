@@ -369,3 +369,14 @@ fn theme_is_light_by_default_and_round_trips() {
     }
     assert_eq!(Preferences::from_text("theme = bogus").theme, Theme::Light);
 }
+
+#[test]
+fn jpeg_is_drawn_on_white_and_clamps_quality() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="20" height="30" fill="#000000"/></svg>"##;
+    for q in [0u8, 100, 255] {
+        let b = ftar_render::svg_to_jpeg(svg, 1.0, q).unwrap();
+        assert_eq!(&b[..2], &[0xff, 0xd8]);
+    }
+    assert!(ftar_render::svg_to_jpeg("not svg", 1.0, 90).is_err());
+    assert!(ftar_render::svg_to_jpeg(svg, 0.0, 90).is_err());
+}

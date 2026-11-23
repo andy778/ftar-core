@@ -14,7 +14,7 @@ use ftar_core::report::{self, ReportKind, ReportParams};
 use ftar_core::write::{write_fta_with, write_ped, LineEnding};
 use ftar_core::{EventType, PrimaryEvent, PrimaryEventDb, Tree};
 use ftar_render::{
-    print_html_with, svg_to_png, tree_svg_with, Preferences, PrintOptions, SvgOptions,
+    print_html_with, svg_to_jpeg, svg_to_png, tree_svg_with, Preferences, PrintOptions, SvgOptions,
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -1111,7 +1111,7 @@ impl App {
         format!("{}.png", self.tree_name())
     }
 
-    /// Export the tree as an image; the format follows the extension (`.png` or `.svg`).
+    /// Export the tree as an image; the format follows the extension (`.png`, `.jpg` or `.svg`).
     pub fn export_image(&mut self, path: &Path) -> Result<(), String> {
         let res = (|| -> Result<(), String> {
             let ext = path
@@ -1122,7 +1122,11 @@ impl App {
             let bytes = match ext.as_str() {
                 "svg" => svg.into_bytes(),
                 "png" => svg_to_png(&svg, self.image_scale).map_err(|e| e.to_string())?,
-                _ => return Err("image files must end in .png or .svg".into()),
+                // like OpenFTA's Export Image: JPEG at maximum quality
+                "jpg" | "jpeg" => {
+                    svg_to_jpeg(&svg, self.image_scale, 100).map_err(|e| e.to_string())?
+                }
+                _ => return Err("image files must end in .png, .jpg or .svg".into()),
             };
             std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
         })();
