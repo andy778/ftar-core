@@ -1284,6 +1284,17 @@ impl eframe::App for App {
                 });
                 ui.separator();
                 ui.horizontal(|ui| {
+                    if self.doc.is_some() {
+                        ui.label(format!(
+                            "There are {} basic events in the tree",
+                            self.basic_event_count()
+                        ));
+                    }
+                    if ui.button("Analysis help").clicked() {
+                        self.show_help(Some("Analysis"));
+                    }
+                });
+                ui.horizontal(|ui| {
                     let l = ui.label("max order (0 = all)");
                     ui.add(egui::DragValue::new(&mut self.order).range(0..=50))
                         .labelled_by(l.id);

@@ -61,7 +61,12 @@ the automation tools are described in the repository README and docs/mcp.md.
 
 ## Analysis
 
-The panel on the right runs analyses on the current tree. Press Run to start one.
+The panel on the right runs analyses on the current tree. Press Run to start one. The panel shows how many
+basic events the tree has, and its Analysis help button opens this page.
+
+Unlike OpenFTA's analysis dialogs there is no "use minimal cut sets on file" option and no run-time estimate:
+every run uses the current tree (so it cannot read out-of-date cut sets from an old file), and runs are quick
+enough that an estimate is not needed. The panel is always open, so it has no Cancel button.
 
 - Cut sets: the minimal cut sets of the top event. Max order limits the size of the sets
   shown (0 means no limit). Terms sets how many terms the exact calculation keeps.
