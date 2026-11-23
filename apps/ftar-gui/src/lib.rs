@@ -19,6 +19,7 @@ pub use app::{ctime_text, App, Clip, Pending, Tab};
 use eframe::egui;
 pub use ped::PedWindow;
 pub use preview::PrintPreview;
+pub use ui::browser_command;
 
 /// Start the desktop app, optionally opening `path`.
 pub fn run(path: Option<PathBuf>) -> eframe::Result {

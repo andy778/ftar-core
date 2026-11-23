@@ -570,7 +570,7 @@ impl App {
     /// Report > Print: open the browser's print dialog for a saved report.
     pub(crate) fn print_report_now(&mut self, kind: ReportKind) {
         if let Ok(path) = self.prepare_report_print(kind) {
-            if let Err(e) = open_with_default_app(&path) {
+            if let Err(e) = open_with_default_app(&path, &self.prefs.browser) {
                 self.error = Some(format!("could not open the print page: {e}"));
             }
         }
@@ -579,7 +579,7 @@ impl App {
     /// Open the browser's print dialog for the tree (and report).
     pub(crate) fn print_now(&mut self) {
         if let Ok(path) = self.prepare_print() {
-            if let Err(e) = open_with_default_app(&path) {
+            if let Err(e) = open_with_default_app(&path, &self.prefs.browser) {
                 self.error = Some(format!("could not open the print page: {e}"));
             }
         }
@@ -1637,8 +1637,11 @@ fn rgb32(c: ftar_render::prefs::Rgb) -> Color32 {
 }
 
 /// Open a file with the system's default application (the browser, for HTML).
-pub(crate) fn open_with_default_app(path: &std::path::Path) -> std::io::Result<()> {
+pub(crate) fn open_with_default_app(path: &std::path::Path, browser: &str) -> std::io::Result<()> {
     use std::process::Command;
+    if let Some((program, args)) = browser_command(browser, path) {
+        return Command::new(program).args(args).spawn().map(|_| ());
+    }
     #[cfg(target_os = "windows")]
     let mut cmd = {
         let mut c = Command::new("cmd");
@@ -1658,6 +1661,41 @@ pub(crate) fn open_with_default_app(path: &std::path::Path) -> std::io::Result<(
         c
     };
     cmd.spawn().map(|_| ())
+}
+
+/// The program and arguments for a user's browser launch command (the page is
+/// added as the last argument), or `None` for the system default when the
+/// command is empty. Words are split on spaces; double quotes keep spaces in
+/// one word. No shell is involved, so nothing in a file name is interpreted.
+pub fn browser_command(command: &str, page: &std::path::Path) -> Option<(String, Vec<String>)> {
+    let mut words: Vec<String> = Vec::new();
+    let (mut cur, mut quoted, mut any) = (String::new(), false, false);
+    for c in command.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                any = true;
+            }
+            c if c.is_whitespace() && !quoted => {
+                if any {
+                    words.push(std::mem::take(&mut cur));
+                    any = false;
+                }
+            }
+            c => {
+                cur.push(c);
+                any = true;
+            }
+        }
+    }
+    if any {
+        words.push(cur);
+    }
+    let mut it = words.into_iter();
+    let program = it.next()?;
+    let mut args: Vec<String> = it.collect();
+    args.push(page.to_string_lossy().into_owned());
+    Some((program, args))
 }
 
 #[cfg(test)]

@@ -85,6 +85,15 @@ enough that an estimate is not needed. The panel is always open, so it has no Ca
 - File > Print... opens the tree in your browser's print dialog (Ctrl+P). The printout
   can include the selected report and the event probabilities; both are options in the File menu.
 
+## Preferences
+
+Edit > Preferences... sets the colours and the Colour / Monochrome view (see Looking at the tree). Web Browser
+Launch Command is the program that opens print pages and report pages, as in OpenFTA: type a command such as
+`firefox` or `"C:\\Program Files\\Browser\\browser.exe" --new-window` (words are split on spaces; double
+quotes keep spaces together) and the page is added at the end. Browse... picks the program from a file dialog.
+Leave it empty to use your system's default. The command is run directly, not through a shell. Reset to defaults
+keeps it.
+
 ## Help menu
 
 The Help menu has the same five pages as OpenFTA's, plus the two ftar had before:
