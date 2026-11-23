@@ -9,7 +9,7 @@ use ftar_render::scene::{symbol_outline, triangulate};
 use crate::app::App;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Icon {
+pub(crate) enum Icon {
     New,
     Open,
     Save,
@@ -157,7 +157,7 @@ fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
 }
 
 /// One toolbar button: an icon, a tooltip and an accessible label.
-fn icon_button(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) -> bool {
+pub(crate) fn icon_button(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::click());
     resp.widget_info(|| WidgetInfo::labeled(egui::Role::Button, enabled, label));
     let resp = resp.on_hover_text(label);

@@ -138,16 +138,19 @@ fn database_window_has_named_controls() {
         "New",
         "Open...",
         "Save",
-        "Save As...",
-        "Export Text File...",
-        "Event id",
-        "Event probability",
-        "Event description",
+        "Print...",
+        "Id",
+        "Probability",
+        "Description",
         "Apply event",
         "Delete event",
         "Copy to tree database",
         "Copy from tree database",
         "Link tree event",
+        "Primary Events",
+        "Constant Failure Rate/Unit Time",
+        "Dormant",
+        "Type",
         "PUMP",
     ] {
         assert!(h.get_all_by_label(label).count() >= 1, "{label}");
@@ -273,4 +276,84 @@ fn database_window_has_type_radios_clear_and_help() {
     assert!(h.state().help.open);
     let t = h.state().help.topic;
     assert_eq!(h.state().help.topics[t].title, "Primary events");
+}
+
+// ------------------------------------------------ #93 menu bar, toolbar, print
+
+#[test]
+fn database_window_menus_and_print() {
+    let dir = scratch("menus");
+    let mut app = App::default();
+    app.ped_new();
+    app.ped.open = true;
+    fill(&mut app, "PUMP", "1e-3", EventType::Basic);
+    let file = dir.join("plant.ped");
+    assert!(app.ped_save_as(&file));
+    let page = app.ped_prepare_print().unwrap();
+    let html = std::fs::read_to_string(&page).unwrap();
+    assert!(html.contains("window.print()"));
+    assert!(html.contains("ID: PUMP"), "{html}");
+    assert!(html.contains("plant.ped"));
+
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    // the window's own menus come after the main window's: take the last
+    h.get_all_by_label("File").last().unwrap().click();
+    h.run();
+    for item in ["Save As...", "Export Text File...", "Print...", "Close"] {
+        assert!(h.get_all_by_label(item).count() >= 1, "File > {item}");
+    }
+    h.get_by_label("Close").click();
+    h.run();
+    assert!(!h.state().ped.open);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn database_window_edit_menu_acts_on_events() {
+    let mut app = App::default();
+    app.ped_new();
+    app.ped.open = true;
+    fill(&mut app, "PUMP", "1e-3", EventType::Basic);
+    app.ped_select("PUMP");
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_all_by_label("Edit").last().unwrap().click();
+    h.run();
+    for item in [
+        "Apply event",
+        "Clear",
+        "Delete event",
+        "Copy to tree database",
+    ] {
+        assert!(h.get_all_by_label(item).count() >= 1, "Edit > {item}");
+    }
+    h.get_all_by_label("Delete event").next().unwrap().click();
+    h.run();
+    assert!(h.state().ped.event_ids().is_empty());
+}
+
+#[test]
+fn database_window_is_a_viewport_that_keeps_its_state() {
+    // Headless there are no OS windows, so egui embeds it in a window; the
+    // contents, state and closing behave the same as in a real window.
+    let mut app = App::default();
+    app.ped_new();
+    app.ped.open = true;
+    fill(&mut app, "PUMP", "1e-3", EventType::Basic);
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_by_label("PUMP");
+    h.state_mut().ped.open = false;
+    h.run();
+    assert!(h.query_by_label("Primary Events").is_none());
+    h.state_mut().ped.open = true;
+    h.run();
+    h.get_by_label("PUMP"); // reopened with the same events
 }
