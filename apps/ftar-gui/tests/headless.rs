@@ -1360,3 +1360,24 @@ fn openftas_shortcuts_act_on_the_tree() {
     assert!(h.state().quit || h.state().pending.is_some());
     let _ = before;
 }
+
+// ------------------------------------------------ #102 analysis panel facts and help
+
+#[test]
+fn analysis_panel_shows_the_basic_event_count_and_opens_help() {
+    let mut app = App::default();
+    assert_eq!(app.basic_event_count(), 0);
+    app.open(PathBuf::from(DATA).join("theatre.fta"));
+    // theatre: MAINS_FAIL, RELAY_FAIL and GEN_FAIL
+    assert_eq!(app.basic_event_count(), 3);
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    h.get_by_label("There are 3 basic events in the tree");
+    h.get_by_label("Analysis help").click();
+    h.run();
+    assert!(h.state().help.open);
+    let t = h.state().help.topic;
+    assert_eq!(h.state().help.topics[t].title, "Analysis");
+}

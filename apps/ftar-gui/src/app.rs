@@ -503,6 +503,23 @@ impl App {
     /// Add a child of `kind` to the selected gate/intermediate event (the
     /// root when nothing is selected) and select it. New primary events get a
     /// database entry with probability 0.
+    /// Number of different primary events in the tree (OpenFTA's "n basic
+    /// events in the tree" in its analysis dialogs).
+    pub fn basic_event_count(&self) -> usize {
+        let Some(doc) = &self.doc else {
+            return 0;
+        };
+        let mut ids = std::collections::BTreeSet::new();
+        for p in edit::all_paths(&doc.tree) {
+            if let Some(n) = edit::node_at(&doc.tree, &p) {
+                if n.kind.is_primary() {
+                    ids.insert(n.id.clone());
+                }
+            }
+        }
+        ids.len()
+    }
+
     /// Whether a new node can go under the selection (the top event when
     /// nothing is selected): a tree is open and the target is a gate or an
     /// intermediate event.
