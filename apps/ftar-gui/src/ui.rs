@@ -476,6 +476,20 @@ impl App {
                     });
                 });
                 ui.menu_button("Help", |ui| {
+                    // OpenFTA's five pages first, then ftar's own two
+                    for (label, topic) in [
+                        ("Help on Help", "Help menu"),
+                        ("Index", "Overview"),
+                        ("User Support", "User support"),
+                        ("History", "History"),
+                        ("Copyright", "Copyright"),
+                    ] {
+                        if ui.button(label).clicked() {
+                            ui.close();
+                            self.show_help(Some(topic));
+                        }
+                    }
+                    ui.separator();
                     if ui.button("User guide").clicked() {
                         ui.close();
                         self.show_help(None);
