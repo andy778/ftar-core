@@ -268,3 +268,26 @@ It needs GNU time, gcc, python3 and cargo, and builds `ftar` (release) and the C
 
 The tables above come from two script runs, because `target/` was deleted from under the first run partway through:
 the `rand` rows and the Monte Carlo rows are from the second run (same settings, `GEN` set explicitly).
+
+## Update after #118 (cut set memory)
+
+The tables above were measured at commit `8ca08ca`. Issue #118 changed the engine to intern event names to `u32` ids
+(sorted boxed slices while computing, shared `Arc<str>` names in the result) and to skip absorption checks between
+equal-order sets. The ftar columns above for the `andor` rows are therefore out of date. This section was **not** a
+full re-run: it is ftar only, one run per cell, same machine and commands (`/usr/bin/time -v`, `ftar cutsets TREE` and
+`ftar prob TREE --terms 2 --time 1`), measured on 2026-11-23 with the #118 change on top of `550e00f` (v0.3.0). The C
+columns are unchanged from above.
+
+| tree | cut sets | cut sets: memory before | after | time before | after | prob: memory before | after | time before | after |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| andor10 | 1024 | 4.3 MB | 3.8 MB | 40 ms | 10 ms | 4.8 MB | 4.0 MB | 50 ms | 20 ms |
+| andor11 | 2048 | 5.7 MB | 4.2 MB | 140 ms | 10 ms | 6.1 MB | 4.4 MB | 210 ms | 70 ms |
+| andor12 | 4096 | 10.3 MB | 4.5 MB | 630 ms | 10 ms | 14.7 MB | 5.4 MB | 880 ms | 230 ms |
+| andor13 | 8192 | 20.2 MB | 5.5 MB | 2.44 s | 20 ms | 26.6 MB | 7.0 MB | 3.51 s | 1.04 s |
+| andor14 | 16384 | 37.4 MB | 7.5 MB | 9.45 s | 30 ms | 50.5 MB | 10.6 MB | 14.4 s | 4.2 s |
+| orand1000 | 1000 | 6.0 MB | 5.9 MB | 20 ms | 10 ms | 6.3 MB | 5.8 MB | 40 ms | 20 ms |
+| orand5000 | 5000 | 20.2 MB | 20.2 MB | 260 ms | 20 ms | - | - | - | - |
+| theatre, lift | 2, 12 | 3.6 MB | 3.7 MB | - | - | - | - | - | - |
+
+andor14 is now 7.5 MB for cut sets (C: 4.8 MB, 1.6x instead of 7.8x) and 10.6 MB for probability (C: 6.3 MB). The
+probability time on the andor rows is dominated by the two inclusion-exclusion terms, which are unchanged.
