@@ -1484,7 +1484,7 @@ fn rgb32(c: ftar_render::prefs::Rgb) -> Color32 {
 }
 
 /// Open a file with the system's default application (the browser, for HTML).
-fn open_with_default_app(path: &std::path::Path) -> std::io::Result<()> {
+pub(crate) fn open_with_default_app(path: &std::path::Path) -> std::io::Result<()> {
     use std::process::Command;
     #[cfg(target_os = "windows")]
     let mut cmd = {

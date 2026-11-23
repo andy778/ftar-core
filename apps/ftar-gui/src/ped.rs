@@ -12,6 +12,8 @@ use ftar_core::write::write_ped;
 use ftar_core::{EventType, PrimaryEvent, PrimaryEventDb};
 
 use crate::app::{App, EventForm};
+use crate::toolbar::{icon_button, Icon};
+use crate::ui::open_with_default_app;
 
 /// State of the database window. It holds its own database, independent of
 /// the open tree's.
@@ -146,6 +148,73 @@ impl App {
     }
 
     /// Select event `id` and load it into the form.
+    /// Write the database as a printable page (the text export, in the page
+    /// setup's sheet size) that opens the print dialog.
+    pub fn ped_prepare_print(&mut self) -> Result<PathBuf, String> {
+        let name = self.ped.name();
+        let text = database::export_text(&self.ped.db, &name);
+        let html = ftar_render::report_html(
+            &format!(
+                "Primary event database {}",
+                if name.is_empty() { "(unnamed)" } else { &name }
+            ),
+            &text,
+            true,
+            &self.preview.setup,
+        );
+        let path = std::env::temp_dir().join(format!(
+            "ftar_ped_print_{}_{}.html",
+            std::process::id(),
+            self.ped.db.events.len()
+        ));
+        let res = std::fs::write(&path, html)
+            .map(|_| path.clone())
+            .map_err(|e| format!("{}: {e}", path.display()));
+        match &res {
+            Ok(p) => {
+                self.ped.error = None;
+                self.ped.status = Some(format!("Print page written to {}", p.display()));
+            }
+            Err(e) => self.ped.error = Some(e.clone()),
+        }
+        res
+    }
+
+    fn ped_print_now(&mut self) {
+        if let Ok(p) = self.ped_prepare_print() {
+            if let Err(e) = open_with_default_app(&p) {
+                self.ped.error = Some(format!("could not open the print page: {e}"));
+            }
+        }
+    }
+
+    fn ped_open_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("Primary event database", &["ped"])
+            .pick_file()
+        {
+            self.ped_open(&p);
+        }
+    }
+
+    fn ped_save_or_dialog(&mut self) {
+        if self.ped.path.is_some() {
+            self.ped_save();
+        } else {
+            self.ped_save_as_dialog();
+        }
+    }
+
+    fn ped_export_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("Text files", &["txt"])
+            .set_file_name("primary_events.txt")
+            .save_file()
+        {
+            self.ped_export_text(&p);
+        }
+    }
+
     /// Empty the form for a new event; the database is not changed.
     pub fn ped_clear(&mut self) {
         self.ped.selected = None;
@@ -359,36 +428,107 @@ impl App {
             .open(&mut open)
             .default_size([640.0, 420.0])
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    if ui.button("New").clicked() {
-                        self.ped_new();
-                    }
-                    if ui.button("Open...").clicked() {
-                        if let Some(p) = rfd::FileDialog::new()
-                            .add_filter("Primary event database", &["ped"])
-                            .pick_file()
-                        {
-                            self.ped_open(&p);
+                let has_doc = self.doc.is_some();
+                egui::MenuBar::new().ui(ui, |ui| {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("New").clicked() {
+                            ui.close();
+                            self.ped_new();
                         }
-                    }
-                    if ui.button("Save").clicked() {
-                        if self.ped.path.is_some() {
-                            self.ped_save();
-                        } else {
+                        if ui.button("Open...").clicked() {
+                            ui.close();
+                            self.ped_open_dialog();
+                        }
+                        if ui.button("Save").clicked() {
+                            ui.close();
+                            self.ped_save_or_dialog();
+                        }
+                        if ui.button("Save As...").clicked() {
+                            ui.close();
                             self.ped_save_as_dialog();
                         }
-                    }
-                    if ui.button("Save As...").clicked() {
-                        self.ped_save_as_dialog();
-                    }
-                    if ui.button("Export Text File...").clicked() {
-                        if let Some(p) = rfd::FileDialog::new()
-                            .add_filter("Text files", &["txt"])
-                            .set_file_name("primary_events.txt")
-                            .save_file()
-                        {
-                            self.ped_export_text(&p);
+                        if ui.button("Export Text File...").clicked() {
+                            ui.close();
+                            self.ped_export_dialog();
                         }
+                        if ui.button("Print...").clicked() {
+                            ui.close();
+                            self.ped_print_now();
+                        }
+                        if ui.button("Close").clicked() {
+                            ui.close();
+                            self.ped.open = false;
+                        }
+                    });
+                    ui.menu_button("Edit", |ui| {
+                        if ui.button("Apply event").clicked() {
+                            ui.close();
+                            self.ped_apply();
+                        }
+                        if ui.button("Clear").clicked() {
+                            ui.close();
+                            self.ped_clear();
+                        }
+                        if ui.button("Delete event").clicked() {
+                            ui.close();
+                            self.ped_delete();
+                        }
+                        ui.separator();
+                        if ui
+                            .add_enabled(has_doc, egui::Button::new("Copy to tree database"))
+                            .clicked()
+                        {
+                            ui.close();
+                            self.ped_copy_to_tree(true);
+                        }
+                        if ui
+                            .add_enabled(has_doc, egui::Button::new("Copy from tree database"))
+                            .clicked()
+                        {
+                            ui.close();
+                            self.ped_copy_from_tree(true);
+                        }
+                        if ui
+                            .add_enabled(has_doc, egui::Button::new("Link tree event"))
+                            .clicked()
+                        {
+                            ui.close();
+                            self.ped_link();
+                        }
+                    });
+                    ui.menu_button("Help", |ui| {
+                        if ui.button("Primary events help").clicked() {
+                            ui.close();
+                            self.show_help(Some("Primary events"));
+                        }
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    if icon_button(ui, Icon::New, "New", true) {
+                        self.ped_new();
+                    }
+                    if icon_button(ui, Icon::Open, "Open...", true) {
+                        self.ped_open_dialog();
+                    }
+                    if icon_button(ui, Icon::Save, "Save", true) {
+                        self.ped_save_or_dialog();
+                    }
+                    if icon_button(ui, Icon::Print, "Print...", true) {
+                        self.ped_print_now();
+                    }
+                    ui.separator();
+                    if icon_button(ui, Icon::Delete, "Delete event", true) {
+                        self.ped_delete();
+                    }
+                    if icon_button(ui, Icon::Copy, "Copy to tree database", has_doc) {
+                        self.ped_copy_to_tree(true);
+                    }
+                    if icon_button(ui, Icon::Paste, "Copy from tree database", has_doc) {
+                        self.ped_copy_from_tree(true);
+                    }
+                    if icon_button(ui, Icon::Link, "Link tree event", has_doc) {
+                        self.ped_link();
                     }
                 });
                 let name = self.ped.name();
@@ -476,27 +616,6 @@ impl App {
                                 self.show_help(Some("Primary events"));
                             }
                         });
-                        ui.horizontal(|ui| {
-                            let has_doc = self.doc.is_some();
-                            if ui
-                                .add_enabled(has_doc, egui::Button::new("Copy to tree database"))
-                                .clicked()
-                            {
-                                self.ped_copy_to_tree(true);
-                            }
-                            if ui
-                                .add_enabled(has_doc, egui::Button::new("Copy from tree database"))
-                                .clicked()
-                            {
-                                self.ped_copy_from_tree(true);
-                            }
-                            if ui
-                                .add_enabled(has_doc, egui::Button::new("Link tree event"))
-                                .clicked()
-                            {
-                                self.ped_link();
-                            }
-                        });
                     });
                 });
                 if let Some(e) = &self.ped.error {
@@ -506,7 +625,7 @@ impl App {
                     ui.label(s);
                 }
             });
-        self.ped.open = open;
+        self.ped.open = open && self.ped.open;
     }
 
     fn ped_save_as_dialog(&mut self) {
