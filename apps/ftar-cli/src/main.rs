@@ -130,11 +130,7 @@ fn run() -> Result<(), String> {
             let sets = minimal_cut_sets_limited(&proj.tree, order).map_err(|e| e.to_string())?;
             println!("{} minimal cut sets", sets.len());
             for (i, s) in sets.iter().enumerate() {
-                println!(
-                    "{:>4}  {}",
-                    i + 1,
-                    s.iter().cloned().collect::<Vec<_>>().join(" ")
-                );
+                println!("{:>4}  {}", i + 1, s.join(" "));
             }
         }
         "prob" => {
@@ -150,12 +146,7 @@ fn run() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
             println!("Minimal cut set probabilities:");
             for (i, (cs, p)) in r.cut_sets.iter().enumerate() {
-                println!(
-                    "{:>4}  {:<40} {:E}",
-                    i + 1,
-                    cs.iter().cloned().collect::<Vec<_>>().join(" "),
-                    p
-                );
+                println!("{:>4}  {:<40} {:E}", i + 1, cs.join(" "), p);
             }
             println!("\nProbability of top level event:");
             for (k, (t, s)) in r.terms.iter().zip(&r.partial_sums).enumerate() {

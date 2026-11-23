@@ -1284,7 +1284,7 @@ impl App {
             .ok_or("run the Monte Carlo analysis first")?;
         let mut out = String::from("rank,failures,probability,events\r\n");
         for (i, (cs, n)) in r.modes.iter().enumerate() {
-            let events = cs.iter().cloned().collect::<Vec<_>>().join(" ");
+            let events = cs.join(" ");
             out.push_str(&format!(
                 "{},{},{:e},{}\r\n",
                 i + 1,

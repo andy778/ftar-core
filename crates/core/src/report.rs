@@ -88,9 +88,13 @@ fn pad(s: &str, width: usize) -> String {
 /// Port of `BitPara`/`ParaGrow`: event ids (in `events` order) as lines of at
 /// most `width` characters, every id preceded by a space.
 fn paragraph(set: &CutSet, events: &[String], width: usize) -> Vec<String> {
-    let mut ids: Vec<&String> = events.iter().filter(|e| set.contains(*e)).collect();
+    let mut ids: Vec<&str> = events
+        .iter()
+        .filter(|e| set.contains(e))
+        .map(String::as_str)
+        .collect();
     // Events missing from the order list are appended alphabetically rather than lost.
-    ids.extend(set.iter().filter(|e| !events.contains(e)));
+    ids.extend(set.iter().filter(|e| !events.iter().any(|x| x == e)));
     let mut lines: Vec<String> = Vec::new();
     for id in ids {
         let s = format!(" {id}");
@@ -564,12 +568,12 @@ pub fn failure_statistics_report(tree_name: &str, time: &str, stats: &FailureSta
     let _ = write!(out, "Other failures (not kept) = {}\n\n", stats.other());
     out.push_str("Ranked failure modes:\n\n");
     for (i, m) in stats.ranked().iter().enumerate() {
-        let ids = m.events.iter().cloned().collect::<Vec<_>>().join(" ");
+        let ids = m.events.join(" ");
         let _ = writeln!(out, "({:<3}) {} - {}", i, ids, m.count);
     }
     out.push_str("\nCompressed (minimal) modes:\n\n");
     for (i, m) in stats.compress().iter().enumerate() {
-        let ids = m.events.iter().cloned().collect::<Vec<_>>().join(" ");
+        let ids = m.events.join(" ");
         let _ = writeln!(out, "({:<3}) {} - {}", i, ids, m.count);
     }
     out
