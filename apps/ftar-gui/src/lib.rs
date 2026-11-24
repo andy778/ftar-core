@@ -6,7 +6,6 @@
 mod app;
 mod crash;
 mod help;
-pub use ftar_core::layout;
 pub use help::HelpState;
 mod ped;
 mod prefs_ui;
