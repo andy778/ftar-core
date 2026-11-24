@@ -4,3 +4,10 @@
 test_tool = "nextest"
 # Build tooling, not shipped code.
 exclude_globs = ["xtask/**"]
+
+# Equivalent mutants: no test can tell them apart from the real code, so they are not misses.
+exclude_re = [
+    # analysis.rs collect_ids: interning extra names (gate ids, an empty id) is harmless; the
+    # interner only has to hold every primary event id, and an empty id fails in `eval` anyway.
+    'replace && with \|\| in collect_ids',
+]
