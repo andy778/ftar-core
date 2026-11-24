@@ -15,6 +15,8 @@ commands:
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
   draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
+  bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)
+  unbundle   ftar unbundle <bundle.zip> [dir]      unpack a bundle (default dir: the zip's name); never overwrites
   tools      list the JSON automation tools (name, description, schema)
   call       ftar call <tool> [json-args]    run one tool, print the JSON result
   run        ftar run <script.json>          run a JSON script (steps of {tool, args})
@@ -52,6 +54,8 @@ fn run() -> Result<(), String> {
     };
     match cmd.as_str() {
         "draw" => return draw(rest),
+        "bundle" => return bundle(rest),
+        "unbundle" => return unbundle(rest),
         "mcp" => return mcp(rest),
         "tools" | "call" | "run" => return automation(&args),
         _ => {}
@@ -287,6 +291,39 @@ fn mcp(args: &[String]) -> Result<(), String> {
 }
 
 /// `ftar draw tree.fta out.png [--scale S]`: the tree as PNG, SVG or a printable HTML page.
+fn bundle(args: &[String]) -> Result<(), String> {
+    let tree = std::path::Path::new(
+        args.first()
+            .ok_or("usage: ftar bundle <tree.fta> [out.zip]")?,
+    );
+    let out = args
+        .get(1)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| ftar_bundle::default_bundle_path(tree));
+    let bytes = ftar_bundle::export(tree, env!("CARGO_PKG_VERSION"))?;
+    std::fs::write(&out, bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    println!("wrote {}", out.display());
+    Ok(())
+}
+
+fn unbundle(args: &[String]) -> Result<(), String> {
+    let zip = std::path::Path::new(
+        args.first()
+            .ok_or("usage: ftar unbundle <bundle.zip> [dir]")?,
+    );
+    let dest = args
+        .get(1)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| zip.with_extension(""));
+    let bytes = std::fs::read(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    let got = ftar_bundle::import(&bytes, &dest)?;
+    println!("unpacked {} files into {}", got.files.len(), dest.display());
+    if let Some(t) = got.tree {
+        println!("tree: {}", t.display());
+    }
+    Ok(())
+}
+
 fn draw(args: &[String]) -> Result<(), String> {
     use ftar_core::project::Document;
     use ftar_render::{print_html, svg_to_png, tree_svg, PrintOptions, SvgOptions};

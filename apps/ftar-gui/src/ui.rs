@@ -202,6 +202,17 @@ impl App {
                         self.export_modes_csv_dialog();
                     }
                     if ui
+                        .add_enabled(has_doc, egui::Button::new("Export bug report bundle..."))
+                        .clicked()
+                    {
+                        ui.close();
+                        self.export_bundle_dialog();
+                    }
+                    if ui.button("Import bundle...").clicked() {
+                        ui.close();
+                        self.import_bundle_dialog();
+                    }
+                    if ui
                         .add_enabled(has_doc, egui::Button::new("Export image..."))
                         .clicked()
                     {
@@ -552,6 +563,32 @@ impl App {
             .save_file()
         {
             let _ = self.export_report(&p);
+        }
+    }
+
+    fn export_bundle_dialog(&mut self) {
+        if let Some(p) = rfd::FileDialog::new()
+            .add_filter("Zip bundle", &["zip"])
+            .set_file_name(self.default_bundle_name())
+            .save_file()
+        {
+            let _ = self.export_bundle(&p);
+        }
+    }
+
+    /// Pick a bundle, then an empty folder to unpack it into.
+    fn import_bundle_dialog(&mut self) {
+        let Some(zip) = rfd::FileDialog::new()
+            .add_filter("Zip bundle", &["zip"])
+            .pick_file()
+        else {
+            return;
+        };
+        if let Some(dest) = rfd::FileDialog::new()
+            .set_title("Unpack the bundle into (an empty folder)")
+            .pick_folder()
+        {
+            let _ = self.import_bundle(&zip, &dest);
         }
     }
 

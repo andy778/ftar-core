@@ -1,0 +1,13 @@
+[package]
+name = "ftar-bundle"
+version = "0.1.1"
+edition.workspace = true
+license.workspace = true
+description = "Zip bundles of a tree with its database, transfer-in trees and reports, for bug reports"
+
+[dependencies]
+ftar-core = { path = "../core" }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

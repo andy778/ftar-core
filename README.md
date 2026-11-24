@@ -38,6 +38,7 @@ Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --tri
 - [x] Preferences (Edit > Preferences): pen, background, highlight and per-symbol fill colours plus monochrome mode, saved between sessions and used by the canvas, image export and print (headless: `ftar_render::Preferences`)
 - [x] Image export (PNG/SVG) and printing: `ftar-render` draws the tree headlessly; GUI File > Export image / Print; `ftar draw`; MCP/automation `tree_export`
 - [x] Page setup and print preview: page size, orientation, fit to one sheet or split across sheets (`ftar_render::page`); GUI File > Page setup and print preview; `ftar draw --page-size/--orientation/--fit/--sheet`; `tree_export` page options
+- [x] Bug report bundles: a zip of a tree with its `.ped`, transfer-in trees and saved reports, since GitHub refuses `.fta`/`.ped` attachments; GUI File > Export bug report bundle / Import bundle, `ftar bundle` / `ftar unbundle` (`ftar-bundle`)
 - [x] Fuzzing: cargo-fuzz targets for the `.fta`/`.ped` parsers, analysis and the MCP server, run on every PR by ClusterFuzzLite (fuzz/README.md)
 
 ## Contributing
