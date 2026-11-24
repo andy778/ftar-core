@@ -1,0 +1,12 @@
+# cargo-nextest settings (`cargo xtask test` uses nextest when it is installed).
+# CI installs exactly this version (.github/workflows/ci.yml); an older one refuses to run.
+nextest-version = "0.9.150"
+
+[profile.default]
+# Report every failing test in one run, as `cargo xtask ci` promises.
+fail-fast = false
+
+[profile.ci]
+fail-fast = false
+# A hung test fails after 2 minutes instead of eating the job's timeout.
+slow-timeout = { period = "30s", terminate-after = 4 }

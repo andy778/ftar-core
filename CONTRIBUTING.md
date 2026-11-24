@@ -40,6 +40,34 @@ Orientation: [docs/architecture.md](docs/architecture.md) (layers and crates),
 [docs/VERIFICATION.md](docs/VERIFICATION.md) (what is proven equal to OpenFTA), [docs/mcp.md](docs/mcp.md)
 (automation and the MCP server). Fuzzing is described in [fuzz/README.md](fuzz/README.md).
 
+The Python helper scripts (`tools/bench`) are linted and formatted with ruff (rules, including
+complexity limits, in [ruff.toml](ruff.toml)); CI runs `.github/workflows/ruff.yml` when they change:
+
+```sh
+uvx ruff check .     # lint
+uvx ruff format .    # format
+```
+
+### Test quality: mutation testing and coverage
+
+Passing tests only help if they would fail on a bug. Two optional tools check that (not part of
+`cargo xtask ci`):
+
+```sh
+cargo xtask mutants      # mutation-test the Rust lines changed since origin/master (cargo install cargo-mutants --locked)
+cargo xtask coverage     # line coverage as HTML (cargo install cargo-llvm-cov --locked; rustup component add llvm-tools-preview)
+```
+
+`cargo xtask mutants` makes small deliberate bugs in the changed code (flip a `<`, return a default)
+and runs the tests against each. A **missed** mutant means no test noticed: add or tighten a test.
+CI runs the same on every pull request (`.github/workflows/mutants.yml`, fails on missed mutants in
+the PR's changes) and over the whole workspace weekly (a report in the job summary and artifacts). The weekly run on
+`master` also publishes the **mutation score** (caught / (caught + missed + timed out)) for the README
+badge, as `mutants.json` on the `badges` branch.
+Coverage runs on every pull request and push to `master` (`.github/workflows/coverage.yml`); the
+per-file table is in the job summary, and the total is on Codecov (README badge). It has no threshold: use it to find untested code, and
+mutation testing to check the tested code is really checked.
+
 ## Rules that reviews check
 
 - **Layering.** `crates/*` are headless libraries and never depend on egui, eframe, winit, rfd or any

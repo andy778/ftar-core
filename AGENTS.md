@@ -22,7 +22,7 @@ Every `.fta`, `.ped`, script and keystroke is untrusted input. In non-test code:
 - Prove a new test fails without the fix.
 
 ## 5. Gates before every commit
-`cargo xtask ci` = `fmt --check`, `clippy -D warnings`, `layers`, `test --workspace`. CI runs the same command on Linux and Windows. Do not weaken a gate to get green.
+`cargo xtask ci` = `fmt --check`, `clippy -D warnings`, `layers`, `test` (cargo-nextest when installed, plus doctests), `deny` (bans, licences, sources; skipped locally without cargo-deny). CI runs the same command on Linux and Windows, and nightly on macOS. Do not weaken a gate to get green.
 
 ## 6. Parallel agents
 Use one git worktree and one `CARGO_TARGET_DIR` per agent, with `CARGO_INCREMENTAL=0`, and delete the target dir (and the worktree) once the branch is merged. Keep per-agent target dirs: a shared one makes parallel agents block on cargo's build lock. Touch only the crate/files your task names; add one `pub mod` line per new module. Commit to your branch; the coordinating agent merges. Never push `master` directly from a worktree agent.

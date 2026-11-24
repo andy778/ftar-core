@@ -14,7 +14,7 @@ Modelled on the layered, headless-first layout of PdfCraft (storytold/pdfcraft):
 | `apps/ftar-cli` | `ftar` command line: analyses, `tools`/`call`/`run` for the automation tools, `mcp` for the MCP server |
 | `apps/ftar-gui` | egui desktop app; testable headless with `egui_kittest` |
 | `tools/openfta-native` | Headless build of the original OpenFTA C engine; makes the report fixtures ftar is compared against (not built in CI) |
-| `xtask` | `cargo xtask ci|fmt|clippy|test|layers` |
+| `xtask` | `cargo xtask ci|fmt|clippy|layers|test|deny` |
 
 ## Layers (enforced by `cargo xtask layers`)
 

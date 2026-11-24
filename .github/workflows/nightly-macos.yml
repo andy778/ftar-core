@@ -1,0 +1,40 @@
+name: Nightly macOS
+
+# The full gate on macOS, each night and on demand. Pull requests and master run Linux and
+# Windows only (ci.yml), and release.yml builds macOS without running the tests, so this leg
+# finds a macOS-only failure within a day instead of at release time.
+on:
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  NEXTEST_PROFILE: ci
+
+jobs:
+  gate:
+    name: cargo xtask ci (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-nextest@0.9.150,cargo-deny@0.20.2
+      - name: Gates (fmt, clippy, layers, tests incl. headless GUI, deny)
+        run: cargo xtask ci
