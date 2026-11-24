@@ -1,0 +1,45 @@
+name: Workflow lint
+
+# actionlint (with shellcheck for `run:` scripts) over the workflows, in seconds and without a
+# Rust build, so a broken workflow fails here instead of after it is merged.
+on:
+  push:
+    branches: [master]
+    paths: [".github/workflows/**", ".github/actionlint.yaml"]
+  pull_request:
+    paths: [".github/workflows/**", ".github/actionlint.yaml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actionlint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The official release binary, checked against a pinned SHA-256 (taiki-e/install-action
+      # does not ship actionlint).
+      - name: Install actionlint
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${tarball}"
+          echo "${SHA256}  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP/actionlint" actionlint
+          echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
+      # shellcheck is preinstalled on the Ubuntu runner; actionlint uses it for `run:` blocks.
+      - name: actionlint
+        run: actionlint -color

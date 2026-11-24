@@ -17,6 +17,8 @@ todo = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
+# A function too tangled to follow (nesting, branches, early exits). Threshold in clippy.toml.
+cognitive_complexity = "warn"
 
 [profile.dev]
 debug = "line-tables-only"
