@@ -58,127 +58,138 @@ impl App {
                     ui.label("Open or create a tree first.");
                     return;
                 }
-                let setup = &mut self.preview.setup;
-                ui.horizontal_wrapped(|ui| {
-                    egui::ComboBox::from_label("page size")
-                        .selected_text(setup.size.name())
-                        .show_ui(ui, |ui| {
-                            for s in PageSize::ALL {
-                                ui.selectable_value(&mut setup.size, s, s.name());
-                            }
-                        });
-                    egui::ComboBox::from_label("orientation")
-                        .selected_text(setup.orientation.name())
-                        .show_ui(ui, |ui| {
-                            for o in [Orientation::Landscape, Orientation::Portrait] {
-                                ui.selectable_value(&mut setup.orientation, o, o.name());
-                            }
-                        });
-                    egui::ComboBox::from_label("fit")
-                        .selected_text(match setup.fit {
-                            Fit::FitToPage => "Fit to one page",
-                            Fit::SplitPages => "Split across pages",
-                        })
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut setup.fit, Fit::FitToPage, "Fit to one page");
-                            ui.selectable_value(
-                                &mut setup.fit,
-                                Fit::SplitPages,
-                                "Split across pages",
-                            );
-                        });
-                });
-                ui.horizontal_wrapped(|ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut setup.margin_mm)
-                            .range(0.0..=40.0)
-                            .suffix(" mm"),
-                    )
-                    .labelled_by(ui.label("margin").id);
-                    if setup.fit == Fit::SplitPages {
-                        ui.add(
-                            egui::DragValue::new(&mut setup.scale_percent)
-                                .range(10.0..=400.0)
-                                .suffix(" %"),
-                        )
-                        .labelled_by(ui.label("scale").id);
-                    }
-                });
-                ui.checkbox(
-                    &mut self.image_probabilities,
-                    "Probabilities in images and prints",
-                );
-                let setup = self.preview.setup;
-                let key = (
-                    self.version,
-                    setup,
-                    self.image_probabilities,
-                    self.preview.sheet,
-                );
-                if self.preview.tex.as_ref().is_none_or(|(k, _, _)| *k != key) {
-                    match self.preview_pixels(self.preview.sheet) {
-                        Ok((n, w, h, px)) => {
-                            let img = egui::ColorImage::from_rgba_premultiplied(
-                                [w as usize, h as usize],
-                                &px,
-                            );
-                            let tex = ctx.load_texture("print_preview", img, Default::default());
-                            self.preview.tex = Some((key, n, tex));
-                            self.preview.err = None;
-                        }
-                        Err(e) => {
-                            self.preview.tex = None;
-                            self.preview.err = Some(e);
-                        }
-                    }
-                }
-                if let Some(e) = &self.preview.err {
-                    ui.colored_label(egui::Color32::RED, e);
-                }
-                let count = self.preview.tex.as_ref().map_or(0, |(_, n, _)| *n);
-                if count > 0 {
-                    self.preview.sheet = self.preview.sheet.min(count - 1);
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add_enabled(self.preview.sheet > 0, egui::Button::new("Previous page"))
-                            .clicked()
-                        {
-                            self.preview.sheet -= 1;
-                        }
-                        ui.label(format!(
-                            "Page {} of {}{}",
-                            self.preview.sheet + 1,
-                            count,
-                            if count >= MAX_PAGES { " (maximum)" } else { "" }
-                        ));
-                        if ui
-                            .add_enabled(
-                                self.preview.sheet + 1 < count,
-                                egui::Button::new("Next page"),
-                            )
-                            .clicked()
-                        {
-                            self.preview.sheet += 1;
-                        }
-                        if ui.button("Print...").clicked() {
-                            self.print_now();
-                        }
-                    });
-                }
-                {
-                    if let Some((_, _, tex)) = &self.preview.tex {
-                        egui::ScrollArea::both().show(ui, |ui| {
-                            let avail = ui.available_width().max(200.0);
-                            let size = tex.size_vec2();
-                            let k = (avail / size.x).min(1.0);
-                            ui.add(
-                                egui::Image::new((tex.id(), size * k))
-                                    .alt_text("Print preview of the selected page"),
-                            );
-                        });
-                    }
-                }
+                self.preview_page_setup(ui);
+                self.preview_refresh(ui.ctx());
+                self.preview_pager(ui);
+                self.preview_image(ui);
             });
         self.preview.open = open;
+    }
+
+    /// Page size, orientation, fit, margin, scale and the probabilities option.
+    fn preview_page_setup(&mut self, ui: &mut egui::Ui) {
+        let setup = &mut self.preview.setup;
+        ui.horizontal_wrapped(|ui| {
+            egui::ComboBox::from_label("page size")
+                .selected_text(setup.size.name())
+                .show_ui(ui, |ui| {
+                    for s in PageSize::ALL {
+                        ui.selectable_value(&mut setup.size, s, s.name());
+                    }
+                });
+            egui::ComboBox::from_label("orientation")
+                .selected_text(setup.orientation.name())
+                .show_ui(ui, |ui| {
+                    for o in [Orientation::Landscape, Orientation::Portrait] {
+                        ui.selectable_value(&mut setup.orientation, o, o.name());
+                    }
+                });
+            egui::ComboBox::from_label("fit")
+                .selected_text(match setup.fit {
+                    Fit::FitToPage => "Fit to one page",
+                    Fit::SplitPages => "Split across pages",
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut setup.fit, Fit::FitToPage, "Fit to one page");
+                    ui.selectable_value(&mut setup.fit, Fit::SplitPages, "Split across pages");
+                });
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.add(
+                egui::DragValue::new(&mut setup.margin_mm)
+                    .range(0.0..=40.0)
+                    .suffix(" mm"),
+            )
+            .labelled_by(ui.label("margin").id);
+            if setup.fit == Fit::SplitPages {
+                ui.add(
+                    egui::DragValue::new(&mut setup.scale_percent)
+                        .range(10.0..=400.0)
+                        .suffix(" %"),
+                )
+                .labelled_by(ui.label("scale").id);
+            }
+        });
+        ui.checkbox(
+            &mut self.image_probabilities,
+            "Probabilities in images and prints",
+        );
+    }
+
+    /// Re-render the shown sheet when the tree, the setup or the page changed.
+    fn preview_refresh(&mut self, ctx: &egui::Context) {
+        let setup = self.preview.setup;
+        let key = (
+            self.version,
+            setup,
+            self.image_probabilities,
+            self.preview.sheet,
+        );
+        if self.preview.tex.as_ref().is_none_or(|(k, _, _)| *k != key) {
+            match self.preview_pixels(self.preview.sheet) {
+                Ok((n, w, h, px)) => {
+                    let img =
+                        egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], &px);
+                    let tex = ctx.load_texture("print_preview", img, Default::default());
+                    self.preview.tex = Some((key, n, tex));
+                    self.preview.err = None;
+                }
+                Err(e) => {
+                    self.preview.tex = None;
+                    self.preview.err = Some(e);
+                }
+            }
+        }
+    }
+
+    /// The render error, if any, and page navigation with Print.
+    fn preview_pager(&mut self, ui: &mut egui::Ui) {
+        if let Some(e) = &self.preview.err {
+            ui.colored_label(egui::Color32::RED, e);
+        }
+        let count = self.preview.tex.as_ref().map_or(0, |(_, n, _)| *n);
+        if count > 0 {
+            self.preview.sheet = self.preview.sheet.min(count - 1);
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(self.preview.sheet > 0, egui::Button::new("Previous page"))
+                    .clicked()
+                {
+                    self.preview.sheet -= 1;
+                }
+                ui.label(format!(
+                    "Page {} of {}{}",
+                    self.preview.sheet + 1,
+                    count,
+                    if count >= MAX_PAGES { " (maximum)" } else { "" }
+                ));
+                if ui
+                    .add_enabled(
+                        self.preview.sheet + 1 < count,
+                        egui::Button::new("Next page"),
+                    )
+                    .clicked()
+                {
+                    self.preview.sheet += 1;
+                }
+                if ui.button("Print...").clicked() {
+                    self.print_now();
+                }
+            });
+        }
+    }
+
+    fn preview_image(&self, ui: &mut egui::Ui) {
+        if let Some((_, _, tex)) = &self.preview.tex {
+            egui::ScrollArea::both().show(ui, |ui| {
+                let avail = ui.available_width().max(200.0);
+                let size = tex.size_vec2();
+                let k = (avail / size.x).min(1.0);
+                ui.add(
+                    egui::Image::new((tex.id(), size * k))
+                        .alt_text("Print preview of the selected page"),
+                );
+            });
+        }
     }
 }

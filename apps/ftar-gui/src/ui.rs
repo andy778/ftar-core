@@ -35,10 +35,115 @@ fn accepts_children(k: EventType) -> bool {
     k.is_gate() || k == EventType::Intermediate
 }
 
+/// Shortcuts the menu bar acts on after drawing its menus.
+#[allow(clippy::struct_excessive_bools)]
+struct BarKeys {
+    save: bool,
+    undo: bool,
+    redo: bool,
+    del: bool,
+    new: bool,
+    open: bool,
+    print: bool,
+}
+
+fn shortcut(ctx: &egui::Context, k: Key) -> String {
+    ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
+}
+
+/// Cut, copy, paste and link. They act on the tree unless a text field has the keyboard;
+/// backends send them as clipboard events, tests as key presses.
+fn clipboard_keys(ctx: &egui::Context) -> (bool, bool, bool, bool) {
+    if ctx.memory(|m| m.focused().is_some()) {
+        return (false, false, false, false);
+    }
+    ctx.input_mut(|i| {
+        let mut c = (
+            i.consume_key(Modifiers::COMMAND, Key::X),
+            i.consume_key(Modifiers::COMMAND, Key::C),
+            i.consume_key(Modifiers::COMMAND, Key::V),
+            i.consume_key(Modifiers::COMMAND, Key::I),
+        );
+        i.events.retain(|e| match e {
+            egui::Event::Cut => {
+                c.0 = true;
+                false
+            }
+            egui::Event::Copy => {
+                c.1 = true;
+                false
+            }
+            egui::Event::Paste(_) => {
+                c.2 = true;
+                false
+            }
+            _ => true,
+        });
+        c
+    })
+}
+
+/// OpenFTA's other shortcuts; a focused text field keeps Ctrl+A and the rest for itself.
+fn openfta_keys(ctx: &egui::Context) -> (bool, bool, bool, bool) {
+    if ctx.egui_wants_keyboard_input() {
+        return (false, false, false, false);
+    }
+    ctx.input_mut(|i| {
+        (
+            i.consume_key(Modifiers::COMMAND, Key::A),
+            i.consume_key(Modifiers::COMMAND, Key::D),
+            i.consume_key(Modifiers::COMMAND, Key::L),
+            i.consume_key(Modifiers::COMMAND, Key::R),
+        )
+    })
+}
+
 impl App {
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
-        // keyboard shortcuts
+        let keys = self.handle_shortcuts(&ctx);
+        egui::Panel::top("menu").show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                let has_doc = self.doc.is_some();
+                ui.menu_button("File", |ui| self.file_menu(ui, has_doc));
+                ui.menu_button("Edit", |ui| self.edit_menu(ui, has_doc));
+                ui.menu_button("View", |ui| self.view_menu(ui, has_doc));
+                ui.menu_button("Analysis", |ui| self.analysis_menu(ui, has_doc));
+                ui.menu_button("Report", |ui| self.report_menu(ui));
+                ui.menu_button("Help", |ui| self.help_menu(ui));
+                ui.separator();
+                if keys.undo && self.history.can_undo() {
+                    self.undo();
+                }
+                if keys.redo && self.history.can_redo() {
+                    self.redo();
+                }
+                ui.label(self.title());
+                if has_doc {
+                    self.database_field(ui);
+                }
+                if keys.save && has_doc {
+                    self.save_or_save_as();
+                }
+                if keys.new {
+                    self.request_new();
+                }
+                if keys.open {
+                    self.open_dialog();
+                }
+                if keys.print && has_doc {
+                    self.print_now();
+                }
+                if keys.del && self.selected.as_ref().is_some_and(|p| !p.is_empty()) {
+                    self.delete_selected();
+                }
+            });
+        });
+    }
+
+    /// Keyboard shortcuts. Most act at once; the ones the menu bar acts on after drawing its
+    /// menus are returned, so they still run in that order.
+    fn handle_shortcuts(&mut self, ctx: &egui::Context) -> BarKeys {
         let (zoom_in, zoom_out) = ctx.input_mut(|i| {
             (
                 i.consume_key(Modifiers::COMMAND, Key::Plus)
@@ -53,60 +158,17 @@ impl App {
                 self.zoom_out();
             }
         }
-        let (save, undo, redo, del, new, open, print) = ctx.input_mut(|i| {
-            (
-                i.consume_key(Modifiers::COMMAND, Key::S),
-                i.consume_key(Modifiers::COMMAND, Key::Z),
-                i.consume_key(Modifiers::COMMAND, Key::Y),
-                i.consume_key(Modifiers::NONE, Key::Delete),
-                i.consume_key(Modifiers::COMMAND, Key::N),
-                i.consume_key(Modifiers::COMMAND, Key::O),
-                i.consume_key(Modifiers::COMMAND, Key::P),
-            )
+        let keys = ctx.input_mut(|i| BarKeys {
+            save: i.consume_key(Modifiers::COMMAND, Key::S),
+            undo: i.consume_key(Modifiers::COMMAND, Key::Z),
+            redo: i.consume_key(Modifiers::COMMAND, Key::Y),
+            del: i.consume_key(Modifiers::NONE, Key::Delete),
+            new: i.consume_key(Modifiers::COMMAND, Key::N),
+            open: i.consume_key(Modifiers::COMMAND, Key::O),
+            print: i.consume_key(Modifiers::COMMAND, Key::P),
         });
-        // Cut, copy and paste act on the tree unless a text field has the keyboard;
-        // backends send them as clipboard events, tests as key presses.
-        let (cut, copy, paste, link) = if ctx.memory(|m| m.focused().is_some()) {
-            (false, false, false, false)
-        } else {
-            ctx.input_mut(|i| {
-                let mut c = (
-                    i.consume_key(Modifiers::COMMAND, Key::X),
-                    i.consume_key(Modifiers::COMMAND, Key::C),
-                    i.consume_key(Modifiers::COMMAND, Key::V),
-                    i.consume_key(Modifiers::COMMAND, Key::I),
-                );
-                i.events.retain(|e| match e {
-                    egui::Event::Cut => {
-                        c.0 = true;
-                        false
-                    }
-                    egui::Event::Copy => {
-                        c.1 = true;
-                        false
-                    }
-                    egui::Event::Paste(_) => {
-                        c.2 = true;
-                        false
-                    }
-                    _ => true,
-                });
-                c
-            })
-        };
-        // OpenFTA's other shortcuts; a focused text field keeps Ctrl+A and the rest for itself.
-        let (save_as, delete_key, shift_left, shift_right) = if ctx.egui_wants_keyboard_input() {
-            (false, false, false, false)
-        } else {
-            ctx.input_mut(|i| {
-                (
-                    i.consume_key(Modifiers::COMMAND, Key::A),
-                    i.consume_key(Modifiers::COMMAND, Key::D),
-                    i.consume_key(Modifiers::COMMAND, Key::L),
-                    i.consume_key(Modifiers::COMMAND, Key::R),
-                )
-            })
-        };
+        let (cut, copy, paste, link) = clipboard_keys(ctx);
+        let (save_as, delete_key, shift_left, shift_right) = openfta_keys(ctx);
         let quit_key = ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Q));
         let can_shift_now = self.selected.as_ref().is_some_and(|p| !p.is_empty());
         if save_as && self.doc.is_some() {
@@ -140,420 +202,409 @@ impl App {
         if self.quit {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
+        keys
+    }
 
-        egui::Panel::top("menu").show(ui, |ui| {
-            egui::MenuBar::new().ui(ui, |ui| {
-                let has_doc = self.doc.is_some();
-                let shortcut = |k| {
-                    ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, k))
-                };
-                ui.menu_button("File", |ui| {
-                    if ui
-                        .add(egui::Button::new("New").shortcut_text(shortcut(Key::N)))
-                        .clicked()
-                    {
-                        self.request_new();
-                        ui.close();
-                    }
-                    if ui
-                        .add(egui::Button::new("Open...").shortcut_text(shortcut(Key::O)))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.open_dialog();
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Save").shortcut_text(shortcut(Key::S)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.save_or_save_as();
-                    }
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Save As...").shortcut_text(shortcut(Key::A)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.save_as_dialog();
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Export report..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.export_report_dialog();
-                    }
-                    if ui
-                        .add_enabled(
-                            self.mc.is_some(),
-                            egui::Button::new("Export Monte Carlo failure modes (CSV)..."),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.export_modes_csv_dialog();
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Export bug report bundle..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.export_bundle_dialog();
-                    }
-                    if ui.button("Import bundle...").clicked() {
-                        ui.close();
-                        self.import_bundle_dialog();
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Export image..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.export_image_dialog();
-                    }
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Print...").shortcut_text(shortcut(Key::P)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.print_now();
-                    }
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Page setup and print preview..."),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.preview.open = true;
-                    }
-                    ui.checkbox(
-                        &mut self.image_probabilities,
-                        "Probabilities in images and prints",
-                    );
-                    ui.checkbox(&mut self.print_report, "Include the report when printing");
-                    ui.separator();
-                    if ui
-                        .add(egui::Button::new("Quit").shortcut_text(shortcut(Key::Q)))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.request_quit();
-                    }
-                });
-                ui.menu_button("Edit", |ui| {
-                    if ui
-                        .add_enabled(
-                            self.history.can_undo(),
-                            egui::Button::new("Undo").shortcut_text(shortcut(Key::Z)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.undo();
-                    }
-                    if ui
-                        .add_enabled(
-                            self.history.can_redo(),
-                            egui::Button::new("Redo").shortcut_text(shortcut(Key::Y)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.redo();
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(
-                            self.can_cut(),
-                            egui::Button::new("Cut").shortcut_text(shortcut(Key::X)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.cut_selected();
-                    }
-                    if ui
-                        .add_enabled(
-                            self.can_copy(),
-                            egui::Button::new("Copy").shortcut_text(shortcut(Key::C)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.copy_selected();
-                    }
-                    if ui
-                        .add_enabled(
-                            self.can_paste(),
-                            egui::Button::new("Paste").shortcut_text(shortcut(Key::V)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.paste();
-                    }
-                    ui.separator();
-                    let can_shift = self.selected.as_ref().is_some_and(|p| !p.is_empty());
-                    if ui
-                        .add_enabled(
-                            can_shift,
-                            egui::Button::new("Shift Left").shortcut_text(shortcut(Key::L)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.move_selected(-1);
-                    }
-                    if ui
-                        .add_enabled(
-                            can_shift,
-                            egui::Button::new("Shift Right").shortcut_text(shortcut(Key::R)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.move_selected(1);
-                    }
-                    if ui
-                        .add_enabled(
-                            self.can_link(),
-                            egui::Button::new("Link").shortcut_text(shortcut(Key::I)),
-                        )
-                        .on_disabled_hover_text(
-                            "Select a primary event in the tree and an event in the Primary event database window",
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.edit_link();
-                    }
-                    if ui
-                        .add_enabled(self.selected.is_some(), egui::Button::new("Selected..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.edit_selected();
-                    }
-                    ui.separator();
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Primary events..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.events_open = true;
-                    }
-                    if ui.button("Primary event database...").clicked() {
-                        ui.close();
-                        self.ped.open = true;
-                    }
-                    if ui.button("Preferences...").clicked() {
-                        ui.close();
-                        self.prefs_open = true;
-                    }
-                    ui.separator();
-                    let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
-                    if ui
-                        .add_enabled(
-                            can_delete,
-                            egui::Button::new("Delete selected").shortcut_text(shortcut(Key::D)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.delete_selected();
-                    }
-                });
-                ui.menu_button("View", |ui| {
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Tree Overview"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.overview_open = true;
-                    }
-                    ui.menu_button("Theme", |ui| {
-                        for (t, label) in [
-                            (ftar_render::Theme::System, "System"),
-                            (ftar_render::Theme::Light, "Light"),
-                            (ftar_render::Theme::Dark, "Dark"),
-                        ] {
-                            if ui
-                                .selectable_label(self.prefs.theme == t, label)
-                                .clicked()
-                            {
-                                ui.close();
-                                let mut p = self.prefs.clone();
-                                p.theme = t;
-                                self.set_prefs(p);
-                            }
-                        }
-                    });
-                    ui.separator();
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Zoom In").shortcut_text(shortcut(Key::Plus)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.zoom_in();
-                    }
-                    if ui
-                        .add_enabled(
-                            has_doc,
-                            egui::Button::new("Zoom Out").shortcut_text(shortcut(Key::Minus)),
-                        )
-                        .clicked()
-                    {
-                        ui.close();
-                        self.zoom_out();
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.set_zoom_percent = self.zoom_percent() as f32;
-                        self.set_zoom_open = true;
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Fit Tree"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.fit_next = true;
-                    }
-                });
-                ui.menu_button("Analysis", |ui| {
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Validate"))
-                        .clicked()
-                    {
-                        ui.close();
-                        self.validate();
-                    }
-                    ui.separator();
-                    for (tab, label) in [
-                        (Tab::CutSets, "Minimal Cut Sets..."),
-                        (Tab::Probability, "Numerical Probability..."),
-                        (Tab::MonteCarlo, "Monte Carlo Simulation..."),
-                    ] {
-                        if ui.add_enabled(has_doc, egui::Button::new(label)).clicked() {
-                            ui.close();
-                            self.show_analysis(tab);
-                        }
-                    }
-                });
-                ui.menu_button("Report", |ui| {
-                    ui.menu_button("Print", |ui| {
-                        for (k, label) in [
-                            (ReportKind::CutSets, "Qualitative Report"),
-                            (ReportKind::Probability, "Probability Report"),
-                            (ReportKind::MonteCarlo, "Monte Carlo Report"),
-                        ] {
-                            let on = self.saved_report_exists(k);
-                            if ui.add_enabled(on, egui::Button::new(label)).clicked() {
-                                ui.close();
-                                self.print_report_now(k);
-                            }
-                        }
-                    });
-                    ui.menu_button("View", |ui| {
-                        for (k, label) in [
-                            (ReportKind::CutSets, "Qualitative Report"),
-                            (ReportKind::Probability, "Probability Report"),
-                            (ReportKind::MonteCarlo, "Monte Carlo Report"),
-                        ] {
-                            let on = self.saved_report_exists(k);
-                            if ui.add_enabled(on, egui::Button::new(label)).clicked() {
-                                ui.close();
-                                let _ = self.view_saved_report(k);
-                            }
-                        }
-                    });
-                });
-                ui.menu_button("Help", |ui| {
-                    // OpenFTA's five pages first, then ftar's own two
-                    for (label, topic) in [
-                        ("Help on Help", "Help menu"),
-                        ("Index", "Overview"),
-                        ("User Support", "User support"),
-                        ("History", "History"),
-                        ("Copyright", "Copyright"),
-                    ] {
-                        if ui.button(label).clicked() {
-                            ui.close();
-                            self.show_help(Some(topic));
-                        }
-                    }
-                    ui.separator();
-                    if ui.button("User guide").clicked() {
-                        ui.close();
-                        self.show_help(None);
-                    }
-                    if ui.button("About ftar").clicked() {
-                        ui.close();
-                        self.show_help(Some(crate::help::ABOUT));
-                    }
-                });
-                ui.separator();
-                if undo && self.history.can_undo() {
-                    self.undo();
+    fn file_menu(&mut self, ui: &mut egui::Ui, has_doc: bool) {
+        if ui
+            .add(egui::Button::new("New").shortcut_text(shortcut(ui.ctx(), Key::N)))
+            .clicked()
+        {
+            self.request_new();
+            ui.close();
+        }
+        if ui
+            .add(egui::Button::new("Open...").shortcut_text(shortcut(ui.ctx(), Key::O)))
+            .clicked()
+        {
+            ui.close();
+            self.open_dialog();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(
+                has_doc,
+                egui::Button::new("Save").shortcut_text(shortcut(ui.ctx(), Key::S)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.save_or_save_as();
+        }
+        if ui
+            .add_enabled(
+                has_doc,
+                egui::Button::new("Save As...").shortcut_text(shortcut(ui.ctx(), Key::A)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.save_as_dialog();
+        }
+        ui.separator();
+        self.file_menu_output(ui, has_doc);
+        ui.separator();
+        if ui
+            .add(egui::Button::new("Quit").shortcut_text(shortcut(ui.ctx(), Key::Q)))
+            .clicked()
+        {
+            ui.close();
+            self.request_quit();
+        }
+    }
+
+    /// Reports, bundles, images and printing.
+    fn file_menu_output(&mut self, ui: &mut egui::Ui, has_doc: bool) {
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Export report..."))
+            .clicked()
+        {
+            ui.close();
+            self.export_report_dialog();
+        }
+        if ui
+            .add_enabled(
+                self.mc.is_some(),
+                egui::Button::new("Export Monte Carlo failure modes (CSV)..."),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.export_modes_csv_dialog();
+        }
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Export bug report bundle..."))
+            .clicked()
+        {
+            ui.close();
+            self.export_bundle_dialog();
+        }
+        if ui.button("Import bundle...").clicked() {
+            ui.close();
+            self.import_bundle_dialog();
+        }
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Export image..."))
+            .clicked()
+        {
+            ui.close();
+            self.export_image_dialog();
+        }
+        if ui
+            .add_enabled(
+                has_doc,
+                egui::Button::new("Print...").shortcut_text(shortcut(ui.ctx(), Key::P)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.print_now();
+        }
+        if ui
+            .add_enabled(
+                has_doc,
+                egui::Button::new("Page setup and print preview..."),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.preview.open = true;
+        }
+        ui.checkbox(
+            &mut self.image_probabilities,
+            "Probabilities in images and prints",
+        );
+        ui.checkbox(&mut self.print_report, "Include the report when printing");
+    }
+
+    fn edit_menu(&mut self, ui: &mut egui::Ui, has_doc: bool) {
+        self.edit_menu_history(ui);
+        ui.separator();
+        self.edit_menu_tree(ui, has_doc);
+    }
+
+    /// Undo, redo and the clipboard.
+    fn edit_menu_history(&mut self, ui: &mut egui::Ui) {
+        if ui
+            .add_enabled(
+                self.history.can_undo(),
+                egui::Button::new("Undo").shortcut_text(shortcut(ui.ctx(), Key::Z)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.undo();
+        }
+        if ui
+            .add_enabled(
+                self.history.can_redo(),
+                egui::Button::new("Redo").shortcut_text(shortcut(ui.ctx(), Key::Y)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.redo();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(
+                self.can_cut(),
+                egui::Button::new("Cut").shortcut_text(shortcut(ui.ctx(), Key::X)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.cut_selected();
+        }
+        if ui
+            .add_enabled(
+                self.can_copy(),
+                egui::Button::new("Copy").shortcut_text(shortcut(ui.ctx(), Key::C)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.copy_selected();
+        }
+        if ui
+            .add_enabled(
+                self.can_paste(),
+                egui::Button::new("Paste").shortcut_text(shortcut(ui.ctx(), Key::V)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.paste();
+        }
+    }
+
+    /// Moving, linking, editing and deleting tree events, and the other editors.
+    fn edit_menu_tree(&mut self, ui: &mut egui::Ui, has_doc: bool) {
+        let can_shift = self.selected.as_ref().is_some_and(|p| !p.is_empty());
+        if ui
+            .add_enabled(
+                can_shift,
+                egui::Button::new("Shift Left").shortcut_text(shortcut(ui.ctx(), Key::L)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.move_selected(-1);
+        }
+        if ui
+            .add_enabled(
+                can_shift,
+                egui::Button::new("Shift Right").shortcut_text(shortcut(ui.ctx(), Key::R)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.move_selected(1);
+        }
+        if ui
+            .add_enabled(
+                self.can_link(),
+                egui::Button::new("Link").shortcut_text(shortcut(ui.ctx(), Key::I)),
+            )
+            .on_disabled_hover_text(
+                "Select a primary event in the tree and an event in the Primary event database window",
+            )
+            .clicked()
+        {
+            ui.close();
+            self.edit_link();
+        }
+        if ui
+            .add_enabled(self.selected.is_some(), egui::Button::new("Selected..."))
+            .clicked()
+        {
+            ui.close();
+            self.edit_selected();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Primary events..."))
+            .clicked()
+        {
+            ui.close();
+            self.events_open = true;
+        }
+        if ui.button("Primary event database...").clicked() {
+            ui.close();
+            self.ped.open = true;
+        }
+        if ui.button("Preferences...").clicked() {
+            ui.close();
+            self.prefs_open = true;
+        }
+        ui.separator();
+        let can_delete = self.selected.as_ref().is_some_and(|p| !p.is_empty());
+        if ui
+            .add_enabled(
+                can_delete,
+                egui::Button::new("Delete selected").shortcut_text(shortcut(ui.ctx(), Key::D)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.delete_selected();
+        }
+    }
+
+    fn view_menu(&mut self, ui: &mut egui::Ui, has_doc: bool) {
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Tree Overview"))
+            .clicked()
+        {
+            ui.close();
+            self.overview_open = true;
+        }
+        ui.menu_button("Theme", |ui| {
+            for (t, label) in [
+                (ftar_render::Theme::System, "System"),
+                (ftar_render::Theme::Light, "Light"),
+                (ftar_render::Theme::Dark, "Dark"),
+            ] {
+                if ui.selectable_label(self.prefs.theme == t, label).clicked() {
+                    ui.close();
+                    let mut p = self.prefs.clone();
+                    p.theme = t;
+                    self.set_prefs(p);
                 }
-                if redo && self.history.can_redo() {
-                    self.redo();
-                }
-                ui.label(self.title());
-                if has_doc {
-                    let l = ui.label("database");
-                    let r = ui
-                        .add(
-                            egui::TextEdit::singleline(&mut self.buf.database)
-                                .hint_text("none")
-                                .desired_width(110.0),
-                        )
-                        .labelled_by(l.id);
-                    let current = self
-                        .doc
-                        .as_ref()
-                        .and_then(|d| d.tree.db_name.clone())
-                        .unwrap_or_default();
-                    if r.lost_focus() && self.buf.database.trim() != current {
-                        let name = self.buf.database.clone();
-                        self.set_database(&name);
-                    }
-                }
-                if save && has_doc {
-                    self.save_or_save_as();
-                }
-                if new {
-                    self.request_new();
-                }
-                if open {
-                    self.open_dialog();
-                }
-                if print && has_doc {
-                    self.print_now();
-                }
-                if del && self.selected.as_ref().is_some_and(|p| !p.is_empty()) {
-                    self.delete_selected();
-                }
-            });
+            }
         });
+        ui.separator();
+        if ui
+            .add_enabled(
+                has_doc,
+                egui::Button::new("Zoom In").shortcut_text(shortcut(ui.ctx(), Key::Plus)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.zoom_in();
+        }
+        if ui
+            .add_enabled(
+                has_doc,
+                egui::Button::new("Zoom Out").shortcut_text(shortcut(ui.ctx(), Key::Minus)),
+            )
+            .clicked()
+        {
+            ui.close();
+            self.zoom_out();
+        }
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Set Zoom..."))
+            .clicked()
+        {
+            ui.close();
+            self.set_zoom_percent = self.zoom_percent() as f32;
+            self.set_zoom_open = true;
+        }
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Fit Tree"))
+            .clicked()
+        {
+            ui.close();
+            self.fit_next = true;
+        }
+    }
+
+    fn analysis_menu(&mut self, ui: &mut egui::Ui, has_doc: bool) {
+        if ui
+            .add_enabled(has_doc, egui::Button::new("Validate"))
+            .clicked()
+        {
+            ui.close();
+            self.validate();
+        }
+        ui.separator();
+        for (tab, label) in [
+            (Tab::CutSets, "Minimal Cut Sets..."),
+            (Tab::Probability, "Numerical Probability..."),
+            (Tab::MonteCarlo, "Monte Carlo Simulation..."),
+        ] {
+            if ui.add_enabled(has_doc, egui::Button::new(label)).clicked() {
+                ui.close();
+                self.show_analysis(tab);
+            }
+        }
+    }
+
+    fn report_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Print", |ui| {
+            for (k, label) in [
+                (ReportKind::CutSets, "Qualitative Report"),
+                (ReportKind::Probability, "Probability Report"),
+                (ReportKind::MonteCarlo, "Monte Carlo Report"),
+            ] {
+                let on = self.saved_report_exists(k);
+                if ui.add_enabled(on, egui::Button::new(label)).clicked() {
+                    ui.close();
+                    self.print_report_now(k);
+                }
+            }
+        });
+        ui.menu_button("View", |ui| {
+            for (k, label) in [
+                (ReportKind::CutSets, "Qualitative Report"),
+                (ReportKind::Probability, "Probability Report"),
+                (ReportKind::MonteCarlo, "Monte Carlo Report"),
+            ] {
+                let on = self.saved_report_exists(k);
+                if ui.add_enabled(on, egui::Button::new(label)).clicked() {
+                    ui.close();
+                    let _ = self.view_saved_report(k);
+                }
+            }
+        });
+    }
+
+    fn help_menu(&mut self, ui: &mut egui::Ui) {
+        // OpenFTA's five pages first, then ftar's own two
+        for (label, topic) in [
+            ("Help on Help", "Help menu"),
+            ("Index", "Overview"),
+            ("User Support", "User support"),
+            ("History", "History"),
+            ("Copyright", "Copyright"),
+        ] {
+            if ui.button(label).clicked() {
+                ui.close();
+                self.show_help(Some(topic));
+            }
+        }
+        ui.separator();
+        if ui.button("User guide").clicked() {
+            ui.close();
+            self.show_help(None);
+        }
+        if ui.button("About ftar").clicked() {
+            ui.close();
+            self.show_help(Some(crate::help::ABOUT));
+        }
+    }
+
+    /// The tree's database name, applied when the field loses focus.
+    fn database_field(&mut self, ui: &mut egui::Ui) {
+        let l = ui.label("database");
+        let r = ui
+            .add(
+                egui::TextEdit::singleline(&mut self.buf.database)
+                    .hint_text("none")
+                    .desired_width(110.0),
+            )
+            .labelled_by(l.id);
+        let current = self
+            .doc
+            .as_ref()
+            .and_then(|d| d.tree.db_name.clone())
+            .unwrap_or_default();
+        if r.lost_focus() && self.buf.database.trim() != current {
+            let name = self.buf.database.clone();
+            self.set_database(&name);
+        }
     }
 
     fn export_report_dialog(&mut self) {
@@ -1330,208 +1381,7 @@ impl eframe::App for App {
 
         egui::Panel::right("analysis")
             .default_size(420.0)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let before = self.tab;
-                    ui.selectable_value(&mut self.tab, Tab::CutSets, "Cut sets");
-                    ui.selectable_value(&mut self.tab, Tab::Probability, "Probability");
-                    ui.selectable_value(&mut self.tab, Tab::MonteCarlo, "Monte Carlo");
-                    if self.tab != before {
-                        // the report to export follows the tab you are looking at
-                        self.report_kind = App::kind_for_tab(self.tab);
-                    }
-                });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    if self.doc.is_some() {
-                        ui.label(format!(
-                            "There are {} basic events in the tree",
-                            self.basic_event_count()
-                        ));
-                    }
-                    if ui.button("Analysis help").clicked() {
-                        self.show_help(Some("Analysis"));
-                    }
-                });
-                ui.horizontal(|ui| {
-                    let l = ui.label("max order (0 = all)");
-                    ui.add(egui::DragValue::new(&mut self.order).range(0..=50))
-                        .labelled_by(l.id);
-                });
-                match self.tab {
-                    Tab::Probability => {
-                        ui.horizontal(|ui| {
-                            let l = ui.label("terms");
-                            ui.add(egui::DragValue::new(&mut self.terms).range(1..=16))
-                                .labelled_by(l.id);
-                            let l = ui.label("unit time");
-                            ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
-                                .labelled_by(l.id);
-                        });
-                    }
-                    Tab::MonteCarlo => {
-                        ui.horizontal(|ui| {
-                            let l = ui.label("trials");
-                            ui.add(egui::DragValue::new(&mut self.trials).range(1..=100_000_000))
-                                .labelled_by(l.id);
-                            let l = ui.label("unit time");
-                            ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
-                                .labelled_by(l.id);
-                        });
-                        ui.horizontal(|ui| {
-                            egui::ComboBox::from_label("method")
-                                .selected_text(match self.mc_method {
-                                    Method::FirstFailure => "first failure (fast)",
-                                    Method::Direct => "direct",
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.mc_method,
-                                        Method::FirstFailure,
-                                        "first failure (fast)",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.mc_method,
-                                        Method::Direct,
-                                        "direct",
-                                    );
-                                });
-                            let l = ui.label("seed");
-                            ui.add(egui::DragValue::new(&mut self.seed))
-                                .labelled_by(l.id);
-                        });
-                    }
-                    Tab::CutSets => {}
-                }
-                if ui
-                    .add_enabled(self.doc.is_some(), egui::Button::new("Run"))
-                    .clicked()
-                {
-                    self.run_analysis();
-                }
-                ui.horizontal(|ui| {
-                    egui::ComboBox::from_label("report")
-                        .selected_text(self.report_kind.label())
-                        .show_ui(ui, |ui| {
-                            for k in ReportKind::ALL {
-                                ui.selectable_value(&mut self.report_kind, k, k.label());
-                            }
-                        });
-                    let has_doc = self.doc.is_some();
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Export report..."))
-                        .clicked()
-                    {
-                        self.export_report_dialog();
-                    }
-                    if ui
-                        .add_enabled(has_doc, egui::Button::new("Copy report"))
-                        .clicked()
-                    {
-                        match self.report_text(self.report_kind, &App::now_text()) {
-                            Ok(t) => {
-                                ctx.copy_text(t);
-                                self.status = Some("Report copied to the clipboard".into());
-                            }
-                            Err(e) => self.error = Some(e),
-                        }
-                    }
-                });
-                if self.tab == Tab::MonteCarlo
-                    && ui
-                        .add_enabled(
-                            self.mc.is_some(),
-                            egui::Button::new("Export failure modes (CSV)..."),
-                        )
-                        .clicked()
-                {
-                    self.export_modes_csv_dialog();
-                }
-                if let Some(e) = &self.error {
-                    ui.colored_label(Color32::LIGHT_RED, e);
-                }
-                ui.separator();
-                egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
-                    Tab::CutSets => {
-                        if let Some(cs) = &self.cut_sets {
-                            ui.label(format!("{} minimal cut sets", cs.len()));
-                            for (i, s) in cs.iter().enumerate() {
-                                ui.monospace(format!("{:>4}  {}", i + 1, s.join(" ")));
-                            }
-                        }
-                    }
-                    Tab::Probability => {
-                        if let Some(r) = &self.prob {
-                            ui.strong("Cut set probabilities");
-                            for (i, (cs, p)) in r.cut_sets.iter().enumerate() {
-                                ui.monospace(format!(
-                                    "{:>3} {:<28} {:.3E}",
-                                    i + 1,
-                                    cs.join(" "),
-                                    p
-                                ));
-                            }
-                            ui.add_space(6.0);
-                            ui.strong("Top event");
-                            for (k, (t, s)) in r.terms.iter().zip(&r.partial_sums).enumerate() {
-                                let b = if k % 2 == 0 { "upper" } else { "lower" };
-                                ui.monospace(format!(
-                                    "{:>2} terms {:+.3E} = {:.6E} ({b})",
-                                    k + 1,
-                                    t,
-                                    s
-                                ));
-                            }
-                            if r.exact {
-                                ui.monospace(format!("Exact value: {:.6E}", r.top));
-                            }
-                            ui.add_space(6.0);
-                            ui.strong("Primary events");
-                            for e in &r.events {
-                                ui.monospace(format!(
-                                    "{:<14} {:.3E} {:6.2}%",
-                                    e.id, e.contribution, e.importance_pct
-                                ));
-                            }
-                        }
-                    }
-                    Tab::MonteCarlo => {
-                        if let Some(r) = &self.mc {
-                            ui.monospace(format!("tests           {}", r.trials));
-                            ui.monospace(format!("system failures {}", r.system_failures));
-                            ui.monospace(match r.upper_bound_95() {
-                                Some(b) => format!(
-                                    "P(top)          < {b:.2E} (95%, no failures simulated)"
-                                ),
-                                None => format!(
-                                    "P(top)          {:.4E} +/- {:.2E}",
-                                    r.probability, r.std_error
-                                ),
-                            });
-                            ui.monospace(format!(
-                                "P(any failure)  {:.4E}",
-                                r.any_component_failure
-                            ));
-                            ui.add_space(6.0);
-                            ui.strong(format!("Failure modes ({})", r.modes.len()));
-                            for (cs, n) in r.modes.iter().take(40) {
-                                ui.monospace(format!(
-                                    "{:>8}  {:.3E}  {}",
-                                    n,
-                                    r.bas_prob * *n as f64 / r.trials.max(1) as f64,
-                                    cs.join(" ")
-                                ));
-                            }
-                            if r.modes.len() > 40 {
-                                ui.label(format!(
-                                    "... {} more (export to see all)",
-                                    r.modes.len() - 40
-                                ));
-                            }
-                        }
-                    }
-                });
-            });
+            .show(ui, |ui| self.analysis_panel(ui));
 
         self.status_bar(ui);
         self.details_panel(ui);
@@ -1552,105 +1402,327 @@ impl eframe::App for App {
         } else {
             ctx.global_style().visuals.panel_fill
         });
-        egui::CentralPanel::default().frame(panel).show(ui, |ui| {
-            let Some(scene) = self.scene() else {
-                ui.centered_and_justified(|ui| {
-                    ui.label("Open a .fta file (Open...), or start a New tree.")
-                });
-                return;
-            };
-            let rect = ui.available_rect_before_wrap();
-            let resp = ui.interact(
-                rect,
-                ui.scope_id().with("canvas_area"),
-                Sense::click_and_drag(),
-            );
+        egui::CentralPanel::default()
+            .frame(panel)
+            .show(ui, |ui| self.canvas_area(ui));
+    }
+}
 
-            let key = (rect.size(), scene.width, scene.height);
-            if self.fit_next || (self.auto_fit && self.fit_key != Some(key)) {
-                let (z, pan) = fit(rect.size(), Vec2::new(scene.width, scene.height));
-                self.zoom = z;
-                self.pan = pan;
-                self.fit_next = false;
-                self.auto_fit = true;
-                self.fit_key = Some(key);
+impl App {
+    /// The analysis side panel: controls, actions, then the results of the current tab.
+    fn analysis_panel(&mut self, ui: &mut egui::Ui) {
+        self.analysis_controls(ui);
+        self.analysis_parameters(ui);
+        self.analysis_actions(ui);
+        ui.separator();
+        self.analysis_results(ui);
+    }
+
+    /// Tabs, the event count and the cut set order limit.
+    fn analysis_controls(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            let before = self.tab;
+            ui.selectable_value(&mut self.tab, Tab::CutSets, "Cut sets");
+            ui.selectable_value(&mut self.tab, Tab::Probability, "Probability");
+            ui.selectable_value(&mut self.tab, Tab::MonteCarlo, "Monte Carlo");
+            if self.tab != before {
+                // the report to export follows the tab you are looking at
+                self.report_kind = App::kind_for_tab(self.tab);
             }
-            self.canvas = rect;
-            if resp.dragged() {
-                self.pan += resp.drag_delta();
-                self.auto_fit = false;
+        });
+        ui.separator();
+        ui.horizontal(|ui| {
+            if self.doc.is_some() {
+                ui.label(format!(
+                    "There are {} basic events in the tree",
+                    self.basic_event_count()
+                ));
             }
-            if resp.hovered() {
-                let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
-                if scroll != 0.0 {
-                    self.auto_fit = false;
-                    let old = self.zoom;
-                    self.zoom = (self.zoom * (1.0 + scroll * 0.002)).clamp(0.02, 4.0);
-                    if let Some(m) = resp.hover_pos() {
-                        let k = self.zoom / old;
-                        let rel = m - rect.min;
-                        self.pan = rel - (rel - self.pan) * k;
+            if ui.button("Analysis help").clicked() {
+                self.show_help(Some("Analysis"));
+            }
+        });
+        ui.horizontal(|ui| {
+            let l = ui.label("max order (0 = all)");
+            ui.add(egui::DragValue::new(&mut self.order).range(0..=50))
+                .labelled_by(l.id);
+        });
+    }
+
+    /// The current tab's own parameters.
+    fn analysis_parameters(&mut self, ui: &mut egui::Ui) {
+        match self.tab {
+            Tab::Probability => {
+                ui.horizontal(|ui| {
+                    let l = ui.label("terms");
+                    ui.add(egui::DragValue::new(&mut self.terms).range(1..=16))
+                        .labelled_by(l.id);
+                    let l = ui.label("unit time");
+                    ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
+                        .labelled_by(l.id);
+                });
+            }
+            Tab::MonteCarlo => {
+                ui.horizontal(|ui| {
+                    let l = ui.label("trials");
+                    ui.add(egui::DragValue::new(&mut self.trials).range(1..=100_000_000))
+                        .labelled_by(l.id);
+                    let l = ui.label("unit time");
+                    ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
+                        .labelled_by(l.id);
+                });
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_label("method")
+                        .selected_text(match self.mc_method {
+                            Method::FirstFailure => "first failure (fast)",
+                            Method::Direct => "direct",
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.mc_method,
+                                Method::FirstFailure,
+                                "first failure (fast)",
+                            );
+                            ui.selectable_value(&mut self.mc_method, Method::Direct, "direct");
+                        });
+                    let l = ui.label("seed");
+                    ui.add(egui::DragValue::new(&mut self.seed))
+                        .labelled_by(l.id);
+                });
+            }
+            Tab::CutSets => {}
+        }
+    }
+
+    /// Run, the report choice and its export/copy, and the last error.
+    fn analysis_actions(&mut self, ui: &mut egui::Ui) {
+        if ui
+            .add_enabled(self.doc.is_some(), egui::Button::new("Run"))
+            .clicked()
+        {
+            self.run_analysis();
+        }
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_label("report")
+                .selected_text(self.report_kind.label())
+                .show_ui(ui, |ui| {
+                    for k in ReportKind::ALL {
+                        ui.selectable_value(&mut self.report_kind, k, k.label());
+                    }
+                });
+            let has_doc = self.doc.is_some();
+            if ui
+                .add_enabled(has_doc, egui::Button::new("Export report..."))
+                .clicked()
+            {
+                self.export_report_dialog();
+            }
+            if ui
+                .add_enabled(has_doc, egui::Button::new("Copy report"))
+                .clicked()
+            {
+                match self.report_text(self.report_kind, &App::now_text()) {
+                    Ok(t) => {
+                        ui.ctx().copy_text(t);
+                        self.status = Some("Report copied to the clipboard".into());
+                    }
+                    Err(e) => self.error = Some(e),
+                }
+            }
+        });
+        if self.tab == Tab::MonteCarlo
+            && ui
+                .add_enabled(
+                    self.mc.is_some(),
+                    egui::Button::new("Export failure modes (CSV)..."),
+                )
+                .clicked()
+        {
+            self.export_modes_csv_dialog();
+        }
+        if let Some(e) = &self.error {
+            ui.colored_label(Color32::LIGHT_RED, e);
+        }
+    }
+
+    fn analysis_results(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
+            Tab::CutSets => {
+                if let Some(cs) = &self.cut_sets {
+                    ui.label(format!("{} minimal cut sets", cs.len()));
+                    for (i, s) in cs.iter().enumerate() {
+                        ui.monospace(format!("{:>4}  {}", i + 1, s.join(" ")));
                     }
                 }
             }
-
-            // The drawing goes under the scrollbars, so it is painted first.
-            let origin = rect.min + self.pan;
-            let z = self.zoom;
-            paint_scene(
-                &ui.painter_at(rect),
-                &scene,
-                origin,
-                z,
-                self.selected.as_deref(),
-                &self.prefs,
-            );
-
-            // Scrollbars: an invisible scroll area sized to the drawing plus a margin
-            // carries them; the pan is mirrored to its offset and back.
-            let content = Vec2::new(scene.width, scene.height) * self.zoom;
-            let extent = scroll_extent(rect.size(), content);
-            self.scroll_extent = extent;
-            let want = scroll_offset_for(self.pan, rect.size(), extent);
-            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
-            // Permanent (solid) scrollbars, as OpenFTA shows, only on an axis that overflows.
-            child.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
-            let out = egui::ScrollArea::both()
-                .id_salt("canvas_scroll")
-                .auto_shrink(false)
-                .scroll([extent.x > rect.width(), extent.y > rect.height()])
-                .scroll_source(egui::containers::scroll_area::ScrollSource::SCROLL_BAR)
-                .scroll_offset(want)
-                .show(&mut child, |ui| {
-                    ui.allocate_exact_size(extent, Sense::hover());
-                });
-            let pan_before = self.pan;
-            let got = out.state.clamped_offset();
-            if (got.x - want.x).abs() > 0.5 && extent.x > rect.width() {
-                self.pan.x = SCROLL_MARGIN - got.x;
-                self.auto_fit = false;
+            Tab::Probability => {
+                if let Some(r) = &self.prob {
+                    ui.strong("Cut set probabilities");
+                    for (i, (cs, p)) in r.cut_sets.iter().enumerate() {
+                        ui.monospace(format!("{:>3} {:<28} {:.3E}", i + 1, cs.join(" "), p));
+                    }
+                    ui.add_space(6.0);
+                    ui.strong("Top event");
+                    for (k, (t, s)) in r.terms.iter().zip(&r.partial_sums).enumerate() {
+                        let b = if k % 2 == 0 { "upper" } else { "lower" };
+                        ui.monospace(format!("{:>2} terms {:+.3E} = {:.6E} ({b})", k + 1, t, s));
+                    }
+                    if r.exact {
+                        ui.monospace(format!("Exact value: {:.6E}", r.top));
+                    }
+                    ui.add_space(6.0);
+                    ui.strong("Primary events");
+                    for e in &r.events {
+                        ui.monospace(format!(
+                            "{:<14} {:.3E} {:6.2}%",
+                            e.id, e.contribution, e.importance_pct
+                        ));
+                    }
+                }
             }
-            if (got.y - want.y).abs() > 0.5 && extent.y > rect.height() {
-                self.pan.y = SCROLL_MARGIN - got.y;
-                self.auto_fit = false;
-            }
-
-            if self.pan != pan_before {
-                ctx.request_repaint();
-            }
-
-            if resp.clicked() {
-                let hit = resp.interact_pointer_pos().and_then(|pos| {
-                    let w = (pos - origin) / z;
-                    scene.item_at([w.x, w.y]).map(|it| it.path.clone())
-                });
-                self.selected = hit;
-                self.version += 1;
-            }
-            if resp.double_clicked() && self.selected.is_some() {
-                self.edit_selected();
+            Tab::MonteCarlo => {
+                if let Some(r) = &self.mc {
+                    ui.monospace(format!("tests           {}", r.trials));
+                    ui.monospace(format!("system failures {}", r.system_failures));
+                    ui.monospace(match r.upper_bound_95() {
+                        Some(b) => {
+                            format!("P(top)          < {b:.2E} (95%, no failures simulated)")
+                        }
+                        None => format!(
+                            "P(top)          {:.4E} +/- {:.2E}",
+                            r.probability, r.std_error
+                        ),
+                    });
+                    ui.monospace(format!("P(any failure)  {:.4E}", r.any_component_failure));
+                    ui.add_space(6.0);
+                    ui.strong(format!("Failure modes ({})", r.modes.len()));
+                    for (cs, n) in r.modes.iter().take(40) {
+                        ui.monospace(format!(
+                            "{:>8}  {:.3E}  {}",
+                            n,
+                            r.bas_prob * *n as f64 / r.trials.max(1) as f64,
+                            cs.join(" ")
+                        ));
+                    }
+                    if r.modes.len() > 40 {
+                        ui.label(format!(
+                            "... {} more (export to see all)",
+                            r.modes.len() - 40
+                        ));
+                    }
+                }
             }
         });
+    }
+
+    /// The tree drawing with zoom, pan, scrollbars and selection.
+    fn canvas_area(&mut self, ui: &mut egui::Ui) {
+        let Some(scene) = self.scene() else {
+            ui.centered_and_justified(|ui| {
+                ui.label("Open a .fta file (Open...), or start a New tree.")
+            });
+            return;
+        };
+        let rect = ui.available_rect_before_wrap();
+        let resp = ui.interact(
+            rect,
+            ui.scope_id().with("canvas_area"),
+            Sense::click_and_drag(),
+        );
+
+        self.canvas_navigate(ui, &resp, rect, &scene);
+
+        // The drawing goes under the scrollbars, so it is painted first.
+        let origin = rect.min + self.pan;
+        let z = self.zoom;
+        paint_scene(
+            &ui.painter_at(rect),
+            &scene,
+            origin,
+            z,
+            self.selected.as_deref(),
+            &self.prefs,
+        );
+
+        self.canvas_scrollbars(ui, rect, &scene);
+
+        if resp.clicked() {
+            let hit = resp.interact_pointer_pos().and_then(|pos| {
+                let w = (pos - origin) / z;
+                scene.item_at([w.x, w.y]).map(|it| it.path.clone())
+            });
+            self.selected = hit;
+            self.version += 1;
+        }
+        if resp.double_clicked() && self.selected.is_some() {
+            self.edit_selected();
+        }
+    }
+
+    /// Fit on demand or on resize, drag to pan, scroll wheel to zoom about the pointer.
+    fn canvas_navigate(&mut self, ui: &egui::Ui, resp: &egui::Response, rect: Rect, scene: &Scene) {
+        let key = (rect.size(), scene.width, scene.height);
+        if self.fit_next || (self.auto_fit && self.fit_key != Some(key)) {
+            let (z, pan) = fit(rect.size(), Vec2::new(scene.width, scene.height));
+            self.zoom = z;
+            self.pan = pan;
+            self.fit_next = false;
+            self.auto_fit = true;
+            self.fit_key = Some(key);
+        }
+        self.canvas = rect;
+        if resp.dragged() {
+            self.pan += resp.drag_delta();
+            self.auto_fit = false;
+        }
+        if resp.hovered() {
+            let scroll = ui.ctx().input(|i| i.smooth_scroll_delta.y);
+            if scroll != 0.0 {
+                self.auto_fit = false;
+                let old = self.zoom;
+                self.zoom = (self.zoom * (1.0 + scroll * 0.002)).clamp(0.02, 4.0);
+                if let Some(m) = resp.hover_pos() {
+                    let k = self.zoom / old;
+                    let rel = m - rect.min;
+                    self.pan = rel - (rel - self.pan) * k;
+                }
+            }
+        }
+    }
+
+    /// Scrollbars: an invisible scroll area sized to the drawing plus a margin
+    /// carries them; the pan is mirrored to its offset and back.
+    fn canvas_scrollbars(&mut self, ui: &mut egui::Ui, rect: Rect, scene: &Scene) {
+        let content = Vec2::new(scene.width, scene.height) * self.zoom;
+        let extent = scroll_extent(rect.size(), content);
+        self.scroll_extent = extent;
+        let want = scroll_offset_for(self.pan, rect.size(), extent);
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+        // Permanent (solid) scrollbars, as OpenFTA shows, only on an axis that overflows.
+        child.style_mut().spacing.scroll = egui::style::ScrollStyle::solid();
+        let out = egui::ScrollArea::both()
+            .id_salt("canvas_scroll")
+            .auto_shrink(false)
+            .scroll([extent.x > rect.width(), extent.y > rect.height()])
+            .scroll_source(egui::containers::scroll_area::ScrollSource::SCROLL_BAR)
+            .scroll_offset(want)
+            .show(&mut child, |ui| {
+                ui.allocate_exact_size(extent, Sense::hover());
+            });
+        let pan_before = self.pan;
+        let got = out.state.clamped_offset();
+        if (got.x - want.x).abs() > 0.5 && extent.x > rect.width() {
+            self.pan.x = SCROLL_MARGIN - got.x;
+            self.auto_fit = false;
+        }
+        if (got.y - want.y).abs() > 0.5 && extent.y > rect.height() {
+            self.pan.y = SCROLL_MARGIN - got.y;
+            self.auto_fit = false;
+        }
+
+        if self.pan != pan_before {
+            ui.ctx().request_repaint();
+        }
     }
 }
 

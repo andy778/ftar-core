@@ -26,123 +26,151 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
     match tool {
         "tree_open" => tree_open(s, &a),
         "tree_new" => tree_new(s, &a),
-        "tree_close" => {
-            let (id, d) = s.doc_mut(args)?;
-            if d.dirty && !a.opt_bool("discard")?.unwrap_or(false) {
-                return Err(ToolError::new(
-                    "unsaved",
-                    format!("`{id}` has unsaved changes: save it with tree_save, or pass `discard: true`"),
-                ));
-            }
-            s.docs.remove(&id);
-            if s.last.as_deref() == Some(&id) {
-                s.last = s.docs.keys().next_back().cloned();
-            }
-            Ok(json!({ "closed": id }))
-        }
-        "tree_list" => Ok(json!({ "documents": s.docs.iter().map(|(id, d)| json!({
-            "doc": id, "name": d.name, "path": d.path.as_ref().map(|p| display_path(p)), "dirty": d.dirty
-        })).collect::<Vec<_>>() })),
+        "tree_close" => tree_close(s, &a),
+        "tree_list" => tree_list(s),
         "tree_info" => {
             let (id, d) = s.doc_mut(args)?;
             Ok(info(&id, d))
         }
-        "tree_get" => {
-            let (_, d) = s.doc_mut(args)?;
-            let path = a.opt_path("path")?.unwrap_or_default();
-            let depth = a
-                .opt_usize("depth")?
-                .unwrap_or(MAX_JSON_DEPTH)
-                .min(MAX_JSON_DEPTH);
-            let n = edit::node_at(&d.tree, &path)
-                .ok_or_else(|| ToolError::new("not_found", "no node at that path"))?;
-            Ok(node_json(n, depth))
-        }
-        "tree_validate" => {
-            let (_, d) = s.doc_mut(args)?;
-            let issues = edit::validate(&d.tree);
-            let mut list: Vec<Value> = issues.iter().map(|i| json!({
-                "path": i.path,
-                "severity": if i.severity == edit::Severity::Error { "error" } else { "warning" },
-                "message": i.message,
-            })).collect();
-            let transfers = raw_transfers(&d.tree);
-            for (path, id) in &transfers {
-                list.push(json!({
-                    "path": path,
-                    "severity": "warning",
-                    "message": format!("transfer-in `{id}` is not inlined (opened with raw=true): reopen without raw to analyse"),
-                }));
-            }
-            Ok(json!({
-                "ok": !issues.iter().any(|i| i.severity == edit::Severity::Error),
-                "analysable": transfers.is_empty(),
-                "issues": list,
-            }))
-        }
+        "tree_get" => tree_get(s, &a),
+        "tree_validate" => tree_validate(s, &a),
         "tree_edit" => tree_edit(s, &a),
-        "tree_undo" | "tree_redo" => {
-            let (_, d) = s.doc_mut(args)?;
-            // history snapshots hold the tree *and* the event database
-            let now = (d.tree.clone(), d.db.clone());
-            let next = if tool == "tree_undo" {
-                d.history.undo(&now)
-            } else {
-                d.history.redo(&now)
-            };
-            match next {
-                Some((t, db)) => {
-                    d.tree = t;
-                    d.db = db;
-                    d.dirty = true;
-                    Ok(
-                        json!({ "applied": true, "can_undo": d.history.can_undo(), "can_redo": d.history.can_redo() }),
-                    )
-                }
-                None => Ok(
-                    json!({ "applied": false, "can_undo": d.history.can_undo(), "can_redo": d.history.can_redo() }),
-                ),
-            }
-        }
+        "tree_undo" | "tree_redo" => tree_undo_redo(s, &a, tool == "tree_undo"),
         "tree_save" => tree_save(s, &a),
         "tree_export" => tree_export(s, &a),
-        "event_list" => {
-            let (_, d) = s.doc_mut(args)?;
-            let mut ev: Vec<_> = d.db.events.values().collect();
-            ev.sort_by(|x, y| x.id.cmp(&y.id));
-            Ok(json!({ "events": ev.iter().map(|e| event_json(e)).collect::<Vec<_>>() }))
-        }
+        "event_list" => event_list(s, &a),
         "event_set" => event_set(s, &a),
         "event_delete" => event_delete(s, &a),
         "event_usage" => event_usage(s, &a),
-        "analysis_cutsets" => {
-            let (_, d) = s.doc_mut(args)?;
-            ensure_analysable(d)?;
-            let sets =
-                minimal_cut_sets_limited(&d.tree, a.opt_usize("max_order")?.unwrap_or(usize::MAX))?;
-            Ok(
-                json!({ "count": sets.len(), "cut_sets": sets.iter().map(cs_json).collect::<Vec<_>>() }),
-            )
-        }
-        "analysis_probability" => {
-            let (_, d) = s.doc_mut(args)?;
-            ensure_analysable(d)?;
-            let opts = prob_opts(&a)?;
-            let r = probability_report(&d.tree, &d.db, &opts)?;
-            Ok(prob_json(&r))
-        }
-        "analysis_montecarlo" => {
-            let (_, d) = s.doc_mut(args)?;
-            ensure_analysable(d)?;
-            let r = simulate(&d.tree, &d.db, &mc_opts(&a)?)?;
-            Ok(mc_json(&r))
-        }
+        "analysis_cutsets" => analysis_cutsets(s, &a),
+        "analysis_probability" => analysis_probability(s, &a),
+        "analysis_montecarlo" => analysis_montecarlo(s, &a),
         "report" => make_report(s, &a, args),
         other => Err(ToolError::new(
             "unknown_tool",
             format!("no tool named `{other}`"),
         )),
     }
+}
+
+/// Close a document; refuses unsaved changes unless `discard` is true.
+fn tree_close(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (id, d) = s.doc_mut(a.0)?;
+    if d.dirty && !a.opt_bool("discard")?.unwrap_or(false) {
+        return Err(ToolError::new(
+            "unsaved",
+            format!("`{id}` has unsaved changes: save it with tree_save, or pass `discard: true`"),
+        ));
+    }
+    s.docs.remove(&id);
+    if s.last.as_deref() == Some(&id) {
+        s.last = s.docs.keys().next_back().cloned();
+    }
+    Ok(json!({ "closed": id }))
+}
+
+/// The open documents.
+fn tree_list(s: &Session) -> Result<Value, ToolError> {
+    Ok(json!({ "documents": s.docs.iter().map(|(id, d)| json!({
+            "doc": id, "name": d.name, "path": d.path.as_ref().map(|p| display_path(p)), "dirty": d.dirty
+        })).collect::<Vec<_>>() }))
+}
+
+/// The node at `path`, as JSON down to `depth` levels.
+fn tree_get(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    let path = a.opt_path("path")?.unwrap_or_default();
+    let depth = a
+        .opt_usize("depth")?
+        .unwrap_or(MAX_JSON_DEPTH)
+        .min(MAX_JSON_DEPTH);
+    let n = edit::node_at(&d.tree, &path)
+        .ok_or_else(|| ToolError::new("not_found", "no node at that path"))?;
+    Ok(node_json(n, depth))
+}
+
+/// Validation issues, plus a warning per transfer that was not inlined.
+fn tree_validate(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    let issues = edit::validate(&d.tree);
+    let mut list: Vec<Value> = issues
+        .iter()
+        .map(|i| {
+            json!({
+                "path": i.path,
+                "severity": if i.severity == edit::Severity::Error { "error" } else { "warning" },
+                "message": i.message,
+            })
+        })
+        .collect();
+    let transfers = raw_transfers(&d.tree);
+    for (path, id) in &transfers {
+        list.push(json!({
+            "path": path,
+            "severity": "warning",
+            "message": format!("transfer-in `{id}` is not inlined (opened with raw=true): reopen without raw to analyse"),
+        }));
+    }
+    Ok(json!({
+        "ok": !issues.iter().any(|i| i.severity == edit::Severity::Error),
+        "analysable": transfers.is_empty(),
+        "issues": list,
+    }))
+}
+
+/// Undo or redo one edit of the tree and its event database.
+fn tree_undo_redo(s: &mut Session, a: &Args, undo: bool) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    // history snapshots hold the tree *and* the event database
+    let now = (d.tree.clone(), d.db.clone());
+    let next = if undo {
+        d.history.undo(&now)
+    } else {
+        d.history.redo(&now)
+    };
+    match next {
+        Some((t, db)) => {
+            d.tree = t;
+            d.db = db;
+            d.dirty = true;
+            Ok(
+                json!({ "applied": true, "can_undo": d.history.can_undo(), "can_redo": d.history.can_redo() }),
+            )
+        }
+        None => Ok(
+            json!({ "applied": false, "can_undo": d.history.can_undo(), "can_redo": d.history.can_redo() }),
+        ),
+    }
+}
+
+/// The tree's event database, sorted by id.
+fn event_list(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    let mut ev: Vec<_> = d.db.events.values().collect();
+    ev.sort_by(|x, y| x.id.cmp(&y.id));
+    Ok(json!({ "events": ev.iter().map(|e| event_json(e)).collect::<Vec<_>>() }))
+}
+
+fn analysis_cutsets(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    ensure_analysable(d)?;
+    let sets = minimal_cut_sets_limited(&d.tree, a.opt_usize("max_order")?.unwrap_or(usize::MAX))?;
+    Ok(json!({ "count": sets.len(), "cut_sets": sets.iter().map(cs_json).collect::<Vec<_>>() }))
+}
+
+fn analysis_probability(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    ensure_analysable(d)?;
+    let opts = prob_opts(a)?;
+    let r = probability_report(&d.tree, &d.db, &opts)?;
+    Ok(prob_json(&r))
+}
+
+fn analysis_montecarlo(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    ensure_analysable(d)?;
+    let r = simulate(&d.tree, &d.db, &mc_opts(a)?)?;
+    Ok(mc_json(&r))
 }
 
 // ------------------------------------------------------------- documents
@@ -271,6 +299,19 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     let op = a.str("op")?;
     // Parse arguments first so a bad request never touches the tree or the history.
     let result: Value = match op {
+        "insert_child" | "delete" | "move" | "copy" | "reorder" => edit_structure(d, a, op)?,
+        "change_type" | "set_id" | "set_text" | "set_database" | "set_note" => {
+            edit_properties(d, a, op, &load_opts)?
+        }
+        other => return Err(ToolError::args(format!("unknown op `{other}`"))),
+    };
+    d.dirty = true;
+    Ok(result)
+}
+
+/// Edits that add, remove or rearrange nodes.
+fn edit_structure(d: &mut Doc, a: &Args, op: &str) -> Result<Value, ToolError> {
+    Ok(match op {
         "insert_child" => {
             let parent = a.opt_path("parent")?.unwrap_or_default();
             let kind = a.kind("kind")?;
@@ -348,6 +389,18 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             let p = d.edit_tree(|t| edit::reorder(t, &path, index))?;
             json!({ "path": p })
         }
+        other => return Err(ToolError::args(format!("unknown op `{other}`"))),
+    })
+}
+
+/// Edits of a node's or the tree's own fields.
+fn edit_properties(
+    d: &mut Doc,
+    a: &Args,
+    op: &str,
+    load_opts: &LoadOptions,
+) -> Result<Value, ToolError> {
+    Ok(match op {
         "change_type" => {
             let (path, kind) = (a.path("path")?, a.kind("kind")?);
             d.edit_tree(|t| edit::change_type(t, &path, kind, None))?;
@@ -376,7 +429,7 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
                 edit::set_db_name(t, name)?;
                 match &dir {
                     Some(dir) => Ok(ftar_core::project::load_database_events(
-                        t, db, dir, &load_opts,
+                        t, db, dir, load_opts,
                     )?),
                     None => Ok(0),
                 }
@@ -392,9 +445,7 @@ fn tree_edit(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             json!({})
         }
         other => return Err(ToolError::args(format!("unknown op `{other}`"))),
-    };
-    d.dirty = true;
-    Ok(result)
+    })
 }
 
 fn event_set(s: &mut Session, a: &Args) -> Result<Value, ToolError> {

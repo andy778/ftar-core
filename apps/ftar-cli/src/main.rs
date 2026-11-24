@@ -64,145 +64,165 @@ fn run() -> Result<(), String> {
         eprint!("{USAGE}");
         return Err("missing arguments".into());
     };
-    let mut order = usize::MAX;
-    let mut terms = ftar_core::analysis::DEFAULT_TERMS;
-    let mut time = 1.0f64;
-    let mut trials = 100_000u64;
-    let mut seed = MonteCarloOptions::default().seed;
-    let mut method = ftar_core::montecarlo::Method::FirstFailure;
-    let mut i = 2;
-    while i < args.len() {
-        let v = args
-            .get(i + 1)
-            .ok_or_else(|| format!("{} needs a value", args[i]))?;
-        match args[i].as_str() {
-            "--order" => {
-                order = v
-                    .parse()
-                    .map_err(|_| format!("bad value `{v}` for {}", args[i]))?
-            }
-            "--terms" => {
-                terms = v
-                    .parse()
-                    .map_err(|_| format!("bad value `{v}` for {}", args[i]))?
-            }
-            "--time" => {
-                time = v
-                    .parse()
-                    .map_err(|_| format!("bad value `{v}` for {}", args[i]))?
-            }
-            "--trials" => {
-                trials = v
-                    .parse()
-                    .map_err(|_| format!("bad value `{v}` for {}", args[i]))?
-            }
-            "--method" => {
-                method = match v.as_str() {
-                    "first" | "first_failure" => ftar_core::montecarlo::Method::FirstFailure,
-                    "direct" => ftar_core::montecarlo::Method::Direct,
-                    _ => return Err(format!("bad value `{v}` for --method (first, direct)")),
-                }
-            }
-            "--seed" => {
-                seed = v
-                    .parse()
-                    .map_err(|_| format!("bad value `{v}` for {}", args[i]))?
-            }
-            o => return Err(format!("unknown option `{o}`")),
-        }
-        i += 2;
-    }
-
+    let o = AnalysisOptions::parse(&args[2..])?;
     let proj = Project::load(file).map_err(|e| e.to_string())?;
     match cmd.as_str() {
-        "info" => {
-            let nodes = proj.tree.nodes();
-            let prim = nodes.iter().filter(|n| n.kind.is_primary()).count();
-            let gates = nodes.iter().filter(|n| n.kind.is_gate()).count();
-            println!(
-                "nodes: {}  gates: {}  primary events: {}  database events: {}",
-                nodes.len(),
-                gates,
-                prim,
-                proj.db.events.len()
-            );
-            if !proj.tree.note.is_empty() {
-                println!("note: {}", proj.tree.note.replace('\n', " "));
-            }
+        "info" => print_info(&proj),
+        "cutsets" => print_cut_sets(&proj, &o)?,
+        "prob" => print_probability(&proj, &o)?,
+        "mc" => print_monte_carlo(&proj, file, &o)?,
+        c => {
+            return Err(format!(
+                "unknown command `{c}`
+
+{USAGE}"
+            ))
         }
-        "cutsets" => {
-            let sets = minimal_cut_sets_limited(&proj.tree, order).map_err(|e| e.to_string())?;
-            println!("{} minimal cut sets", sets.len());
-            for (i, s) in sets.iter().enumerate() {
-                println!("{:>4}  {}", i + 1, s.join(" "));
-            }
-        }
-        "prob" => {
-            let r = probability_report(
-                &proj.tree,
-                &proj.db,
-                &ProbabilityOptions {
-                    max_order: order,
-                    terms,
-                    unit_time: time,
-                },
-            )
-            .map_err(|e| e.to_string())?;
-            println!("Minimal cut set probabilities:");
-            for (i, (cs, p)) in r.cut_sets.iter().enumerate() {
-                println!("{:>4}  {:<40} {:E}", i + 1, cs.join(" "), p);
-            }
-            println!("\nProbability of top level event:");
-            for (k, (t, s)) in r.terms.iter().zip(&r.partial_sums).enumerate() {
-                let bound = if k % 2 == 0 { "upper" } else { "lower" };
-                println!(
-                    "{:>2} term{}  {}{:E} = {:E} ({bound} bound)",
-                    k + 1,
-                    if k > 0 { "s" } else { " " },
-                    if *t >= 0.0 { "+" } else { "-" },
-                    t.abs(),
-                    s
-                );
-            }
-            if r.exact {
-                println!("\nExact value : {:E}", r.top);
-            }
-            println!(
-                "\nPrimary event analysis:\n {:<15} {:<20} Importance",
-                "Event", "Failure contrib."
-            );
-            for e in &r.events {
-                println!(
-                    " {:<15} {:<20E} {:5.2}%",
-                    e.id, e.contribution, e.importance_pct
-                );
-            }
-        }
-        "mc" => {
-            let r = simulate(
-                &proj.tree,
-                &proj.db,
-                &MonteCarloOptions {
-                    trials,
-                    unit_time: time,
-                    seed,
-                    method,
-                },
-            )
-            .map_err(|e| e.to_string())?;
-            let stats = ftar_core::report::failure_statistics_from_modes(&r);
-            // OpenFTA prints the file name, extension included.
-            let name = std::path::Path::new(file)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            print!(
-                "{}",
-                ftar_core::report::monte_carlo_report_text(&name, "", time, &r, &stats)
-            );
-        }
-        c => return Err(format!("unknown command `{c}`\n\n{USAGE}")),
     }
+    Ok(())
+}
+
+/// The analysis options after `<command> <file>`.
+struct AnalysisOptions {
+    order: usize,
+    terms: usize,
+    time: f64,
+    trials: u64,
+    seed: u64,
+    method: ftar_core::montecarlo::Method,
+}
+
+impl AnalysisOptions {
+    /// `opts` is everything after the file name: `--name value` pairs.
+    fn parse(opts: &[String]) -> Result<Self, String> {
+        let mut o = AnalysisOptions {
+            order: usize::MAX,
+            terms: ftar_core::analysis::DEFAULT_TERMS,
+            time: 1.0,
+            trials: 100_000,
+            seed: MonteCarloOptions::default().seed,
+            method: ftar_core::montecarlo::Method::FirstFailure,
+        };
+        for pair in opts.chunks(2) {
+            let (flag, v) = match pair {
+                [flag, v] => (flag, v),
+                [flag] => return Err(format!("{flag} needs a value")),
+                _ => continue,
+            };
+            match flag.as_str() {
+                "--order" => o.order = value(flag, v)?,
+                "--terms" => o.terms = value(flag, v)?,
+                "--time" => o.time = value(flag, v)?,
+                "--trials" => o.trials = value(flag, v)?,
+                "--method" => {
+                    o.method = match v.as_str() {
+                        "first" | "first_failure" => ftar_core::montecarlo::Method::FirstFailure,
+                        "direct" => ftar_core::montecarlo::Method::Direct,
+                        _ => return Err(format!("bad value `{v}` for --method (first, direct)")),
+                    }
+                }
+                "--seed" => o.seed = value(flag, v)?,
+                other => return Err(format!("unknown option `{other}`")),
+            }
+        }
+        Ok(o)
+    }
+}
+
+fn value<T: std::str::FromStr>(flag: &str, v: &str) -> Result<T, String> {
+    v.parse().map_err(|_| format!("bad value `{v}` for {flag}"))
+}
+
+fn print_info(proj: &Project) {
+    let nodes = proj.tree.nodes();
+    let prim = nodes.iter().filter(|n| n.kind.is_primary()).count();
+    let gates = nodes.iter().filter(|n| n.kind.is_gate()).count();
+    println!(
+        "nodes: {}  gates: {}  primary events: {}  database events: {}",
+        nodes.len(),
+        gates,
+        prim,
+        proj.db.events.len()
+    );
+    if !proj.tree.note.is_empty() {
+        println!("note: {}", proj.tree.note.replace('\n', " "));
+    }
+}
+
+fn print_cut_sets(proj: &Project, o: &AnalysisOptions) -> Result<(), String> {
+    let sets = minimal_cut_sets_limited(&proj.tree, o.order).map_err(|e| e.to_string())?;
+    println!("{} minimal cut sets", sets.len());
+    for (i, s) in sets.iter().enumerate() {
+        println!("{:>4}  {}", i + 1, s.join(" "));
+    }
+    Ok(())
+}
+
+fn print_probability(proj: &Project, o: &AnalysisOptions) -> Result<(), String> {
+    let r = probability_report(
+        &proj.tree,
+        &proj.db,
+        &ProbabilityOptions {
+            max_order: o.order,
+            terms: o.terms,
+            unit_time: o.time,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    println!("Minimal cut set probabilities:");
+    for (i, (cs, p)) in r.cut_sets.iter().enumerate() {
+        println!("{:>4}  {:<40} {:E}", i + 1, cs.join(" "), p);
+    }
+    println!("\nProbability of top level event:");
+    for (k, (t, s)) in r.terms.iter().zip(&r.partial_sums).enumerate() {
+        let bound = if k % 2 == 0 { "upper" } else { "lower" };
+        println!(
+            "{:>2} term{}  {}{:E} = {:E} ({bound} bound)",
+            k + 1,
+            if k > 0 { "s" } else { " " },
+            if *t >= 0.0 { "+" } else { "-" },
+            t.abs(),
+            s
+        );
+    }
+    if r.exact {
+        println!("\nExact value : {:E}", r.top);
+    }
+    println!(
+        "\nPrimary event analysis:\n {:<15} {:<20} Importance",
+        "Event", "Failure contrib."
+    );
+    for e in &r.events {
+        println!(
+            " {:<15} {:<20E} {:5.2}%",
+            e.id, e.contribution, e.importance_pct
+        );
+    }
+    Ok(())
+}
+
+fn print_monte_carlo(proj: &Project, file: &str, o: &AnalysisOptions) -> Result<(), String> {
+    let r = simulate(
+        &proj.tree,
+        &proj.db,
+        &MonteCarloOptions {
+            trials: o.trials,
+            unit_time: o.time,
+            seed: o.seed,
+            method: o.method,
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    let stats = ftar_core::report::failure_statistics_from_modes(&r);
+    // OpenFTA prints the file name, extension included.
+    let name = std::path::Path::new(file)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    print!(
+        "{}",
+        ftar_core::report::monte_carlo_report_text(&name, "", o.time, &r, &stats)
+    );
     Ok(())
 }
 
