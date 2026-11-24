@@ -27,7 +27,7 @@ body:
     id: files
     attributes:
       label: Tree and database files
-      description: Attach the `.fta` / `.ped` files, or the smallest tree that shows the problem (zip them if GitHub refuses the extension).
+      description: "Attach the smallest tree that shows the problem. GitHub does not accept `.fta` or `.ped` files, so put them in a `.zip` and attach that (`ftar bundle tree.fta`, or File > Export bug report bundle, makes one), or add `.txt` to the name, e.g. `Test1.fta.txt`. Without the tree we usually cannot reproduce the problem."
   - type: textarea
     id: openfta
     attributes:
