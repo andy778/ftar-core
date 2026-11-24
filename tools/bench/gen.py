@@ -11,6 +11,7 @@ Families (all files have LF line ends, which OpenFTA on Linux needs):
 Writes OUTDIR/<family><PARAM>.fta and .ped and prints the tree file path.
 Every gate sits under an intermediate event ("M"), as OpenFTA requires.
 """
+
 import os
 import random
 import sys
@@ -24,10 +25,10 @@ def emit_tree(name, top_gate):
         kind, kids = g
         out.append("M NULL 1 ")
         out.append("0")
-        out.append("%s NULL %d " % (kind, len(kids)))
+        out.append(f"{kind} NULL {len(kids)} ")
         for k in kids:
             if k[0] == "B":
-                out.append("B %s 0 " % k[1])
+                out.append(f"B {k[1]} 0 ")
             else:
                 gate(k[1])
 
@@ -38,25 +39,25 @@ def emit_tree(name, top_gate):
 def emit_ped(events):
     # Same record layout as tests/data/*.ped: name;;B ;description;probability; ;
     return "".join(
-        "%s;;B ;Bench event;%.6e; ;\n" % (e, 1e-3 * (1 + i % 7)) for i, e in enumerate(events)
+        f"{e};;B ;Bench event;{1e-3 * (1 + i % 7):.6e}; ;\n" for i, e in enumerate(events)
     )
 
 
 def andor(k):
-    ev = ["E%d" % i for i in range(2 * k)]
+    ev = [f"E{i}" for i in range(2 * k)]
     kids = [("G", ("O", [("B", ev[2 * i]), ("B", ev[2 * i + 1])])) for i in range(k)]
     return ("A", kids), ev
 
 
 def orand(k):
-    ev = ["E%d" % i for i in range(3 * k)]
+    ev = [f"E{i}" for i in range(3 * k)]
     kids = [("G", ("A", [("B", ev[3 * i + j]) for j in range(3)])) for i in range(k)]
     return ("O", kids), ev
 
 
 def rand(n, seed):
     rng = random.Random(seed)
-    ev = ["E%d" % i for i in range(n)]
+    ev = [f"E{i}" for i in range(n)]
     used = []
     budget = [n]
 
@@ -68,10 +69,7 @@ def rand(n, seed):
                 kids.append(("G", build(depth + 1, "O" if kind == "A" else "A")))
             else:
                 # sharing: mostly a fresh event, sometimes one already used
-                if used and rng.random() < 0.25:
-                    e = rng.choice(used)
-                else:
-                    e = ev[rng.randrange(n)]
+                e = rng.choice(used) if used and rng.random() < 0.25 else ev[rng.randrange(n)]
                 used.append(e)
                 kids.append(("B", e))
         return (kind, kids)
@@ -96,7 +94,7 @@ def main():
         top, ev = rand(param, seed)
     else:
         sys.exit("unknown family " + fam)
-    name = "%s%d" % (fam, param)
+    name = f"{fam}{param}"
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, name + ".fta"), "w", newline="\n") as f:
         f.write(emit_tree(name, top))

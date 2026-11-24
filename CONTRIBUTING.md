@@ -40,6 +40,14 @@ Orientation: [docs/architecture.md](docs/architecture.md) (layers and crates),
 [docs/VERIFICATION.md](docs/VERIFICATION.md) (what is proven equal to OpenFTA), [docs/mcp.md](docs/mcp.md)
 (automation and the MCP server). Fuzzing is described in [fuzz/README.md](fuzz/README.md).
 
+The Python helper scripts (`tools/bench`) are linted and formatted with ruff (rules, including
+complexity limits, in [ruff.toml](ruff.toml)); CI runs `.github/workflows/ruff.yml` when they change:
+
+```sh
+uvx ruff check .     # lint
+uvx ruff format .    # format
+```
+
 ### Test quality: mutation testing and coverage
 
 Passing tests only help if they would fail on a bug. Two optional tools check that (not part of

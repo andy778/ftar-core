@@ -1,0 +1,23 @@
+# ruff: lint and format for the Python helper scripts (tools/bench). CI: .github/workflows/ruff.yml.
+#   uvx ruff check .      uvx ruff format .
+line-length = 100           # same as rustfmt
+target-version = "py310"    # the scripts run with the system python3
+
+[lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes: undefined names, unused imports
+    "I",        # import order
+    "B",        # bugbear: likely bugs
+    "UP",       # pyupgrade: modern syntax
+    "SIM",      # simplifications
+    "RUF",      # ruff's own checks
+    "C90",      # mccabe: cyclomatic complexity
+    "PLR0911",  # too many return statements
+    "PLR0912",  # too many branches
+    "PLR0913",  # too many arguments
+    "PLR0915",  # too many statements
+]
+
+[lint.mccabe]
+max-complexity = 10
