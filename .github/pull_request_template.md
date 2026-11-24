@@ -5,7 +5,7 @@ Closes #
 
 
 ## Checklist
-- [ ] `cargo xtask ci` passes locally (fmt, clippy, layers, tests)
+- [ ] `cargo xtask ci` passes locally (fmt, clippy, layers, tests, deny)
 - [ ] New behaviour has tests; a bug fix has a regression test that fails without the fix
 - [ ] No new `unwrap`/`expect`/`panic!`/indexing on untrusted input in non-test code
 - [ ] GUI change: headless `egui_kittest` test, widgets have accessible names
