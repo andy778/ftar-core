@@ -1,4 +1,5 @@
 //! Edit > Selected... / double-click (#64) and Shift Left / Right (#65).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

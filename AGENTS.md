@@ -25,7 +25,7 @@ Every `.fta`, `.ped`, script and keystroke is untrusted input. In non-test code:
 `cargo xtask ci` = `fmt --check`, `clippy -D warnings`, `layers`, `test --workspace`. CI runs the same command on Linux and Windows. Do not weaken a gate to get green.
 
 ## 6. Parallel agents
-Use one git worktree and one `CARGO_TARGET_DIR` per agent. Touch only the crate/files your task names; add one `pub mod` line per new module. Commit to your branch; the coordinating agent merges. Never push `master` directly from a worktree agent.
+Use one git worktree and one `CARGO_TARGET_DIR` per agent, with `CARGO_INCREMENTAL=0`, and delete the target dir (and the worktree) once the branch is merged. Keep per-agent target dirs: a shared one makes parallel agents block on cargo's build lock. Touch only the crate/files your task names; add one `pub mod` line per new module. Commit to your branch; the coordinating agent merges. Never push `master` directly from a worktree agent.
 
 ## 7. Commits
 Small, green, one topic per commit. Branch `<type>/<slug>`; PR into `master`; merge when CI is green.

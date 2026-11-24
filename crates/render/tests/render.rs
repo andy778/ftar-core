@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::project::Project;
 use ftar_core::{EventType, PrimaryEventDb, Tree};
 use ftar_render::svg::{wrap, xml_escape};

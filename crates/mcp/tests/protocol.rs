@@ -1,4 +1,5 @@
 //! In-process tests of the MCP protocol layer (no processes, no I/O).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ftar_automation::Session;
 use ftar_mcp::{serve, Server, MAX_LINE, SUPPORTED_VERSIONS};

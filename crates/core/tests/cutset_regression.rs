@@ -4,6 +4,7 @@
 //! verbatim as a reference. The production engine (interned `u32` ids, sorted
 //! boxed slices) must return exactly the same cut sets in the same order, also
 //! when the order limit drops sets or conditions are involved.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeSet;
 

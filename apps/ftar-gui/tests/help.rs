@@ -1,4 +1,5 @@
 //! Help menu and user guide window (headless: egui_kittest, no window or GPU).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use eframe::egui::vec2;
 use egui_kittest::{

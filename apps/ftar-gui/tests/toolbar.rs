@@ -1,4 +1,5 @@
 //! The icon toolbar and the symbol palette (#72).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 
