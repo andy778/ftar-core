@@ -17,3 +17,9 @@ todo = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
