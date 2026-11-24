@@ -3,8 +3,11 @@ name: Release
 # Builds optimised binaries (`ftar` CLI/MCP server and `ftar-gui`) for Linux, Windows and macOS.
 #
 # * push a tag `vX.Y.Z`  -> build everything, then publish a GitHub release with archives and checksums
-# * pull request that touches the build files, or manual run -> build only (a dry run, nothing published)
+# * pull request that touches the build files, manual run, or nightly -> build and smoke test only
+#   (a dry run, nothing published), so release-only breakage shows up before release day
 on:
+  schedule:
+    - cron: "13 3 * * *"
   push:
     tags: ["v*"]
   pull_request:
@@ -54,6 +57,7 @@ jobs:
     # run when check-version passed, or was skipped (dry runs)
     if: ${{ !cancelled() && (needs.check-version.result == 'success' || needs.check-version.result == 'skipped') }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
