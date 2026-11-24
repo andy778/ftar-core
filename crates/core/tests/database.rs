@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::database::{remove_event, upsert_event, validate_event};
 use ftar_core::project::Project;
 use ftar_core::{EventType, PrimaryEvent};

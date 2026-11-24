@@ -979,7 +979,10 @@ impl App {
             if idx == 0 {
                 return;
             }
-            let left = &edit::node_at(&doc.tree, parent).unwrap().children[idx - 1];
+            let Some(left) = edit::node_at(&doc.tree, parent).and_then(|p| p.children.get(idx - 1))
+            else {
+                return;
+            };
             if pinned(left.kind) {
                 return;
             }

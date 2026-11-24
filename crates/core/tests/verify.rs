@@ -12,6 +12,7 @@
 //!
 //! Everything derived (minimal cut sets, exact probability, importance) is
 //! recomputed from the truth table and compared with the library.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};

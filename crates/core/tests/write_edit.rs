@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::edit::*;
 use ftar_core::parse::{parse_fta, parse_ped};
 use ftar_core::write::{write_fta, write_fta_with, write_ped, LineEnding};

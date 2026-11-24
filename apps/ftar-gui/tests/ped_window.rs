@@ -1,5 +1,6 @@
 //! The primary event database window (issue #58): works without a tree,
 //! saves/opens `.ped`, exports text, copies events and links tree events.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

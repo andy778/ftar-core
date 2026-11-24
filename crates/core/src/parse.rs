@@ -123,7 +123,9 @@ fn parse_node(c: &mut Cursor, depth: usize) -> Result<Node> {
     }
     let ty = c.token()?;
     let mut chars = ty.chars();
-    let code = chars.next().unwrap();
+    let code = chars
+        .next()
+        .ok_or_else(|| Error::Parse("missing event type".into()))?;
     let kind = EventType::from_code(code)
         .ok_or_else(|| Error::Parse(format!("unknown event type `{code}`")))?;
     let modifier = chars.next().filter(|m| *m != '\0');

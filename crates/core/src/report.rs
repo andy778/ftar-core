@@ -64,8 +64,12 @@ pub fn fmt_e(x: f64) -> String {
         return if x < 0.0 { "-INF".into() } else { "INF".into() };
     }
     let s = format!("{x:.6E}");
-    let (m, e) = s.split_once('E').expect("exponent");
-    let e: i32 = e.parse().expect("exponent value");
+    let Some((m, e)) = s.split_once('E') else {
+        return s;
+    };
+    let Ok(e) = e.parse::<i32>() else {
+        return s;
+    };
     format!("{m}E{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
 }
 

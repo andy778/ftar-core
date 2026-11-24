@@ -1,4 +1,5 @@
 //! `cargo run -p ftar-render --example print_page -- tree.fta out.html` - writes the printable page.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::project::Project;
 use ftar_render::{print_html, PrintOptions};
 
