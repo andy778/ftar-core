@@ -7,7 +7,13 @@ use std::process::Command;
 
 const GUI_CRATES: &[&str] = &["egui", "eframe", "winit", "rfd", "egui_kittest"];
 /// Library crates that must stay headless. Add new `crates/*` members here.
-const HEADLESS: &[&str] = &["ftar-core", "ftar-render", "ftar-automation", "ftar-mcp"];
+const HEADLESS: &[&str] = &[
+    "ftar-core",
+    "ftar-render",
+    "ftar-automation",
+    "ftar-mcp",
+    "ftar-bundle",
+];
 
 pub fn check() -> Result<(), String> {
     let mut bad = Vec::new();

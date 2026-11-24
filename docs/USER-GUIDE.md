@@ -115,7 +115,10 @@ The Help menu has the same five pages as OpenFTA's, plus the two ftar had before
 
 Questions, problems and ideas go to the issue tracker at https://github.com/andy778/ftar-core/issues.
 Say which version you run (Help > About ftar), what you did, what you expected and what happened,
-and attach the `.fta` and `.ped` files if the problem depends on a tree.
+and attach the tree if the problem depends on one. GitHub refuses `.fta` and `.ped` files, so use
+File > Export bug report bundle, which zips the saved tree with its `.ped`, transfer-in trees and
+saved reports, and attach that `.zip` (CLI: `ftar bundle tree.fta`). File > Import bundle (CLI:
+`ftar unbundle bundle.zip`) unpacks such a zip into an empty folder and opens its tree.
 
 ## History
 

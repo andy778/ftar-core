@@ -295,7 +295,13 @@ pub fn event_contributions(
                 .sum::<f64>()
                 // An empty float sum is -0.0, which would print as "-0.000000E+00".
                 + 0.0;
-            (e.clone(), c, 100.0 * c / top_probability)
+            // No simulated failures gives 0/0; show 0 % rather than "NaN%".
+            let imp = if top_probability > 0.0 {
+                100.0 * c / top_probability
+            } else {
+                0.0
+            };
+            (e.clone(), c, imp)
         })
         .collect()
 }
@@ -515,6 +521,13 @@ pub fn monte_carlo_report_text(
         ),
     };
 
+    if report.system_failures == 0 {
+        out.push_str(
+            "No system failure occurred in the simulation, so no failure modes are listed.\n\
+             The top event is rare: increase the number of tests, or use the\n\
+             cut set or probability analysis for an exact result.\n\n",
+        );
+    }
     out.push_str(
         "Rank   Failure mode         Failures  Estimated Probability         Importance\n\n",
     );

@@ -1330,6 +1330,58 @@ impl App {
         res
     }
 
+    /// File > Export bug report bundle: zip the saved tree with its database,
+    /// transfer-in trees and reports, for attaching to an issue.
+    pub fn export_bundle(&mut self, path: &Path) -> Result<(), String> {
+        let res = if self.dirty {
+            Err("save the tree first: the bundle holds the saved files".to_string())
+        } else {
+            self.tree_path()
+                .ok_or_else(|| "save the tree first".to_string())
+                .and_then(|t| ftar_bundle::export(t, env!("CARGO_PKG_VERSION")))
+                .and_then(|b| {
+                    std::fs::write(path, b).map_err(|e| format!("{}: {e}", path.display()))
+                })
+        };
+        match &res {
+            Ok(()) => {
+                self.error = None;
+                self.status = Some(format!("Bundle written to {}", path.display()));
+            }
+            Err(e) => self.error = Some(e.clone()),
+        }
+        res
+    }
+
+    pub fn default_bundle_name(&self) -> String {
+        format!("{}.zip", self.tree_name())
+    }
+
+    /// File > Import bundle: unpack `zip` into `dest` and open its tree.
+    pub fn import_bundle(&mut self, zip: &Path, dest: &Path) -> Result<(), String> {
+        let res = std::fs::read(zip)
+            .map_err(|e| format!("{}: {e}", zip.display()))
+            .and_then(|b| ftar_bundle::import(&b, dest));
+        match res {
+            Ok(got) => {
+                self.error = None;
+                self.status = Some(format!(
+                    "Unpacked {} files into {}",
+                    got.files.len(),
+                    dest.display()
+                ));
+                if let Some(t) = got.tree {
+                    self.request_open(t);
+                }
+                Ok(())
+            }
+            Err(e) => {
+                self.error = Some(e.clone());
+                Err(e)
+            }
+        }
+    }
+
     pub fn default_modes_csv_name(&self) -> String {
         format!("{}_failure_modes.csv", self.tree_name())
     }

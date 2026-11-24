@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 ftar-core = { path = "../../crates/core" }
 ftar-render = { path = "../../crates/render" }
+ftar-bundle = { path = "../../crates/bundle" }
 eframe = "0.37"
 rfd = "0.18"
 jiff = "1"
