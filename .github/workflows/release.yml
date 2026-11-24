@@ -146,7 +146,7 @@ jobs:
           set -euo pipefail
           cd dist
           ls -l
-          sha256sum * > SHA256SUMS.txt
+          sha256sum -- * > SHA256SUMS.txt
           cat SHA256SUMS.txt
       # SLSA build provenance for every archive and the checksum file, signed
       # with Sigstore. Verify with `gh attestation verify <file> --repo andy778/ftar-core`.
