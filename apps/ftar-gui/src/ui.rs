@@ -608,7 +608,7 @@ impl App {
     }
 
     fn export_report_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Text report", &["txt"])
             .set_file_name(self.default_report_name())
             .save_file()
@@ -618,7 +618,7 @@ impl App {
     }
 
     fn export_bundle_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Zip bundle", &["zip"])
             .set_file_name(self.default_bundle_name())
             .save_file()
@@ -629,13 +629,13 @@ impl App {
 
     /// Pick a bundle, then an empty folder to unpack it into.
     fn import_bundle_dialog(&mut self) {
-        let Some(zip) = rfd::FileDialog::new()
+        let Some(zip) = crate::desktop::FileDialog::new()
             .add_filter("Zip bundle", &["zip"])
             .pick_file()
         else {
             return;
         };
-        if let Some(dest) = rfd::FileDialog::new()
+        if let Some(dest) = crate::desktop::FileDialog::new()
             .set_title("Unpack the bundle into (an empty folder)")
             .pick_folder()
         {
@@ -644,7 +644,7 @@ impl App {
     }
 
     fn export_image_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("JPEG image", &["jpg", "jpeg"])
             .add_filter("PNG image", &["png"])
             .add_filter("SVG drawing", &["svg"])
@@ -674,7 +674,7 @@ impl App {
     }
 
     fn export_modes_csv_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("CSV", &["csv"])
             .set_file_name(self.default_modes_csv_name())
             .save_file()
@@ -684,7 +684,7 @@ impl App {
     }
 
     pub(crate) fn open_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("OpenFTA tree", &["fta"])
             .pick_file()
         {
@@ -709,7 +709,7 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "untitled.fta".into());
-        match rfd::FileDialog::new()
+        match crate::desktop::FileDialog::new()
             .add_filter("OpenFTA tree", &["fta"])
             .set_file_name(name)
             .save_file()
@@ -1751,6 +1751,10 @@ fn rgb32(c: ftar_render::prefs::Rgb) -> Color32 {
 /// Open a file with the system's default application (the browser, for HTML).
 pub(crate) fn open_with_default_app(path: &std::path::Path, browser: &str) -> std::io::Result<()> {
     use std::process::Command;
+    // the GUI's own tests build with `test-no-launch`: nothing opens on the desktop
+    if !crate::desktop::LAUNCHES {
+        return Ok(());
+    }
     if let Some((program, args)) = browser_command(browser, path) {
         return Command::new(program).args(args).spawn().map(|_| ());
     }

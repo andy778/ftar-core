@@ -1,0 +1,5 @@
+exit 0
+--- stdout
+nodes: 7  gates: 2  primary events: 3  database events: 3
+note: Failure Of An Electrical Supply To An Operating Theatre. 
+--- stderr

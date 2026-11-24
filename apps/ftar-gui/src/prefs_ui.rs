@@ -61,7 +61,7 @@ impl App {
                         )
                         .labelled_by(l.id);
                         if ui.button("Browse...").clicked() {
-                            if let Some(f) = rfd::FileDialog::new().pick_file() {
+                            if let Some(f) = crate::desktop::FileDialog::new().pick_file() {
                                 let name = f.to_string_lossy();
                                 p.browser = if name.contains(' ') {
                                     format!("\"{name}\"")

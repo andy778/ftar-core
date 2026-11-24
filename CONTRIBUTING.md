@@ -60,6 +60,8 @@ cargo xtask coverage     # line coverage as HTML (cargo install cargo-llvm-cov -
 
 `cargo xtask mutants` makes small deliberate bugs in the changed code (flip a `<`, return a default)
 and runs the tests against each. A **missed** mutant means no test noticed: add or tighten a test.
+A mutant no test can tell apart from the real code (an *equivalent* mutant), or code not worth a
+test (icon drawing), goes in `exclude_re` in `.cargo/mutants.toml` with its reason.
 CI runs the same on every pull request (`.github/workflows/mutants.yml`, fails on missed mutants in
 the PR's changes) and over the whole workspace weekly (a report in the job summary and artifacts). The weekly run on
 `master` also publishes the **mutation score** (caught / (caught + missed + timed out)) for the README
@@ -67,6 +69,18 @@ badge, as `mutants.json` on the `badges` branch.
 Coverage runs on every pull request and push to `master` (`.github/workflows/coverage.yml`); the
 per-file table is in the job summary, and the total is on Codecov (README badge). It has no threshold: use it to find untested code, and
 mutation testing to check the tested code is really checked.
+
+### Golden files
+
+The renderer (`crates/render/tests/golden.rs`) and the CLI's analysis commands
+(`apps/ftar-cli/tests/golden.rs`) are checked against files in their `tests/golden/` folders: every
+path, text and hit box of a drawing, and the stdout, stderr and exit code of a command. When a
+change to a drawing or a report is intended, regenerate them and review the diff before committing:
+
+```sh
+FTAR_UPDATE_GOLDEN=1 cargo test -p ftar-render --test golden
+FTAR_UPDATE_GOLDEN=1 cargo test -p ftar-cli --test golden
+```
 
 ## Rules that reviews check
 

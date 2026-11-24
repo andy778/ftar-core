@@ -1,0 +1,6 @@
+exit 0
+--- stdout
+2 minimal cut sets
+   1  GEN_FAIL MAINS_FAIL
+   2  MAINS_FAIL RELAY_FAIL
+--- stderr

@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Minimal cut set probabilities:
+   1  GEN_FAIL MAINS_FAIL                      5.940398007973424E-4
+   2  MAINS_FAIL RELAY_FAIL                    1.5E-3
+
+Probability of top level event:
+ 1 term   +2.0940398007973423E-3 = 2.0940398007973423E-3 (upper bound)
+ 2 terms  -2.970199003986712E-5 = 2.0643378107574753E-3 (lower bound)
+
+Exact value : 2.0643378107574753E-3
+
+Primary event analysis:
+ Event           Failure contrib.     Importance
+ GEN_FAIL        5.940398007973424E-4 28.78%
+ MAINS_FAIL      2.0940398007973423E-3 101.44%
+ RELAY_FAIL      1.5E-3               72.66%
+--- stderr

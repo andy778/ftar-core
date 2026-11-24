@@ -358,3 +358,46 @@ fn database_window_is_a_viewport_that_keeps_its_state() {
     h.run();
     h.get_by_label("PUMP"); // reopened with the same events
 }
+
+#[test]
+fn the_selected_event_is_highlighted_in_the_list() {
+    let mut app = App::default();
+    app.ped_new();
+    app.ped.open = true;
+    fill(&mut app, "PUMP", "1e-3", EventType::Basic);
+    fill(&mut app, "VALVE", "2e-3", EventType::Basic);
+    app.ped_select("VALVE");
+    let mut h = Harness::builder()
+        .with_size(vec2(1280.0, 800.0))
+        .build_eframe(move |_| app);
+    h.run();
+    let selected = |h: &Harness<'static, App>, id: &str| {
+        h.get_all_by_label(id)
+            .any(|n| n.accesskit_node().toggled() == Some(eframe::egui::accesskit::Toggled::True))
+    };
+    assert!(selected(&h, "VALVE"));
+    assert!(!selected(&h, "PUMP"));
+}
+
+#[test]
+fn new_and_open_keep_the_window_open_and_say_what_happened() {
+    let mut app = App::default();
+    app.ped.open = true;
+    app.ped_new();
+    assert!(app.ped.open, "New keeps the window open");
+    assert_eq!(app.ped.status.as_deref(), Some("New database"));
+
+    let path = data("theatre.ped");
+    assert!(app.ped_open(&path));
+    assert!(app.ped.open, "Open keeps the window open");
+    let n = app.ped.db.events.len();
+    assert!(n > 0);
+    assert_eq!(
+        app.ped.status.as_deref(),
+        Some(format!("Opened {} ({n} events)", path.display()).as_str())
+    );
+
+    app.ped.open = false;
+    app.ped_new();
+    assert!(!app.ped.open, "New does not open a closed window");
+}

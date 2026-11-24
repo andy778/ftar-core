@@ -2,12 +2,29 @@
 # function that returns a default) and checks that some test fails for each one; a "missed"
 # mutant is code the tests do not really check. See CONTRIBUTING.md and .github/workflows/mutants.yml.
 test_tool = "nextest"
-# Build tooling, not shipped code.
-exclude_globs = ["xtask/**"]
+exclude_globs = [
+    # Build tooling, not shipped code.
+    "xtask/**",
+    # The GUI's no-launch switch for tests. Mutating it would only test the scaffolding, and
+    # flipping LAUNCHES would make the test run open browser tabs and native dialogs.
+    "apps/ftar-gui/src/desktop.rs",
+]
 
-# Equivalent mutants: no test can tell them apart from the real code, so they are not misses.
+# Mutants left out, each with its reason. Equivalent ones are not misses: no test can tell them
+# apart from the real code.
 exclude_re = [
     # analysis.rs collect_ids: interning extra names (gate ids, an empty id) is harmless; the
     # interner only has to hold every primary event id, and an empty id fails in `eval` anyway.
     'replace && with \|\| in collect_ids',
+    # Icon drawing (toolbar.rs: paint_icon, the icon groups and their Pen): moving a stroke of
+    # an icon changes no behaviour worth a test, and the headless tests do not compare pixels.
+    # icon_button, the control itself, is still mutated.
+    'toolbar\.rs:.*(paint_\w*icon|Pen<)',
+    # Functions that only show a native file dialog: the GUI's tests build with test-no-launch,
+    # where every dialog answers "cancelled", so emptying one changes nothing a test can see.
+    'apps/ftar-gui/.*replace App::\w+_dialog with \(\)',
+    # canvas_scrollbars mirrors the pan to the scroll offset and back. The two agree on every
+    # frame except while a scrollbar is dragged (covered by the scrollbar tests), so these
+    # comparisons cannot change the result.
+    'replace (> with >=|- with [+/]|&& with \|\|) in App::canvas_scrollbars',
 ]

@@ -270,3 +270,19 @@ fn draw_takes_page_setup_options() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn draw_heads_the_drawing_with_the_tree_name() {
+    let dir = std::env::temp_dir().join(format!("ftar_draw_title_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("t.svg");
+    let (ok, _) = ftar(&[
+        "draw",
+        &format!("{DATA}/theatre.fta"),
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok);
+    let svg = std::fs::read_to_string(&out).unwrap();
+    assert!(svg.contains("Tree: theatre"), "header with the tree name");
+    let _ = std::fs::remove_dir_all(dir);
+}

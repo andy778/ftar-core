@@ -148,8 +148,8 @@ impl App {
             ui.colored_label(egui::Color32::RED, e);
         }
         let count = self.preview.tex.as_ref().map_or(0, |(_, n, _)| *n);
-        if count > 0 {
-            self.preview.sheet = self.preview.sheet.min(count - 1);
+        if let Some(last) = count.checked_sub(1) {
+            self.preview.sheet = self.preview.sheet.min(last);
             ui.horizontal(|ui| {
                 if ui
                     .add_enabled(self.preview.sheet > 0, egui::Button::new("Previous page"))

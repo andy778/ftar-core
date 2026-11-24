@@ -621,17 +621,15 @@ fn draw_node(b: &mut Builder, p: &Placed, db: &PrimaryEventDb, opts: &SceneOptio
         }
     }
     // description inside the symbol, centred (`draw_symbol_text`)
-    let desc = description(n, db);
-    if sym.text_lines > 0 && !desc.is_empty() {
-        // a little wider than the average glyph, so lines stay inside the symbol
-        let chars = (sym.text_w * UNIT / (FONT * 0.58)).floor() as usize;
-        let lines = wrap(desc, chars, sym.text_lines);
-        let h = lines.len() as f32 * LINE_H;
-        let mut y = p.top + (sym.depth * UNIT - h) / 2.0 + LINE_H / 2.0;
-        for l in &lines {
-            b.text([p.x, y], FONT, Anchor::Middle, false, l);
-            y += LINE_H;
-        }
+    // (no lines for an empty description or a symbol without a text area)
+    // a little wider than the average glyph, so lines stay inside the symbol
+    let chars = (sym.text_w * UNIT / (FONT * 0.58)).floor() as usize;
+    let lines = wrap(description(n, db), chars, sym.text_lines);
+    let h = lines.len() as f32 * LINE_H;
+    let mut y = p.top + (sym.depth * UNIT - h) / 2.0 + LINE_H / 2.0;
+    for l in &lines {
+        b.text([p.x, y], FONT, Anchor::Middle, false, l);
+        y += LINE_H;
     }
     let half = sym.width * UNIT / 2.0;
     let lift = if is_dormant(n) { 0.05 * UNIT } else { 0.0 };

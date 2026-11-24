@@ -17,8 +17,15 @@ eframe = "0.37"
 rfd = "0.18"
 jiff = "1"
 
+[features]
+# Only for this crate's own tests (see the dev-dependency below and src/desktop.rs): file dialogs
+# answer "cancelled" and nothing is launched, so no test can open a dialog or a browser tab.
+test-no-launch = []
+
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["eframe"] }
+# The crate's tests build it with test-no-launch; normal builds (resolver 2) do not get it.
+ftar-gui = { path = ".", features = ["test-no-launch"] }
 
 [lints]
 workspace = true

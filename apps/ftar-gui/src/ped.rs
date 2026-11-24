@@ -189,7 +189,7 @@ impl App {
     }
 
     fn ped_open_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Primary event database", &["ped"])
             .pick_file()
         {
@@ -206,7 +206,7 @@ impl App {
     }
 
     fn ped_export_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Text files", &["txt"])
             .set_file_name("primary_events.txt")
             .save_file()
@@ -655,7 +655,7 @@ impl App {
     }
 
     fn ped_save_as_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Primary event database", &["ped"])
             .set_file_name("events.ped")
             .save_file()
