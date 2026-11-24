@@ -1,5 +1,6 @@
 //! Drawing preferences: colours and monochrome reach exports and print, are saved between
 //! sessions, and the window opens (headless, no GPU).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

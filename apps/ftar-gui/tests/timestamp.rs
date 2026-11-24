@@ -1,4 +1,5 @@
 //! Report header timestamps keep C `ctime` layout after replacing chrono (#36).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ftar_gui::{ctime_text, App};
 

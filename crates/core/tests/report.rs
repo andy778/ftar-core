@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::analysis::{minimal_cut_sets, probability_report, CutSet, ProbabilityOptions};
 use ftar_core::montecarlo::{simulate, MonteCarloOptions};
 use ftar_core::project::Project;

@@ -50,7 +50,9 @@ fn place<'a>(
                 place(c, depth + 1, Some(me), p, next_col, out)
             })
             .collect();
-        out[me].x = (out[ids[0]].x + out[*ids.last().unwrap()].x) / 2.0;
+        if let (Some(&first), Some(&last)) = (ids.first(), ids.last()) {
+            out[me].x = (out[first].x + out[last].x) / 2.0;
+        }
     }
     me
 }

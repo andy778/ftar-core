@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::analysis::{minimal_cut_sets, top_probability};
 use ftar_core::parse::{parse_fta, parse_ped};
 

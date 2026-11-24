@@ -1,4 +1,5 @@
 //! The OpenFTA-style drawing shared by the SVG export and the GUI canvas (#52).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ftar_core::edit::new_node;
 use ftar_core::project::{Document, Project};

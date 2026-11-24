@@ -5,6 +5,7 @@
 //!
 //! Layout must match exactly. Numbers may differ in the last digits, because
 //! OpenFTA computes in `float` and ftar in `f64` (docs/VERIFICATION.md, item 7).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::{Path, PathBuf};
 

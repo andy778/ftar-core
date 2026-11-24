@@ -1,4 +1,5 @@
 //! Black-box tests of the `ftar` binary (what agents and CI scripts see).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::process::Command;
 
