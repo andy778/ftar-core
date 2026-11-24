@@ -1,4 +1,5 @@
 //! Headless end-to-end tests of the JSON tool API.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ftar_automation::{run_script, tools, Session};
 use serde_json::{json, Value};

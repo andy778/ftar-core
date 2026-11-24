@@ -229,7 +229,7 @@ pub fn insert_child(
     let p = node_at(tree, parent).ok_or(EditError::InvalidPath)?;
     check_child(p, parent.is_empty(), &p.children, index, &node)?;
     node_at_mut(tree, parent)
-        .unwrap()
+        .ok_or(EditError::InvalidPath)?
         .children
         .insert(index, node);
     let mut path = parent.to_vec();
@@ -254,7 +254,10 @@ pub fn delete_subtree(tree: &mut Tree, path: &[usize]) -> EditResult<Node> {
     }
     let (parent, i) = split_last(path)?;
     node_at(tree, path).ok_or(EditError::InvalidPath)?;
-    Ok(node_at_mut(tree, parent).unwrap().children.remove(i))
+    Ok(node_at_mut(tree, parent)
+        .ok_or(EditError::InvalidPath)?
+        .children
+        .remove(i))
 }
 
 /// Clone the subtree at `path` (for a clipboard).
@@ -332,12 +335,12 @@ pub fn change_type(
     }
     check_subtree(&new, path.is_empty())?;
     if let Some((parent, i)) = path.split_last().map(|(i, p)| (p, *i)) {
-        let p = node_at(tree, parent).unwrap();
+        let p = node_at(tree, parent).ok_or(EditError::InvalidPath)?;
         let mut sibs = p.children.clone();
         sibs.remove(i);
         check_child(p, parent.is_empty(), &sibs, i, &new)?;
     }
-    *node_at_mut(tree, path).unwrap() = new;
+    *node_at_mut(tree, path).ok_or(EditError::InvalidPath)? = new;
     Ok(())
 }
 
@@ -412,7 +415,9 @@ pub struct Issue {
 pub fn validate(tree: &Tree) -> Vec<Issue> {
     let mut out = Vec::new();
     for path in all_paths(tree) {
-        let n = node_at(tree, &path).unwrap();
+        let Some(n) = node_at(tree, &path) else {
+            continue;
+        };
         let mut push = |severity, message: &str| {
             out.push(Issue {
                 path: path.clone(),

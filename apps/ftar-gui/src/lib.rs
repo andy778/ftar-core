@@ -4,6 +4,7 @@
 //! * `ui` draws it with egui; the tree drawing comes from `ftar_render::scene`
 
 mod app;
+mod crash;
 mod help;
 pub use ftar_core::layout;
 pub use help::HelpState;
@@ -23,6 +24,7 @@ pub use ui::browser_command;
 
 /// Start the desktop app, optionally opening `path`.
 pub fn run(path: Option<PathBuf>) -> eframe::Result {
+    crash::install_panic_hook();
     eframe::run_native(
         "ftar - fault tree analysis",
         eframe::NativeOptions {

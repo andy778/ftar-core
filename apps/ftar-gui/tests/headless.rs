@@ -1,5 +1,6 @@
 //! Headless GUI tests: no window, no GPU. Drives the real egui app through
 //! kittest, and the operations behind it directly.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

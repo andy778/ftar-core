@@ -1,4 +1,5 @@
 //! Analysis menu: Validate and the analysis entries (#66).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

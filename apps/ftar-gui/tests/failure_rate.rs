@@ -1,6 +1,7 @@
 //! "Constant Failure Rate/Unit Time" (#123): the flag changes the analysis
 //! results through the unit time, and each rate checkbox shows the
 //! probability the rate gives.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};

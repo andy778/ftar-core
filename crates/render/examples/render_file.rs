@@ -1,5 +1,6 @@
 //! `cargo run -p ftar-render --example render_file -- tree.fta out.png [scale]`
 //! Renders a tree to PNG (or SVG when `out` ends in .svg) - handy for looking at the drawing.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use ftar_core::project::Project;
 use ftar_render::{svg_to_png, tree_svg, SvgOptions};
 
