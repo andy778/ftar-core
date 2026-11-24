@@ -1,0 +1,6 @@
+# cargo-mutants: mutation testing. It makes small deliberate bugs (a `+` turned into `-`, a
+# function that returns a default) and checks that some test fails for each one; a "missed"
+# mutant is code the tests do not really check. See CONTRIBUTING.md and .github/workflows/mutants.yml.
+test_tool = "nextest"
+# Build tooling, not shipped code.
+exclude_globs = ["xtask/**"]

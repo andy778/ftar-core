@@ -6,7 +6,13 @@
 //! * `layers`  – architecture rules (see docs/architecture.md)
 //! * `test`    – unit, integration and headless GUI tests, then doctests
 //! * `deny`    – dependency bans, licences and sources (deny.toml)
+//!
+//! Not part of `ci` (slower; see CONTRIBUTING.md):
+//! * `mutants [BASE]` – mutation-test the Rust lines changed since BASE (default `origin/master`),
+//!   committed or not, to check the tests catch bugs there (needs cargo-mutants)
+//! * `coverage`       – line coverage of the workspace tests as HTML (needs cargo-llvm-cov)
 
+use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
 
 mod layers;
@@ -15,9 +21,12 @@ mod layers;
 const CI_STEPS: &[&str] = &["fmt", "clippy", "layers", "test", "deny"];
 
 fn main() -> ExitCode {
-    let cmd = std::env::args().nth(1).unwrap_or_else(|| "ci".into());
+    let mut args = std::env::args().skip(1);
+    let cmd = args.next().unwrap_or_else(|| "ci".into());
     let result = match cmd.as_str() {
         "ci" => ci(),
+        "mutants" => mutants(args.next().as_deref().unwrap_or("origin/master")),
+        "coverage" => coverage(),
         other => run(other),
     };
     match result {
@@ -61,7 +70,7 @@ fn run(cmd: &str) -> Result<(), String> {
         "layers" => layers::check(),
         "deny" => deny(),
         _ => Err(format!(
-            "unknown command `{cmd}` (try: ci, fmt, clippy, layers, test, deny)"
+            "unknown command `{cmd}` (try: ci, fmt, clippy, layers, test, deny, mutants, coverage)"
         )),
     }
 }
@@ -102,6 +111,87 @@ fn deny() -> Result<(), String> {
         "licenses",
         "sources",
     ])
+}
+
+/// Mutation testing of what this branch changed: the Rust diff from the merge base with `base`
+/// to the working tree (so uncommitted edits count; a new file only once it is tracked). Every mutant must be caught by a test; a missed one is printed with its line.
+fn mutants(base: &str) -> Result<(), String> {
+    if !installed(&["mutants", "--version"]) {
+        return Err("cargo-mutants is not installed (cargo install cargo-mutants --locked)".into());
+    }
+    let merge_base = git(&["merge-base", base, "HEAD"])?;
+    let diff = git(&["diff", merge_base.trim(), "--", "*.rs"])?;
+    if diff.trim().is_empty() {
+        println!("mutants: no Rust changes since {base}, nothing to test");
+        return Ok(());
+    }
+    let dir = target_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file = dir.join("mutants.diff");
+    std::fs::write(&file, diff).map_err(|e| format!("{}: {e}", file.display()))?;
+    // cargo-mutants builds a copy of the tree. With a shared CARGO_TARGET_DIR its mutated builds
+    // would land in (and fight over) the normal target dir, and leave test binaries there whose
+    // compiled-in CARGO_MANIFEST_DIR points at the deleted copy; give it its own.
+    let status = cargo_cmd()
+        .args(["mutants", "--in-diff"])
+        .arg(&file)
+        .env_remove("CARGO_TARGET_DIR")
+        .status()
+        .map_err(|e| e.to_string())?;
+    status.success().then_some(()).ok_or_else(|| {
+        "cargo mutants found mutants the tests miss (see mutants.out/missed.txt)".into()
+    })
+}
+
+/// Line coverage of the workspace tests (nextest when installed), as an HTML report and a
+/// per-file summary. Informational: there is no threshold to pass.
+fn coverage() -> Result<(), String> {
+    if !installed(&["llvm-cov", "--version"]) {
+        return Err(
+            "cargo-llvm-cov is not installed (cargo install cargo-llvm-cov --locked;              rustup component add llvm-tools-preview)"
+                .into(),
+        );
+    }
+    let runner: &[&str] = if installed(&["nextest", "--version"]) {
+        &["llvm-cov", "nextest"]
+    } else {
+        &["llvm-cov"]
+    };
+    cargo(
+        &[
+            runner,
+            &["--workspace", "--exclude", "xtask", "--no-report"],
+        ]
+        .concat(),
+    )?;
+    cargo(&["llvm-cov", "report", "--summary-only"])?;
+    cargo(&["llvm-cov", "report", "--html"])?;
+    println!(
+        "coverage: open {}",
+        target_dir().join("llvm-cov/html/index.html").display()
+    );
+    Ok(())
+}
+
+/// Cargo's target directory: `CARGO_TARGET_DIR` when set (parallel agents use their own).
+fn target_dir() -> PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| PathBuf::from("target"), PathBuf::from)
+}
+
+/// Runs git and returns its stdout.
+fn git(args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git")
+        .args(args)
+        .output()
+        .map_err(|e| format!("git: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    String::from_utf8(out.stdout).map_err(|e| format!("git {}: {e}", args.join(" ")))
 }
 
 /// Whether `cargo <args>` (a cargo subcommand such as nextest) runs successfully.

@@ -1,0 +1,131 @@
+name: Mutation testing
+
+# cargo-mutants makes small deliberate bugs in the code (a `<` turned into `>`, a function that
+# returns a default) and checks that some test fails for each one. A "missed" mutant is code the
+# tests run but do not really check. Config: .cargo/mutants.toml; locally: `cargo xtask mutants`.
+#
+# * pull request: only the Rust lines the PR changes; fails if a mutant there is missed
+# * weekly / manual: every mutant in the workspace, in shards; a report, it does not fail on misses
+on:
+  pull_request:
+    paths: ["**/*.rs", "**/Cargo.toml", "Cargo.lock", ".cargo/mutants.toml", ".github/workflows/mutants.yml"]
+  schedule:
+    - cron: "29 1 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutants-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  in-diff:
+    name: Mutants in the PR's changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mutants
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-nextest@0.9.150,cargo-mutants@27.1.0
+      - name: Linux GUI build deps
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Diff against the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git diff "origin/${BASE_REF}...HEAD" -- '*.rs' > "$RUNNER_TEMP/pr.diff"
+      - name: Mutants
+        run: cargo mutants --in-diff "$RUNNER_TEMP/pr.diff" --no-shuffle -j 2
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Mutants in this PR's changes"
+            for f in caught missed timeout unviable; do
+              n=0; [ -f "mutants.out/$f.txt" ] && n=$(wc -l < "mutants.out/$f.txt")
+              echo "- $f: $n"
+            done
+            if [ -s mutants.out/missed.txt ]; then
+              echo; echo "Missed (no test failed for these changes; add or tighten a test):"
+              echo '```'; cat mutants.out/missed.txt; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutants-pr
+          path: mutants.out
+          if-no-files-found: ignore
+          retention-days: 14
+
+  full:
+    name: Mutants, shard ${{ matrix.shard }} of 8
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: mutants
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-nextest@0.9.150,cargo-mutants@27.1.0
+      - name: Linux GUI build deps
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      # Exit codes: 0 all caught, 2 some missed, 3 some timed out (both reported, not failures
+      # here); anything else (the unmutated tests failing, bad arguments) fails the job.
+      - name: Mutants
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          code=0
+          cargo mutants --workspace --shard "${SHARD}/8" --no-shuffle -j 2 || code=$?
+          echo "cargo mutants exited with $code"
+          case "$code" in 0|2|3) ;; *) exit "$code" ;; esac
+      - name: Summary
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          {
+            echo "### Mutants, shard ${SHARD} of 8"
+            for f in caught missed timeout unviable; do
+              n=0; [ -f "mutants.out/$f.txt" ] && n=$(wc -l < "mutants.out/$f.txt")
+              echo "- $f: $n"
+            done
+            if [ -s mutants.out/missed.txt ]; then
+              echo; echo "Missed:"; echo '```'; cat mutants.out/missed.txt; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,6 +1,9 @@
 # ftar-core
 
 [![CI](https://github.com/andy778/ftar-core/actions/workflows/ci.yml/badge.svg)](https://github.com/andy778/ftar-core/actions/workflows/ci.yml)
+[![Nightly macOS](https://github.com/andy778/ftar-core/actions/workflows/nightly-macos.yml/badge.svg?branch=master)](https://github.com/andy778/ftar-core/actions/workflows/nightly-macos.yml)
+[![Coverage](https://github.com/andy778/ftar-core/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/andy778/ftar-core/actions/workflows/coverage.yml)
+[![Mutation testing](https://github.com/andy778/ftar-core/actions/workflows/mutants.yml/badge.svg?branch=master)](https://github.com/andy778/ftar-core/actions/workflows/mutants.yml)
 [![Release](https://img.shields.io/github/v/release/andy778/ftar-core?logo=github&cacheSeconds=300)](https://github.com/andy778/ftar-core/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/andy778/ftar-core/total?logo=github&cacheSeconds=300)](https://github.com/andy778/ftar-core/releases)
 [![License](https://img.shields.io/github/license/andy778/ftar-core?cacheSeconds=300)](LICENSE)
