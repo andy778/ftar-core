@@ -7,7 +7,7 @@ description = "Zip bundles of a tree with its database, transfer-in trees and re
 
 [dependencies]
 ftar-core = { path = "../core" }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true

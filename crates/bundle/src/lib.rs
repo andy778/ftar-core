@@ -158,9 +158,12 @@ pub fn import(bytes: &[u8], dest: &Path) -> Result<Imported, String> {
         if f.is_dir() {
             continue;
         }
-        let rel = f
-            .enclosed_name()
-            .ok_or_else(|| format!("unsafe path in the bundle: {}", f.name()))?;
+        let rel = f.enclosed_name().ok_or_else(|| {
+            format!(
+                "unsafe path in the bundle: {}",
+                f.name().unwrap_or_default()
+            )
+        })?;
         total += f.size();
         if total > MAX_TOTAL {
             return Err("the bundle unpacks to too much data".into());
