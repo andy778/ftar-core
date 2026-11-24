@@ -1,8 +1,8 @@
 name: Coverage
 
 # Line coverage of the workspace tests (cargo-llvm-cov, nextest), Linux only. Informational: no
-# threshold. The per-file table is in the job summary; HTML and lcov are uploaded as artifacts.
-# Locally: `cargo xtask coverage`.
+# threshold. The per-file table is in the job summary; HTML and lcov are uploaded as artifacts,
+# and lcov goes to Codecov (the README badge). Locally: `cargo xtask coverage`.
 on:
   push:
     branches: [master]
@@ -25,6 +25,9 @@ jobs:
     name: cargo llvm-cov
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write # Codecov upload authenticates with the job's OIDC token, no stored secret
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,3 +70,11 @@ jobs:
             target/llvm-cov/html
           if-no-files-found: error
           retention-days: 14
+      # Not fatal: Codecov being down, or a fork PR without an OIDC token, must not fail the PR.
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: lcov.info
+          disable_search: true
+          use_oidc: true
+          fail_ci_if_error: false

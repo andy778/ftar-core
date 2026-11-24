@@ -55,7 +55,7 @@ and runs the tests against each. A **missed** mutant means no test noticed: add 
 CI runs the same on every pull request (`.github/workflows/mutants.yml`, fails on missed mutants in
 the PR's changes) and over the whole workspace weekly (a report in the job summary and artifacts).
 Coverage runs on every pull request and push to `master` (`.github/workflows/coverage.yml`); the
-per-file table is in the job summary. It has no threshold: use it to find untested code, and
+per-file table is in the job summary, and the total is on Codecov (README badge). It has no threshold: use it to find untested code, and
 mutation testing to check the tested code is really checked.
 
 ## Rules that reviews check
