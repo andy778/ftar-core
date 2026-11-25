@@ -405,6 +405,24 @@ Event: A\n- label: First\n- model_type: Fixed\n- probability: 0.1\n- intensity: 
 Event: B\n- model_type: Fixed\n- probability: 0.2\n- intensity: 0\n";
     let r = report(src);
     let t = tsv::importances(&r, 0).unwrap();
+    // Every table runs time-major: each time, then each sample.
+    let rows = |table: &str, id: &str, col: usize| -> Vec<(String, String)> {
+        table
+            .lines()
+            .filter(|l| l.starts_with(&format!("{id}\t")))
+            .map(|l| {
+                let c: Vec<&str> = l.split('\t').collect();
+                (c[col].to_string(), c[col + 1].to_string())
+            })
+            .collect()
+    };
+    let want: Vec<(String, String)> = [("1.0", "0"), ("1.0", "1"), ("2.0", "0"), ("2.0", "1")]
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
+    assert_eq!(rows(&tsv::events(&r), "A", 3), want);
+    assert_eq!(rows(&tsv::gates(&r), "T", 6), want);
+    assert_eq!(rows(&tsv::cut_sets(&r, 0).unwrap(), "A", 2), want);
     let mut lines = t.lines();
     assert_eq!(
         lines.next().unwrap(),
@@ -463,7 +481,9 @@ Event: B\n- model_type: Fixed\n- probability: 0.2\n- intensity: 2\n";
 #[test]
 fn a_huge_expansion_is_refused_not_run() {
     let mut src = String::from("- times: 1\n\nGate: T\n- type: OR\n- inputs: ");
-    let ids: Vec<String> = (0..40).map(|i| format!("E{i}")).collect();
+    // 16 cut sets: 65535 combinations for q alone, quick even if the
+    // budget were not enforced, and far more than the 10000 allowed.
+    let ids: Vec<String> = (0..16).map(|i| format!("E{i}")).collect();
     src += &ids.join(", ");
     src.push('\n');
     for id in &ids {
@@ -472,7 +492,8 @@ fn a_huge_expansion_is_refused_not_run() {
     let e = analyse(
         &parse_text_ast(src.as_bytes()).unwrap(),
         &QuantOptions {
-            budget: 1_000_000,
+            budget: 10_000,
+            importance: false,
             ..QuantOptions::default()
         },
     )
@@ -754,6 +775,31 @@ fn carriage_returns_at_the_end_of_values_go() {
     let text = stable("- note: a\r\r\n\nEvent: E\n- comment: c\r\r\r\n");
     assert!(text.contains("- note: a\n"), "{text:?}");
     assert!(text.contains("- comment: c\n"), "{text:?}");
+}
+
+#[test]
+fn events_in_cut_sets_need_a_model() {
+    let run = |src: &str| {
+        analyse(
+            &parse_text_ast(src.as_bytes()).unwrap(),
+            &QuantOptions::default(),
+        )
+        .map(|_| ())
+        .unwrap_err()
+        .to_string()
+    };
+    let e =
+        run("Gate: T\n- type: OR\n- inputs: A, B\n\nEvent: A\n- probability: 0.1\n\nEvent: B\n");
+    assert!(e.contains("event `B` has no probability or model"), "{e}");
+    let e = run("Gate: T\n- type: OR\n- inputs: A, x.fta\n\nEvent: A\n- probability: 0.1\n\nEvent: x.fta\n- type: transfer_in\n");
+    assert!(e.contains("`x.fta` is not inlined"), "{e}");
+    // An event without a model that no cut set uses is fine.
+    let ok = "Gate: T\n- type: OR\n- inputs: A\n\nEvent: A\n- probability: 0.1\n\nEvent: SPARE\n";
+    assert!(analyse(
+        &parse_text_ast(ok.as_bytes()).unwrap(),
+        &QuantOptions::default()
+    )
+    .is_ok());
 }
 
 #[test]

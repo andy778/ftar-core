@@ -16,17 +16,28 @@ fn fnv1a(s: &str) -> u64 {
     })
 }
 
+/// splitmix64: the next number from state `z`.
+fn splitmix(z: &mut u64) -> u64 {
+    *z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut x = *z;
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^ (x >> 31)
+}
+
+/// Rejections before Marsaglia and Tsang's gamma gives up (each round
+/// accepts with probability above 0.95, so this never happens).
+const GAMMA_TRIES: usize = 1000;
+
 impl Rng {
     pub(crate) fn from_seed(seed: &str) -> Self {
         let mut z = fnv1a(seed);
-        let mut next = || {
-            z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
-            let mut x = z;
-            x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-            x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-            x ^ (x >> 31)
-        };
-        let s = [next(), next(), next(), next()];
+        let s = [
+            splitmix(&mut z),
+            splitmix(&mut z),
+            splitmix(&mut z),
+            splitmix(&mut z),
+        ];
         // xoshiro's state must not be all zero; splitmix64 never gives four zeros.
         Rng(s)
     }
@@ -68,17 +79,17 @@ impl Rng {
         }
         let d = alpha - 1.0 / 3.0;
         let c = 1.0 / (9.0 * d).sqrt();
-        loop {
+        for _ in 0..GAMMA_TRIES {
             let x = self.normal();
             let v = (1.0 + c * x).powi(3);
             if v <= 0.0 {
                 continue;
             }
-            let u = self.uniform_open();
-            if u.ln() < 0.5 * x * x + d - d * v + d * v.ln() {
+            if accepts(self.uniform_open(), x, d, v) {
                 return d * v;
             }
         }
+        f64::NAN
     }
 
     pub(crate) fn sample(&mut self, p: &Param) -> f64 {
@@ -104,6 +115,11 @@ impl Rng {
             Distribution::Uniform { lower, upper } => lower + (upper - lower) * self.uniform(),
         }
     }
+}
+
+/// Marsaglia and Tsang's acceptance test for the candidate `d·v`.
+fn accepts(u: f64, x: f64, d: f64, v: f64) -> bool {
+    u.ln() < 0.5 * x * x + d - d * v + d * v.ln()
 }
 
 /// Inverse distribution function of the triangular distribution.
@@ -214,6 +230,129 @@ mod tests {
         let m = logs.iter().sum::<f64>() / n as f64;
         assert!(close(m, -2.0, 0.01), "{m}");
         assert!(logs.iter().all(|x| (-3.0..=-1.0).contains(x)));
+    }
+
+    #[test]
+    fn generators_match_their_reference_vectors() {
+        // FNV-1a 64.
+        assert_eq!(fnv1a(""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a("a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a("foobar"), 0x8594_4171_f739_67e8);
+        // splitmix64 from 0.
+        let mut z = 0;
+        assert_eq!(splitmix(&mut z), 0xe220_a839_7b1d_cdaf);
+        assert_eq!(splitmix(&mut z), 0x6e78_9e6a_a1b9_65f4);
+        // xoshiro256** from the state [1, 2, 3, 4].
+        let mut r = Rng([1, 2, 3, 4]);
+        let out: Vec<u64> = (0..4).map(|_| r.next_u64()).collect();
+        assert_eq!(out, [11520, 0, 1_509_978_240, 1_215_971_899_390_074_240]);
+    }
+
+    /// The first samples of each distribution for one seed, so a seed gives
+    /// the same numbers in every version (to 1e-12: `ln`, `exp` and `cos`
+    /// may differ in the last bit between platforms).
+    #[test]
+    fn samples_are_pinned_per_seed() {
+        use Distribution::*;
+        let pins: &[(Distribution, [f64; 3])] = &[
+            (
+                Beta {
+                    alpha: 2.0,
+                    beta: 5.0,
+                },
+                [0.08000668704907728, 0.04192316189785182, 0.3626755936061592],
+            ),
+            (
+                Gamma {
+                    alpha: 0.5,
+                    lambda: 2.0,
+                },
+                [
+                    0.010963555447515195,
+                    0.07227661986065469,
+                    1.5919142732457714,
+                ],
+            ),
+            (
+                Gamma {
+                    alpha: 1.0,
+                    lambda: 1.0,
+                },
+                [0.15159523191068783, 0.05068136616992545, 3.508083328814201],
+            ),
+            (
+                Gamma {
+                    alpha: 3.0,
+                    lambda: 1.0,
+                },
+                [0.6680706781778929, 1.3920496374502849, 0.9617540498851753],
+            ),
+            (
+                LogNormal {
+                    mu: 1.0,
+                    sigma: 0.5,
+                },
+                [1.0993010779810637, 2.3267708530071913, 1.613939434803387],
+            ),
+            (
+                LogUniform {
+                    lower: 0.001,
+                    upper: 0.1,
+                },
+                [
+                    0.06651635469880625,
+                    0.015584725130526599,
+                    0.001574703914522453,
+                ],
+            ),
+            (
+                Normal {
+                    mu: 1.0,
+                    sigma: 2.0,
+                },
+                [
+                    -2.6213016231639683,
+                    0.37792562533225427,
+                    -1.0852878230451375,
+                ],
+            ),
+            (
+                Triangular {
+                    lower: 0.0,
+                    upper: 4.0,
+                    mode: 1.0,
+                },
+                [2.96925786112288, 1.7991353703354434, 0.6280109984584953],
+            ),
+            (
+                Uniform {
+                    lower: 1.0,
+                    upper: 3.0,
+                },
+                [2.8229284405238366, 2.1926991469819157, 1.197198907092418],
+            ),
+        ];
+        for (d, want) in pins {
+            let mut r = Rng::from_seed("pin");
+            for w in want {
+                let got = r.sample(&Param::Dist(*d));
+                assert!(close(got, *w, 1e-12), "{d:?}: {got} vs {w}");
+            }
+        }
+    }
+
+    #[test]
+    fn triangular_inverts_its_distribution_function() {
+        // lower 0, mode 1, upper 4: F(1) = 1/4.
+        assert_eq!(triangular(0.04, 0.0, 4.0, 1.0), 0.4);
+        assert_eq!(triangular(0.25, 0.0, 4.0, 1.0), 1.0);
+        // Right of the mode: 4 - sqrt((1 - u) * 4 * 3).
+        assert_eq!(triangular(0.8125, 0.0, 4.0, 1.0), 2.5);
+        assert_eq!(triangular(0.5, 2.0, 2.0, 2.0), 2.0, "no width");
+        assert_eq!(
+            triangular(0.5, 1.0, 3.0, 3.0),
+            1.0 + (0.5f64 * 2.0 * 2.0).sqrt()
+        );
     }
 
     #[test]

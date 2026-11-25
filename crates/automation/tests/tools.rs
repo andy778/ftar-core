@@ -252,6 +252,44 @@ fn time_analysis_of_a_text_tree() {
     assert_eq!(r["gates"][0]["q"].as_array().unwrap().len(), 1);
     assert!(r["gates"][0].get("q_p05").is_none());
     assert!(r["gates"][0].get("importance").is_none());
+    // Seed, order and tolerance reach the analysis.
+    let q = |s: &mut ftar_automation::Session, args: Value| {
+        let r = s.call("analysis_time", &args).unwrap();
+        (r["seed"].clone(), r["gates"][0]["q"][0].as_f64().unwrap())
+    };
+    let (seed_a, a) = q(
+        &mut s,
+        json!({ "times": [5000], "samples": 50, "seed": "a" }),
+    );
+    let (seed_b, b) = q(
+        &mut s,
+        json!({ "times": [5000], "samples": 50, "seed": "b" }),
+    );
+    assert_eq!((seed_a, seed_b), (json!("a"), json!("b")));
+    assert_ne!(a, b, "another seed, other samples");
+    let (_, exact) = q(&mut s, json!({ "times": [5000], "samples": 1 }));
+    let (_, rare) = q(&mut s, json!({ "times": [5000], "samples": 1, "order": 1 }));
+    let (_, tol) = q(
+        &mut s,
+        json!({ "times": [5000], "samples": 1, "tolerance": 0.99 }),
+    );
+    assert!(rare > exact, "order 1 is the rare-event upper bound");
+    // A tolerance near 1 stops after the second term (the first is the
+    // whole sum so far): Bonferroni's lower bound.
+    assert!(tol < rare && tol <= exact, "{tol} {exact} {rare}");
+    // Exactly the limit of points is allowed, one more is not.
+    s.call(
+        "analysis_time",
+        &json!({ "times": [5000], "samples": 100_000 }),
+    )
+    .unwrap();
+    let e = s
+        .call(
+            "analysis_time",
+            &json!({ "times": [5000], "samples": 100_001 }),
+        )
+        .unwrap_err();
+    assert!(e.message.contains("100001"), "{}", e.message);
     let r = s
         .call(
             "analysis_time",

@@ -144,20 +144,37 @@ fn leaf(kind: EventType, id: &str, modifier: Option<char>, children: Vec<Node>) 
     }
 }
 
-/// k-element subsets of `0..n`, in lexicographic order.
-pub(crate) fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
-    let mut out = Vec::new();
-    if k == 0 || k > n {
-        return out;
+/// `n` choose `k`, or `None` once it is more than `cap`.
+pub(crate) fn binomial_upto(n: usize, k: usize, cap: usize) -> Option<usize> {
+    if k > n {
+        return Some(0);
     }
+    // C(n, i) grows with i up to n/2, so a value over the cap stays over it.
+    let k = k.min(n - k);
+    let mut c: u128 = 1;
+    for i in 0..k {
+        c = c * (n - i) as u128 / (i + 1) as u128;
+        if c > cap as u128 {
+            return None;
+        }
+    }
+    usize::try_from(c).ok()
+}
+
+/// k-element subsets of `0..n`, in lexicographic order; `None` when there
+/// are more than `cap` of them.
+pub(crate) fn combinations(n: usize, k: usize, cap: usize) -> Option<Vec<Vec<usize>>> {
+    let total = binomial_upto(n, k, cap)?;
+    let mut out = Vec::with_capacity(total);
     let mut c: Vec<usize> = (0..k).collect();
-    loop {
+    // Exactly `total` rounds, so the loop ends whatever the steps do.
+    for _ in 0..total {
         out.push(c.clone());
         let Some(i) = (0..k)
             .rev()
             .find(|&i| c.get(i).is_some_and(|&x| x < n - k + i))
         else {
-            return out;
+            break;
         };
         if let Some(x) = c.get_mut(i) {
             *x += 1;
@@ -169,6 +186,7 @@ pub(crate) fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
             }
         }
     }
+    Some(out)
 }
 
 /// The children of an intermediate event for a gate of type `t` over
@@ -188,7 +206,13 @@ pub(crate) fn gate_children(t: GateType, gate_id: &str, inputs: Vec<Node>) -> Re
             vec![leaf(EventType::And, gate_id, None, inputs)]
         }
         GateType::Vote(k) => {
-            let ands = combinations(inputs.len(), k)
+            let ands = combinations(inputs.len(), k, MAX_NODES)
+                .ok_or_else(|| {
+                    unsupported(format!(
+                        "VOTE({k}) over {} inputs has more than {MAX_NODES} combinations",
+                        inputs.len()
+                    ))
+                })?
                 .into_iter()
                 .map(|c| Node {
                     kind: EventType::Intermediate,
@@ -212,18 +236,27 @@ pub(crate) fn gate_children(t: GateType, gate_id: &str, inputs: Vec<Node>) -> Re
     })
 }
 
-/// Nodes in the expansion of a gate (for the size check).
-fn expansion_size(t: GateType, n: usize) -> usize {
+/// Nodes a gate of type `t` adds to its intermediate event and inputs
+/// (whose subtrees have `sizes` nodes and are counted already): the gate
+/// symbol, and for a VOTE(k) the OR, an intermediate event and an AND per
+/// combination, and the copies of each input in the combinations it is in.
+/// More than [`MAX_NODES`] gives `usize::MAX`.
+fn added_nodes(t: GateType, sizes: &[usize]) -> usize {
+    let n = sizes.len();
     match t {
+        GateType::Null => 0,
         GateType::Vote(k) if k > 1 && k < n => {
-            let mut c: usize = 1;
-            for i in 0..k {
-                c = c.saturating_mul(n - i) / (i + 1);
-                if c > MAX_NODES {
-                    return usize::MAX;
-                }
-            }
-            c.saturating_mul(2 + k)
+            let (Some(combos), Some(each)) = (
+                binomial_upto(n, k, MAX_NODES),
+                binomial_upto(n - 1, k - 1, MAX_NODES),
+            ) else {
+                return usize::MAX;
+            };
+            let total: usize = sizes.iter().sum();
+            combos
+                .saturating_mul(2)
+                .saturating_add(1)
+                .saturating_add((each - 1).saturating_mul(total))
         }
         _ => 1,
     }
@@ -263,14 +296,8 @@ impl Builder<'_> {
         for i in &def.inputs {
             inputs.push(self.input(i, def.line, child_depth)?);
         }
-        self.count(def.line, expansion_size(def.gate_type, inputs.len()))?;
-        if let GateType::Vote(k) = def.gate_type {
-            if k > 1 && k < inputs.len() {
-                // Each input is copied into the combinations it is part of.
-                let copies: usize = inputs.iter().map(node_count).sum();
-                self.count(def.line, copies.saturating_mul(k))?;
-            }
-        }
+        let sizes: Vec<usize> = inputs.iter().map(node_count).collect();
+        self.count(def.line, added_nodes(def.gate_type, &sizes))?;
         let children = gate_children(def.gate_type, def.gate_id.as_deref().unwrap_or(""), inputs)
             .map_err(|e| err(def.line, e))?;
         self.active.remove(id);
@@ -621,7 +648,9 @@ impl<'a> Writer<'a> {
                     if g.modifier.is_some() {
                         return Err(unsupported(format!("gate `{}` has a type marker", g.id)));
                     }
-                    def.gate_type = GateType::from_openfta(g.kind).unwrap_or(GateType::Or);
+                    def.gate_type = GateType::from_openfta(g.kind).ok_or_else(|| {
+                        unsupported(format!("gate `{}` has no text-format type", g.id))
+                    })?;
                     if !g.id.is_empty() {
                         def.gate_id = Some(write_id(&g.id)?.to_string());
                     }
@@ -695,16 +724,6 @@ impl<'a> Writer<'a> {
             })),
             (None, None) => None,
         };
-        if let Some(Param::Value(x)) = match &model {
-            Some(EventModel::Own(Model::Fixed { probability, .. })) => Some(probability),
-            _ => None,
-        } {
-            if x.is_infinite() {
-                return Err(unsupported(format!(
-                    "event `{id}` has an infinite probability"
-                )));
-            }
-        }
         let label = match entry.map(|e| e.description.as_str()) {
             Some(d) if !d.is_empty() => Some(single_line(d)?),
             _ => extra.and_then(|x| x.label.clone()),
@@ -826,4 +845,129 @@ fn check_references(ast: &Ast) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn v(x: f64) -> Param {
+        Param::Value(x)
+    }
+
+    #[test]
+    fn rates_and_mean_times() {
+        assert_eq!(rate_value(&Rate::Rate(v(0.5))), Some(0.5));
+        assert_eq!(rate_value(&Rate::MeanTime(v(4.0))), Some(0.25));
+        assert_eq!(rate_value(&Rate::MeanTime(v(0.0))), Some(f64::INFINITY));
+        assert_eq!(rate_value(&Rate::MeanTime(v(f64::INFINITY))), Some(0.0));
+        let d = Param::Dist(crate::text::Distribution::Uniform {
+            lower: 0.0,
+            upper: 1.0,
+        });
+        assert_eq!(rate_value(&Rate::Rate(d)), None);
+    }
+
+    #[test]
+    fn what_the_database_can_hold() {
+        let cr = |f: Rate, r: Rate| Model::ConstantRate {
+            failure: f,
+            repair: r,
+        };
+        let fixed = |p: f64| Model::Fixed {
+            probability: v(p),
+            intensity: v(3.0),
+        };
+        assert_eq!(database_value(&fixed(0.25)), Some((0.25, None)));
+        assert_eq!(database_value(&fixed(f64::NAN)), None);
+        assert_eq!(
+            database_value(&cr(
+                Rate::MeanTime(v(50.0)),
+                Rate::MeanTime(v(f64::INFINITY))
+            )),
+            Some((0.02, Some('L')))
+        );
+        // An infinite rate, or repair, has no `L` entry.
+        assert_eq!(
+            database_value(&cr(Rate::MeanTime(v(0.0)), Rate::Rate(v(0.0)))),
+            None
+        );
+        assert_eq!(
+            database_value(&cr(Rate::Rate(v(0.1)), Rate::Rate(v(0.5)))),
+            None
+        );
+        assert_eq!(database_value(&Model::True), Some((1.0, None)));
+        assert_eq!(database_value(&Model::False), Some((0.0, None)));
+        assert_eq!(database_value_for(EventType::Dormant, &Model::True), None);
+        assert_eq!(
+            database_value_for(EventType::External, &Model::True),
+            Some((1.0, None))
+        );
+    }
+
+    #[test]
+    fn database_entries_compare_by_value_and_rate_marker() {
+        let e = |lambda| PrimaryEvent {
+            id: "E".into(),
+            group: String::new(),
+            kind: EventType::Basic,
+            modifier: None,
+            description: String::new(),
+            probability: 0.5,
+            lambda,
+        };
+        assert_eq!(entry_value(&e(Some('L'))), (0.5, Some('L')));
+        // OpenFTA's space or NUL for "no marker" is no marker.
+        assert_eq!(entry_value(&e(Some(' '))), (0.5, None));
+        assert_eq!(entry_value(&e(None)), (0.5, None));
+    }
+
+    #[test]
+    fn combinations_and_their_count() {
+        assert_eq!(
+            combinations(4, 2, 100).unwrap(),
+            [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]
+        );
+        assert_eq!(combinations(3, 3, 100).unwrap(), [[0, 1, 2]]);
+        assert_eq!(combinations(2, 3, 100).unwrap(), Vec::<Vec<usize>>::new());
+        assert_eq!(combinations(4, 2, 6).unwrap().len(), 6);
+        assert!(combinations(4, 2, 5).is_none(), "more than the cap");
+        assert_eq!(binomial_upto(10, 3, 1000), Some(120));
+        assert_eq!(binomial_upto(10, 7, 1000), Some(120));
+        assert_eq!(binomial_upto(60, 30, MAX_NODES), None);
+        assert_eq!(binomial_upto(5, 0, 1), Some(1));
+    }
+
+    /// The nodes a gate adds, checked against the tree it builds.
+    #[test]
+    fn added_nodes_is_the_size_of_the_expansion() {
+        let event = |id: &str| leaf(EventType::Basic, id, None, Vec::new());
+        let sub = Node {
+            kind: EventType::Intermediate,
+            modifier: None,
+            id: "S".into(),
+            text: String::new(),
+            children: vec![leaf(EventType::And, "", None, vec![event("x"), event("y")])],
+        };
+        let inputs = vec![event("a"), sub, event("b"), event("c")];
+        let sizes: Vec<usize> = inputs.iter().map(node_count).collect();
+        assert_eq!(sizes, [1, 4, 1, 1]);
+        for t in [
+            GateType::Null,
+            GateType::And,
+            GateType::Xor,
+            GateType::Vote(1),
+            GateType::Vote(2),
+            GateType::Vote(3),
+            GateType::Vote(4),
+        ] {
+            let kids = gate_children(t, "G", inputs.clone()).unwrap();
+            let built: usize = kids.iter().map(node_count).sum();
+            let inputs_once: usize = sizes.iter().sum();
+            let added = added_nodes(t, &sizes);
+            // VOTE copies inputs; the expansion holds each copy.
+            assert_eq!(built, added + inputs_once, "{t:?}");
+        }
+        assert_eq!(added_nodes(GateType::Vote(30), &[1; 60]), usize::MAX);
+    }
 }

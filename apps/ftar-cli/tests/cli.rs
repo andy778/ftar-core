@@ -371,6 +371,14 @@ fn time_prints_the_top_gate_and_writes_pfta_tables() {
     let (ok, out) = ftar(&["time", &format!("{DATA}/theatre.fta"), "--times", "1"]);
     assert!(ok);
     assert!(out.contains("2.064338E-3"), "{out}");
+    // Without sampling, no quantile columns.
+    let (ok, out) = ftar(&["time", &tree, "--samples", "1"]);
+    assert!(ok);
+    assert!(
+        !out.contains("q 5%") && !out.contains("samples (seed"),
+        "{out}"
+    );
+    assert!(out.contains("Gate NO_FLOW"), "{out}");
     let (ok, _) = ftar(&["time", &tree, "--samples"]);
     assert!(!ok);
     let _ = std::fs::remove_dir_all(dir);

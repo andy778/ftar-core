@@ -26,7 +26,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::analysis::minimal_cut_sets;
 use crate::error::{Error, Result};
-use crate::model::{EventType, Tree};
+use crate::model::Tree;
 use crate::text::convert::{gate_trees, resolve};
 use crate::text::{Ast, EventModel, GateType, Model, Param, Rate};
 use compute::{Budget, Point, Term, Truncation};
@@ -168,6 +168,16 @@ struct Setup {
     trunc: Truncation,
 }
 
+/// At most [`MAX_POINTS`] times × samples.
+fn check_points(times: usize, samples: usize) -> Result<()> {
+    if times.saturating_mul(samples) > MAX_POINTS {
+        return Err(Error::Unsupported(format!(
+            "times × samples is more than {MAX_POINTS}"
+        )));
+    }
+    Ok(())
+}
+
 fn setup(ast: &Ast, o: &QuantOptions) -> Result<Setup> {
     let p = &ast.props;
     let times = o
@@ -179,11 +189,7 @@ fn setup(ast: &Ast, o: &QuantOptions) -> Result<Setup> {
         return Err(Error::Parse("times must be given and not negative".into()));
     }
     let samples = o.sample_size.or(p.sample_size).unwrap_or(1).max(1);
-    if times.len().saturating_mul(samples) > MAX_POINTS {
-        return Err(Error::Unsupported(format!(
-            "times × samples is more than {MAX_POINTS}"
-        )));
-    }
+    check_points(times.len(), samples)?;
     let tolerance = o
         .computational_tolerance
         .or(p.computational_tolerance)
@@ -478,17 +484,16 @@ pub fn analyse(ast: &Ast, opts: &QuantOptions) -> Result<QuantReport> {
     })
 }
 
-/// Events in a gate's cut sets need a model.
+/// Events in a gate's cut sets need a model. (A transfer-in never gets
+/// here: the cut-set engine refuses one that is not inlined.)
 fn check_models(terms: &[Term], ast: &Ast) -> Result<()> {
     for e in terms.iter().flatten() {
         if let Some(ev) = ast.events.get(*e as usize) {
             if ev.model.is_none() {
-                let what = if ev.kind == EventType::TransferIn {
-                    "is a transfer-in (open the tree with its transfers inlined)"
-                } else {
-                    "has no probability or model"
-                };
-                return Err(Error::Parse(format!("event `{}` {what}", ev.id)));
+                return Err(Error::Parse(format!(
+                    "event `{}` has no probability or model",
+                    ev.id
+                )));
             }
         }
     }
@@ -530,5 +535,71 @@ mod tests {
         assert!((w - 0.5 * (-1.0f64).exp()).abs() < 1e-15);
         // Repairable: steady state λ/(λ+μ).
         assert!((constant_rate_q(1e9, 1.0, 3.0) - 0.25).abs() < 1e-15);
+    }
+
+    /// PFTA's table of edge cases, row by row (`constant_rate_model_*`).
+    #[test]
+    fn constant_rate_edge_table() {
+        let nan = f64::NAN;
+        let inf = f64::INFINITY;
+        let same = |a: f64, b: f64| a == b || (a.is_nan() && b.is_nan());
+        // (t, λ, μ, q, ω)
+        let rows = [
+            (inf, 0.0, 0.0, nan, 0.0),
+            (nan, 0.0, 0.0, nan, 0.0),
+            (5.0, 0.0, 0.0, 0.0, 0.0),
+            (inf, 0.0, nan, nan, 0.0),
+            (5.0, 0.0, nan, 0.0, 0.0),
+            (inf, 0.0, 1.0, 0.0, 0.0),
+            (nan, 0.0, inf, 0.0, 0.0),
+            (5.0, inf, inf, nan, nan),
+            (5.0, inf, nan, nan, nan),
+            (0.0, inf, 1.0, nan, nan),
+            (nan, inf, 1.0, nan, nan),
+            (5.0, inf, 1.0, 1.0, 1.0),
+            (5.0, nan, 1.0, nan, nan),
+            (5.0, 1.0, nan, nan, nan),
+            (5.0, 1.0, inf, 0.0, 1.0),
+        ];
+        for (t, l, m, q, w) in rows {
+            assert!(same(constant_rate_q(t, l, m), q), "q({t}, {l}, {m})");
+            assert!(same(constant_rate_w(t, l, m), w), "ω({t}, {l}, {m})");
+        }
+    }
+
+    #[test]
+    fn rate_divides_by_the_chance_of_working() {
+        let s = Series::from_qw(vec![0.5, 0.0, 1.0], vec![1.0, 2.0, 0.0]);
+        assert_eq!(s.rate[..2], [2.0, 2.0]);
+        assert!(s.rate[2].is_nan(), "0/0");
+    }
+
+    #[test]
+    fn the_size_limit_is_exact() {
+        assert!(check_points(MAX_POINTS, 1).is_ok());
+        assert!(check_points(1, MAX_POINTS).is_ok());
+        assert!(check_points(MAX_POINTS, 2).is_err());
+        assert!(check_points(1, MAX_POINTS + 1).is_err());
+    }
+
+    #[test]
+    fn times_must_be_given_and_not_negative() {
+        let ast = crate::text::parse_text_ast(
+            b"Gate: T
+",
+        )
+        .unwrap();
+        for times in [vec![], vec![1.0, -2.0], vec![-1.0]] {
+            let o = QuantOptions {
+                times: Some(times.clone()),
+                ..QuantOptions::default()
+            };
+            assert!(setup(&ast, &o).is_err(), "{times:?}");
+        }
+        let o = QuantOptions {
+            times: Some(vec![0.0, f64::NAN]),
+            ..QuantOptions::default()
+        };
+        assert!(setup(&ast, &o).is_ok(), "0 and nan are times");
     }
 }
