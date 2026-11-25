@@ -325,7 +325,9 @@ fn paragraphs(text: &str) -> Result<Vec<Paragraph>> {
     let mut open = false;
     for (i, raw) in text.split('\n').enumerate() {
         let ln = i + 1;
-        let line = raw.strip_suffix('\r').unwrap_or(raw).trim_start();
+        // Every CR before the line end goes (not only one), so a value
+        // written and read back is the same.
+        let line = raw.trim_end_matches('\r').trim_start();
         if line.trim_end().is_empty() {
             open = false;
             continue;
@@ -1039,7 +1041,7 @@ fn render_props(o: &mut Out, p: &Props) {
     o.opt("transfer_out", &p.transfer_out);
     if let Some(note) = &p.note {
         for l in note.split('\n') {
-            o.line("note", l.strip_suffix('\r').unwrap_or(l));
+            o.line("note", l.trim_end_matches('\r'));
         }
     }
 }
