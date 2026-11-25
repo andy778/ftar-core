@@ -9,6 +9,7 @@ the automation tools are described in the repository README and docs/mcp.md.
 
 - Start the app with a file to open it directly: `ftar-gui path/to/tree.fta`.
 - Or use File > Open... (Ctrl+O) to open a `.fta` file, or File > New (Ctrl+N) for an empty tree.
+- ftar also opens `.ftt` files, its plain-text format: the tree and its events in one file that you can write in a text editor (docs/TEXT-FORMAT.md).
 - The window title shows the file name. An asterisk marks unsaved changes.
 - The top event is the root of the tree. Everything else hangs below it.
 
@@ -55,7 +56,7 @@ the automation tools are described in the repository README and docs/mcp.md.
 
 ## Saving
 
-- File > Save (Ctrl+S) writes the tree back to its `.fta` file. Save As... writes a copy under a new name.
+- File > Save (Ctrl+S) writes the tree back to its `.fta` file. Save As... writes a copy under a new name. Choose a `.ftt` name to save in the text format. That one file then holds the events too, and no `.ped` is written.
 - When you start a New tree, Open a file or Quit with unsaved changes, ftar asks first:
   Save, Discard or Cancel.
 

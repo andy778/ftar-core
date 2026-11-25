@@ -18,14 +18,17 @@ Java 21 baseline of the original: <https://github.com/andy778/OpenFTA/tree/dev>.
 cargo run --release -p ftar-cli -- prob crates/core/tests/data/theatre.fta
 cargo run --release -p ftar-cli -- cutsets crates/core/tests/data/top.fta     # follows transfer-in trees
 cargo run --release -p ftar-cli -- mc crates/core/tests/data/theatre.fta --trials 1000000
+cargo run --release -p ftar-cli -- prob crates/core/tests/data/text/theatre.ftt   # the text format
+cargo run --release -p ftar-cli -- convert theatre.fta theatre.ftt                # .fta + .ped <-> .ftt
 ```
 
-Commands: `info`, `cutsets`, `prob`, `mc`; options `--order --terms --time --trials --seed`.
+Commands: `info`, `cutsets`, `prob`, `mc`, `convert`; options `--order --terms --time --trials --seed`.
 
 ## Status
 
 - [x] `.fta` tree and `.ped` primary-event database parsers
 - [x] Transfer-in / transfer-out trees (multi-file), cycle detection
+- [x] Text format `.ftt` (docs/TEXT-FORMAT.md): tree and event database in one plain-text file, PFTA-style paragraphs, for writing by hand and diffing; `ftar convert` to and from `.fta`/`.ped`, opened and saved by the GUI, CLI and MCP tools, lossless for every OpenFTA example
 - [x] Minimal cut sets with OpenFTA semantics (XOR analysed as OR, analysed/not-analysed conditions, order limit)
 - [x] Exact top-event probability by inclusion-exclusion with per-term bounds, failure-rate (`L`) events via unit time, event importance
 - [x] Monte Carlo simulation (reproducible per seed)

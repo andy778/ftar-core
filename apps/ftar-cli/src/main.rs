@@ -7,7 +7,7 @@ use ftar_core::project::Project;
 const USAGE: &str = "\
 ftar - fault tree analysis (OpenFTA-compatible)
 
-usage: ftar <command> <tree.fta> [options]
+usage: ftar <command> <tree.fta|tree.ftt> [options]
 
 commands:
   info       tree summary
@@ -15,6 +15,8 @@ commands:
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
   draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
+  convert    ftar convert <in> <out> [--inline]   convert between .fta (+ .ped) and the text format .ftt;
+             --inline copies transfer-in trees into the output; never overwrites
   bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)
   unbundle   ftar unbundle <bundle.zip> [dir]      unpack a bundle (default dir: the zip's name); never overwrites
   tools      list the JSON automation tools (name, description, schema)
@@ -54,6 +56,7 @@ fn run() -> Result<(), String> {
     };
     match cmd.as_str() {
         "draw" => return draw(rest),
+        "convert" => return convert(rest),
         "bundle" => return bundle(rest),
         "unbundle" => return unbundle(rest),
         "mcp" => return mcp(rest),
@@ -440,5 +443,65 @@ fn draw(args: &[String]) -> Result<(), String> {
         "wrote {out} ({} sheet(s))",
         ftar_render::page_count(&doc.tree, &doc.db, true, &setup)
     );
+    Ok(())
+}
+
+/// `ftar convert <in> <out> [--inline]`: write a tree in the format the
+/// output's extension names: `.ftt` (text, tree and database in one file) or
+/// `.fta` with its database as `<stem>.ped` next to it.
+fn convert(args: &[String]) -> Result<(), String> {
+    use ftar_core::project::Document;
+    use std::path::Path;
+    let mut inline = false;
+    let mut files = Vec::new();
+    for a in args {
+        match a.as_str() {
+            "--inline" => inline = true,
+            o if o.starts_with("--") => {
+                return Err(format!("unknown option `{o}` for `ftar convert`"))
+            }
+            f => files.push(f),
+        }
+    }
+    let [input, out] = files[..] else {
+        return Err("usage: ftar convert <in> <out> [--inline]".into());
+    };
+    let (mut tree, db) = if inline {
+        let p = Project::load(input).map_err(|e| e.to_string())?;
+        (p.tree, p.db)
+    } else {
+        let d = Document::load(input).map_err(|e| e.to_string())?;
+        (d.tree, d.db)
+    };
+    let out = Path::new(out);
+    let mut writes: Vec<(std::path::PathBuf, String)> = Vec::new();
+    if ftar_core::text::is_text_path(out) {
+        let text = ftar_core::text::write_text(&tree, &db).map_err(|e| e.to_string())?;
+        writes.push((out.to_path_buf(), text));
+    } else if out
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("fta"))
+    {
+        tree.db_name = None;
+        if !db.events.is_empty() {
+            let stem = out
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "tree".into());
+            let ped = format!("{stem}.ped");
+            writes.push((out.with_file_name(&ped), ftar_core::write::write_ped(&db)));
+            tree.db_name = Some(ped);
+        }
+        writes.insert(0, (out.to_path_buf(), ftar_core::write::write_fta(&tree)));
+    } else {
+        return Err("output must end in .ftt or .fta".into());
+    }
+    if let Some((p, _)) = writes.iter().find(|(p, _)| p.exists()) {
+        return Err(format!("{}: already exists", p.display()));
+    }
+    for (p, content) in &writes {
+        std::fs::write(p, content).map_err(|e| format!("{}: {e}", p.display()))?;
+        eprintln!("wrote {}", p.display());
+    }
     Ok(())
 }

@@ -5,7 +5,7 @@ ftar: unknown command `nonsense`
 
 ftar - fault tree analysis (OpenFTA-compatible)
 
-usage: ftar <command> <tree.fta> [options]
+usage: ftar <command> <tree.fta|tree.ftt> [options]
 
 commands:
   info       tree summary
@@ -13,6 +13,8 @@ commands:
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
   draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
+  convert    ftar convert <in> <out> [--inline]   convert between .fta (+ .ped) and the text format .ftt;
+             --inline copies transfer-in trees into the output; never overwrites
   bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)
   unbundle   ftar unbundle <bundle.zip> [dir]      unpack a bundle (default dir: the zip's name); never overwrites
   tools      list the JSON automation tools (name, description, schema)

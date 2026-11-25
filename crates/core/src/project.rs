@@ -175,6 +175,23 @@ fn check_depth(tree: &Tree) -> Result<()> {
     Ok(())
 }
 
+/// Read one tree file with its own event database: an `.fta` and the `.ped`
+/// it names, or a text-format file ([`crate::text`]), which holds both.
+fn read_tree_file(path: &Path, opts: &LoadOptions) -> Result<(Tree, Option<PrimaryEventDb>)> {
+    let bytes = opts.read(path)?;
+    if crate::text::is_text_path(path) {
+        let (tree, db) = crate::text::parse_text(&bytes)?;
+        return Ok((tree, Some(db)));
+    }
+    let tree = parse_fta(&bytes)?;
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let ped = match tree.db_name.as_deref().and_then(|n| opts.find_ped(dir, n)) {
+        Some(p) => Some(parse_ped(&opts.read(&p)?)?),
+        None => None,
+    };
+    Ok((tree, ped))
+}
+
 fn load_tree(
     path: &Path,
     db: &mut PrimaryEventDb,
@@ -195,20 +212,14 @@ fn load_tree(
     }
     stack.push(canon);
 
-    let mut tree = parse_fta(&opts.read(path)?)?;
+    let (mut tree, own_ped) = read_tree_file(path, opts)?;
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
-
-    let mut own_ped = None;
-    if let Some(p) = tree.db_name.as_deref().and_then(|n| opts.find_ped(dir, n)) {
-        let ped = parse_ped(&opts.read(&p)?)?;
+    if let Some(ped) = &own_ped {
         for (k, v) in &ped.events {
             db.events.entry(k.clone()).or_insert_with(|| v.clone());
         }
-        own_ped = Some(ped);
-    }
-    // As in OpenFTA's `load_item`, the event type recorded in the tree's own
-    // database overrides the type letter stored in the `.fta` file.
-    if let Some(ped) = &own_ped {
+        // As in OpenFTA's `load_item`, the event type recorded in the tree's own
+        // database overrides the type letter stored in the `.fta` file.
         apply_ped_types(&mut tree.root, ped);
     }
 
@@ -297,7 +308,9 @@ impl Default for Tree {
 }
 
 impl Document {
-    /// Load a tree and its own `.ped` without following transfers.
+    /// Load a tree and its own `.ped` without following transfers. A
+    /// text-format file (`.ftt`, see [`crate::text`]) carries its database
+    /// itself.
     pub fn load(path: impl AsRef<Path>) -> Result<Document> {
         Self::load_with(path, &LoadOptions::default())
     }
@@ -305,13 +318,9 @@ impl Document {
     /// Like [`Document::load`], under the limits in `opts`.
     pub fn load_with(path: impl AsRef<Path>, opts: &LoadOptions) -> Result<Document> {
         let path = path.as_ref();
-        let mut tree = parse_fta(&opts.read(path)?)?;
-        let dir = path.parent().unwrap_or_else(|| Path::new("."));
-        let mut db = PrimaryEventDb::default();
-        if let Some(p) = tree.db_name.as_deref().and_then(|n| opts.find_ped(dir, n)) {
-            db = parse_ped(&opts.read(&p)?)?;
-            apply_ped_types(&mut tree.root, &db);
-        }
+        let (mut tree, db) = read_tree_file(path, opts)?;
+        let db = db.unwrap_or_default();
+        apply_ped_types(&mut tree.root, &db);
         Ok(Document {
             path: Some(path.to_path_buf()),
             tree,

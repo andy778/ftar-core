@@ -356,7 +356,8 @@ impl App {
     }
 
     /// Write the tree as `.fta` and, if it has events, its database as `.ped`
-    /// next to it. A tree without a database name gets `<stem>.ped`.
+    /// next to it. A tree without a database name gets `<stem>.ped`. A path
+    /// ending in `.ftt` writes the text format: tree and events in one file.
     pub fn save_as(&mut self, path: PathBuf) -> Result<(), String> {
         let Some(doc) = self.doc.as_mut() else {
             return Err("nothing to save".into());
@@ -365,11 +366,18 @@ impl App {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "tree".into());
-        if doc.tree.db_name.is_none() && !doc.db.events.is_empty() {
+        let text = ftar_core::text::is_text_path(&path);
+        if !text && doc.tree.db_name.is_none() && !doc.db.events.is_empty() {
             doc.tree.db_name = Some(format!("{stem}.ped"));
         }
         let res = (|| -> Result<Vec<PathBuf>, String> {
             let mut written = vec![path.clone()];
+            if text {
+                let t = ftar_core::text::write_text(&doc.tree, &doc.db)
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                std::fs::write(&path, t).map_err(|e| format!("{}: {e}", path.display()))?;
+                return Ok(written);
+            }
             std::fs::write(&path, write_fta_with(&doc.tree, LineEnding::CrLf))
                 .map_err(|e| format!("{}: {e}", path.display()))?;
             if let Some(name) = &doc.tree.db_name {
