@@ -9,7 +9,7 @@ the automation tools are described in the repository README and docs/mcp.md.
 
 - Start the app with a file to open it directly: `ftar-gui path/to/tree.fta`.
 - Or use File > Open... (Ctrl+O) to open a `.fta` file, or File > New (Ctrl+N) for an empty tree.
-- ftar also opens `.ftt` files, its plain-text format: the tree and its events in one file that you can write in a text editor (docs/TEXT-FORMAT.md).
+- ftar also opens `.ftt` files, its plain-text format: the tree and its events in one file that you can write in a text editor (docs/TEXT-FORMAT.md). It is PFTA's format, so files written for PFTA open too. The GUI shows the first top gate; time-dependent models and distributions are kept in the file and analysed with `ftar time` on the command line.
 - The window title shows the file name. An asterisk marks unsaved changes.
 - The top event is the root of the tree. Everything else hangs below it.
 

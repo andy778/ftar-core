@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use ftar_core::analysis::{minimal_cut_sets, probability_report, ProbabilityOptions};
 use ftar_core::project::{Document, Project};
-use ftar_core::text::{parse_text, write_text, MAX_NODES};
+use ftar_core::text::{parse_text, write_text, Extras, MAX_NODES};
 use ftar_core::{Error, PrimaryEventDb, Tree};
 
 fn data_dir() -> PathBuf {
@@ -42,12 +42,16 @@ fn normalise(db: &PrimaryEventDb) -> PrimaryEventDb {
     db
 }
 
+fn write(t: &Tree, db: &PrimaryEventDb) -> Result<String, Error> {
+    write_text(t, db, &Extras::default())
+}
+
 fn round_trip(tree: &Tree, db: &PrimaryEventDb) -> (Tree, PrimaryEventDb) {
-    let text = write_text(tree, db).unwrap();
-    let (t, d) = parse_text(text.as_bytes()).unwrap();
+    let text = write(tree, db).unwrap();
+    let d = parse_text(text.as_bytes()).unwrap();
     // Writing again gives the same text.
-    assert_eq!(write_text(&t, &d).unwrap(), text);
-    (t, d)
+    assert_eq!(write_text(&d.tree, &d.db, &d.extras).unwrap(), text);
+    (d.tree, d.db)
 }
 
 #[test]
@@ -120,7 +124,7 @@ fn text_tree_can_transfer_in_an_fta_tree() {
 }
 
 fn parse(s: &str) -> Result<(Tree, PrimaryEventDb), Error> {
-    parse_text(s.as_bytes())
+    parse_text(s.as_bytes()).map(|d| (d.tree, d.db))
 }
 
 fn parse_err(s: &str) -> String {
@@ -152,72 +156,80 @@ fn unnamed_and_untyped_gates() {
     assert!(db.events.is_empty());
 }
 
+/// An event paragraph under a one-input gate, with `extra` keys.
+fn ev(extra: &str) -> String {
+    format!("Gate: T\n- inputs: A\n\nEvent: A\n{extra}")
+}
+
+#[rustfmt::skip]
+fn bad_inputs() -> Vec<(String, &'static str)> {
+    vec![
+        ("Gate: T\n- inputs: A\n".into(), "input `A` is not defined"),
+        ("Gate: T\n- inputs: T\n".into(), "its own input"),
+        ("Gate: T\n- inputs: U\n\nGate: U\n- inputs: T\n".into(), "its own input"),
+        ("Gate: T\n- inputs: A\n\nEvent: A\n\nEvent: A\n".into(), "defined twice"),
+        ("Gate: T\n- colour: red\n".into(), "unknown key `colour`"),
+        ("Gate: T\n- type: NAND\n".into(), "unknown gate type"),
+        ("Gate: T\n- gate_id: G\n".into(), "needs a `type`"),
+        ("Gate: T\n- label: a\n- label: b\n".into(), "more than once"),
+        ("Gate: T\n- inputs: A,,B\n".into(), "bad id"),
+        ("Gate: two words\n".into(), "bad id"),
+        ("Gate:\n".into(), "bad id"),
+        ("Gate: NULL\n".into(), "bad id"),
+        ("Fault: T\n".into(), "unknown paragraph"),
+        ("Gate: T\nlabel\n".into(), "expected"),
+        ("Gate: T\n\n- label: x\n".into(), "field outside a paragraph"),
+        ("Gate: T\n- id: X\n- unnamed: true\n".into(), "not both"),
+        ("Gate: T\n- id: x y\n".into(), "bad id"),
+        (ev("- type: dog\n"), "unknown event type"),
+        (ev("- type: basic\n- appearance: House\n"), "not both"),
+        (ev("- appearance: Fancy\n"), "unknown appearance"),
+        (ev("- probability: 2\n"), "must be within 0..1"),
+        (ev("- probability: x\n"), "bad number"),
+        (ev("- probability: 0.1\n- failure_rate: 1\n"), "need a `model_type`"),
+        (ev("- group: g\n"), "needs a probability"),
+        (ev("- dormant: maybe\n"), "`True` or `False`"),
+        (ev("- model_type: Fixed\n- probability: 0.1\n"), "takes probability and intensity"),
+        (ev("- model_type: ConstantRate\n- failure_rate: 1\n"), "repair_rate"),
+        (ev("- model_type: Sometimes\n"), "unknown model type"),
+        (ev("- model_type: True\n- probability: 1\n"), "no parameters"),
+        (ev("- model: M\n"), "no model `M`"),
+        (ev("- model: M\n- probability: 0.1\n"), "not both"),
+        (ev("- probability: beta(alpha=0, beta=1)\n"), "not finite positive"),
+        (ev("- probability: loguniform(lower=0, upper=1)\n"), "positive"),
+        (ev("- probability: weibull(k=1)\n"), "unknown distribution"),
+        (ev("- probability: uniform(lower=0)\n"), "needs `upper`"),
+        (ev("- probability: uniform(lower=0, upper=1, mode=2)\n"), "not `mode`"),
+        (ev("- probability: uniform(lower=0, upper=1\n"), "missing `)`"),
+        (ev("- failure_rate: -1\n"), "cannot be negative"),
+        ("Gate: T\n- type: NULL\n- inputs: A, B\n\nEvent: A\n\nEvent: B\n".into(), "exactly one input"),
+        ("Gate: T\n- type: VOTE(4)\n- inputs: A, B\n\nEvent: A\n\nEvent: B\n".into(), "always true or never"),
+        ("- times: 1, -2\n\nGate: T\n".into(), "negative time"),
+        ("- sample_size: 0\n\nGate: T\n".into(), "at least 1"),
+        ("- computational_tolerance: 1\n\nGate: T\n".into(), "within 0..1"),
+        ("- colour: red\n".into(), "unknown key"),
+        ("Model: M\n- label: m\n".into(), "needs a `model_type`"),
+    ]
+}
+
 #[test]
 fn bad_input_is_an_error() {
-    let cases: &[(&str, &str)] = &[
-        ("", "no `Gate:`"),
-        ("Gate: T\n- inputs: A\n", "input `A` is not defined"),
-        ("Gate: T\n- inputs: T\n", "its own input"),
-        (
-            "Gate: T\n- inputs: U\n\nGate: U\n- inputs: T\n",
-            "its own input",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n\nEvent: A\n",
-            "defined twice",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n\nGate: U\n- inputs: A\n",
-            "`U` is not part of the tree",
-        ),
-        ("Gate: T\n- colour: red\n", "unknown key `colour`"),
-        ("Gate: T\n- type: NAND\n", "unknown gate type"),
-        ("Gate: T\n- gate_id: G\n", "needs a `type`"),
-        ("Gate: T\n- label: a\n- label: b\n", "more than once"),
-        ("Gate: T\n- inputs: A,,B\n", "bad id"),
-        ("Gate: two words\n", "bad id"),
-        ("Gate:\n", "bad id"),
-        ("Fault: T\n", "unknown paragraph"),
-        ("Gate: T\nlabel\n", "expected"),
-        ("Gate: T\n\n- label: x\n", "field outside a paragraph"),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n- type: dog\n",
-            "unknown event type",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n- probability: 2\n",
-            "probability must be within 0..1",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n- probability: x\n",
-            "bad number",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n- probability: 0.1\n- failure_rate: 1\n",
-            "not both",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n- label: no value\n",
-            "needs a `probability`",
-        ),
-        (
-            "Gate: T\n- inputs: A\n\nEvent: A\n- dormant: maybe\n",
-            "`true` or `false`",
-        ),
-        ("Gate: T\n- id: X\n- unnamed: true\n", "not both"),
-        ("Gate: T\n- id: x y\n", "bad id"),
-    ];
-    for (src, want) in cases {
-        let e = parse_err(src);
+    for (src, want) in bad_inputs() {
+        let e = parse_err(&src);
         assert!(e.contains(want), "{src:?}: got `{e}`, want `{want}`");
     }
     assert!(parse_text(&[0xff, 0xfe]).is_err());
 }
 
 #[test]
-fn pfta_only_keys_are_reported_as_not_supported_yet() {
-    let src = "- times: 1, 2\n\nGate: T\n- inputs: A\n\nEvent: A\n";
-    assert!(matches!(parse(src), Err(Error::Unsupported(m)) if m.contains("`times`")));
+fn a_file_without_gates_is_an_empty_tree() {
+    for src in ["", "- times: nan\n"] {
+        let d = parse_text(src.as_bytes()).unwrap();
+        assert!(d.tree.root.children.is_empty());
+        let text = write_text(&d.tree, &d.db, &d.extras).unwrap();
+        assert!(!text.contains("Gate:"), "{text}");
+        assert!(text.contains("- times: "), "{text}");
+    }
 }
 
 #[test]
@@ -232,6 +244,14 @@ fn shared_gates_cannot_blow_up() {
         );
     }
     src += "Event: G18\n";
+    let e = parse_err(&src);
+    assert!(e.contains(&MAX_NODES.to_string()), "{e}");
+    // A VOTE over many inputs has too many combinations.
+    let ids: Vec<String> = (0..60).map(|i| format!("E{i}")).collect();
+    let mut src = format!("Gate: T\n- type: VOTE(30)\n- inputs: {}\n", ids.join(", "));
+    for id in &ids {
+        src += &format!("\nEvent: {id}\n");
+    }
     let e = parse_err(&src);
     assert!(e.contains(&MAX_NODES.to_string()), "{e}");
 }
@@ -262,8 +282,9 @@ fn same_id_over_different_subtrees_gets_its_own_paragraph() {
     .unwrap();
     // Give the second intermediate event the first one's id, over a different subtree.
     t.root.children[0].children[1].id = "M".into();
-    let text = write_text(&t, &db).unwrap();
-    assert!(text.contains("Gate: M_1\n- id: M\n"), "{text}");
+    let text = write(&t, &db).unwrap();
+    assert!(text.contains("Gate: M_1\n"), "{text}");
+    assert!(text.contains("- id: M\n"), "{text}");
     assert_eq!(parse(&text).unwrap().0, t);
 }
 
@@ -271,8 +292,9 @@ fn same_id_over_different_subtrees_gets_its_own_paragraph() {
 fn intermediate_event_named_like_an_event() {
     let (mut t, db) = parse(SMALL).unwrap();
     t.root.id = "A".into();
-    let text = write_text(&t, &db).unwrap();
-    assert!(text.contains("Gate: A_1\n- id: A\n"), "{text}");
+    let text = write(&t, &db).unwrap();
+    assert!(text.contains("Gate: A_1\n"), "{text}");
+    assert!(text.contains("- id: A\n"), "{text}");
     assert_eq!(parse(&text).unwrap().0, t);
 }
 
@@ -282,8 +304,8 @@ fn writer_refuses_what_it_cannot_hold() {
     // A gate directly under a gate.
     let g = t.root.children[0].clone();
     t.root.children[0].children.push(g);
-    assert!(write_text(&t, &db).is_err());
+    assert!(write(&t, &db).is_err());
     let (mut t, db) = parse(SMALL).unwrap();
     t.root.children[0].children[0].id = "has space".into();
-    assert!(write_text(&t, &db).is_err());
+    assert!(write(&t, &db).is_err());
 }

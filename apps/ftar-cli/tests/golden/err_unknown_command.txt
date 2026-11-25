@@ -13,6 +13,9 @@ commands:
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
   draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
+  time       ftar time <tree> [--times 0,10,100] [--samples N] [--seed S] [--order N] [--tolerance X] [--out DIR]
+             time-dependent probability, intensity and rate of every gate (PFTA's analysis);
+             --out writes PFTA's tables (models, events, gates, cut sets) as .tsv files
   convert    ftar convert <in> <out> [--inline]   convert between .fta (+ .ped) and the text format .ftt;
              --inline copies transfer-in trees into the output; never overwrites
   bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)

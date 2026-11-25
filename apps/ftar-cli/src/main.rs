@@ -15,6 +15,9 @@ commands:
   prob       cut-set probabilities, top-event probability, event importance
   mc         Monte Carlo simulation
   draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
+  time       ftar time <tree> [--times 0,10,100] [--samples N] [--seed S] [--order N] [--tolerance X] [--out DIR]
+             time-dependent probability, intensity and rate of every gate (PFTA's analysis);
+             --out writes PFTA's tables (models, events, gates, cut sets) as .tsv files
   convert    ftar convert <in> <out> [--inline]   convert between .fta (+ .ped) and the text format .ftt;
              --inline copies transfer-in trees into the output; never overwrites
   bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)
@@ -57,6 +60,7 @@ fn run() -> Result<(), String> {
     match cmd.as_str() {
         "draw" => return draw(rest),
         "convert" => return convert(rest),
+        "time" => return time(rest),
         "bundle" => return bundle(rest),
         "unbundle" => return unbundle(rest),
         "mcp" => return mcp(rest),
@@ -466,17 +470,17 @@ fn convert(args: &[String]) -> Result<(), String> {
     let [input, out] = files[..] else {
         return Err("usage: ftar convert <in> <out> [--inline]".into());
     };
-    let (mut tree, db) = if inline {
-        let p = Project::load(input).map_err(|e| e.to_string())?;
-        (p.tree, p.db)
+    let d = Document::load(input).map_err(|e| e.to_string())?;
+    let (mut tree, db, extras) = if inline {
+        let p = d.analysis_project().map_err(|e| e.to_string())?;
+        (p.tree, p.db, d.extras)
     } else {
-        let d = Document::load(input).map_err(|e| e.to_string())?;
-        (d.tree, d.db)
+        (d.tree, d.db, d.extras)
     };
     let out = Path::new(out);
     let mut writes: Vec<(std::path::PathBuf, String)> = Vec::new();
     if ftar_core::text::is_text_path(out) {
-        let text = ftar_core::text::write_text(&tree, &db).map_err(|e| e.to_string())?;
+        let text = ftar_core::text::write_text(&tree, &db, &extras).map_err(|e| e.to_string())?;
         writes.push((out.to_path_buf(), text));
     } else if out
         .extension()
@@ -504,4 +508,108 @@ fn convert(args: &[String]) -> Result<(), String> {
         eprintln!("wrote {}", p.display());
     }
     Ok(())
+}
+
+/// `ftar time <tree> [options]`: PFTA's time-dependent quantification.
+fn time(args: &[String]) -> Result<(), String> {
+    use ftar_core::quant::{analyse_document, tsv, QuantOptions};
+    let mut it = args.iter();
+    let file = it.next().ok_or("usage: ftar time <tree> [options]")?;
+    let mut o = QuantOptions::default();
+    let mut out_dir = None;
+    while let Some(flag) = it.next() {
+        let v = it.next().ok_or(format!("{flag} needs a value"))?;
+        match flag.as_str() {
+            "--times" => {
+                let t: Result<Vec<f64>, String> =
+                    v.split(',').map(|x| value("--times", x.trim())).collect();
+                o.times = Some(t?);
+            }
+            "--samples" => o.sample_size = Some(value(flag, v)?),
+            "--seed" => o.seed = Some(v.clone()),
+            "--order" => o.computational_order = Some(value(flag, v)?),
+            "--tolerance" => o.computational_tolerance = Some(value(flag, v)?),
+            "--out" => out_dir = Some(std::path::PathBuf::from(v)),
+            other => return Err(format!("unknown option `{other}` for `ftar time`")),
+        }
+    }
+    let doc = ftar_core::project::Document::load(file).map_err(|e| e.to_string())?;
+    let r = analyse_document(&doc, &o).map_err(|e| e.to_string())?;
+    print_time(&r);
+    if let Some(dir) = out_dir {
+        let cuts = dir.join("cut-sets");
+        std::fs::create_dir_all(&cuts).map_err(|e| format!("{}: {e}", cuts.display()))?;
+        let mut files = vec![
+            (dir.join("models.tsv"), tsv::models(&r)),
+            (dir.join("events.tsv"), tsv::events(&r)),
+            (dir.join("gates.tsv"), tsv::gates(&r)),
+        ];
+        for (i, g) in r.gates.iter().enumerate() {
+            if let Some(t) = tsv::cut_sets(&r, i) {
+                files.push((cuts.join(format!("{}.tsv", g.id)), t));
+            }
+        }
+        for (p, content) in &files {
+            std::fs::write(p, content).map_err(|e| format!("{}: {e}", p.display()))?;
+        }
+        eprintln!("wrote {} tables to {}", files.len(), dir.display());
+    }
+    Ok(())
+}
+
+fn print_time(r: &ftar_core::quant::QuantReport) {
+    let unit = r.time_unit.as_deref().unwrap_or("");
+    let per = if unit.is_empty() {
+        String::new()
+    } else {
+        format!(" (/{unit})")
+    };
+    let sampled = r.sample_size > 1;
+    if sampled {
+        println!(
+            "{} samples (seed `{}`); values are means, q also as 5% and 95% quantiles",
+            r.sample_size, r.seed
+        );
+    }
+    for g in r.gates.iter().filter(|g| g.is_top_gate || g.is_paged) {
+        let label = g
+            .label
+            .as_deref()
+            .map(|l| format!(" - {l}"))
+            .unwrap_or_default();
+        println!(
+            "
+Gate {} ({}){label}",
+            g.id,
+            g.gate_type.name()
+        );
+        let q = r.expected(&g.series.q);
+        let w = r.expected(&g.series.w);
+        let l = r.expected(&g.series.rate);
+        let (lo, hi) = (r.quantile(&g.series.q, 0.05), r.quantile(&g.series.q, 0.95));
+        print!(
+            "{:>12}  {:>14}",
+            format!(
+                "time{}",
+                if unit.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({unit})")
+                }
+            ),
+            "q"
+        );
+        if sampled {
+            print!("  {:>12}  {:>12}", "q 5%", "q 95%");
+        }
+        println!("  {:>14}  {:>14}", format!("w{per}"), format!("rate{per}"));
+        for (i, t) in r.times.iter().enumerate() {
+            let at = |v: &[f64]| v.get(i).copied().unwrap_or(f64::NAN);
+            print!("{:>12}  {:>14.6E}", t, at(&q));
+            if sampled {
+                print!("  {:>12.4E}  {:>12.4E}", at(&lo), at(&hi));
+            }
+            println!("  {:>14.6E}  {:>14.6E}", at(&w), at(&l));
+        }
+    }
 }

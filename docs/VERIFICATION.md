@@ -45,6 +45,35 @@ Mutation check: treating XOR as AND makes the random test fail.
 Result: the cut sets, exact probabilities and importances agree with the oracle on all of them.
 `Three Motor` has 54 cut sets, so only the order-limited probabilities (<= 16 sets) are compared there.
 
+## PFTA's time-dependent analysis (`tests/pfta.rs`)
+
+`ftar time` (`ftar_core::quant`) follows PFTA, which publishes its mathematics (`MATHS.md`) and
+whose sources were read for the edge cases. No PFTA run is part of the tests: ftar does not execute
+PFTA. The checks are:
+
+- **Oracle.** 60 random trees of AND, OR and VOTE gates over 2 to 7 events with random `q` and `ω`.
+  Every gate's `q` and `ω` at full order agree to 1e-10 with brute force over every state: exact `q`,
+  and `ω = Σ ω_e (Q(e failed) − Q(e working))`. So the truncated expansion PFTA uses (`ω = ω¹ − ω²`)
+  is implemented so that it is exact when not truncated.
+- **Worked examples.** The examples in PFTA's README give the same numbers: the toast tree, and
+  `A AND B` OR `C` with rate 0.6301.
+- **Closed forms.** Constant-rate events over time, VOTE(2) of 3, and the rare-event approximation
+  at `computational_order: 1`.
+- **Edge cases.** PFTA's answers for zero, infinite and `nan` rates and times in the constant-rate
+  model, and `True`/`False` events simplifying cut sets, are copied as unit tests.
+- **OpenFTA trees.** `ftar time theatre.fta --times 1` gives OpenFTA's exact top probability.
+
+Known differences from PFTA:
+
+- **Sampling.** ftar's generator is xoshiro256** seeded from the `seed` text; PFTA's is Python's
+  Mersenne Twister. Sampled numbers therefore match PFTA's in distribution only. Without a `seed`,
+  PFTA draws a random one and ftar uses `ftar`, so ftar's runs stay reproducible.
+- **Rounding.** ftar sums terms in a fixed order, where PFTA's order follows a Python set. Results
+  can differ in the last digits.
+- **Large trees.** A gate whose expansion needs more than 50 million combinations stops with an
+  error asking for `computational_order`. PFTA keeps computing.
+- **Not written yet.** The importance tables and the SVG drawings per time.
+
 ## Confirmed equal
 
 | Item | C | Rust |

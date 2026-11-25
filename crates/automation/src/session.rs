@@ -60,6 +60,9 @@ pub(crate) struct Doc {
     /// Undo history; each snapshot holds the tree and the event database.
     pub history: History<(Tree, PrimaryEventDb)>,
     pub dirty: bool,
+    /// What a text-format file holds beyond tree and database (models,
+    /// times, comments); written back by `tree_save` to a `.ftt`.
+    pub extras: ftar_core::text::Extras,
 }
 
 impl Doc {

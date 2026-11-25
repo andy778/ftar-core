@@ -373,7 +373,7 @@ impl App {
         let res = (|| -> Result<Vec<PathBuf>, String> {
             let mut written = vec![path.clone()];
             if text {
-                let t = ftar_core::text::write_text(&doc.tree, &doc.db)
+                let t = ftar_core::text::write_text(&doc.tree, &doc.db, &doc.extras)
                     .map_err(|e| format!("{}: {e}", path.display()))?;
                 std::fs::write(&path, t).map_err(|e| format!("{}: {e}", path.display()))?;
                 return Ok(written);

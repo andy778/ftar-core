@@ -342,3 +342,34 @@ fn convert_to_text_and_back_keeps_the_numbers() {
     assert!(!ok);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn time_prints_the_top_gate_and_writes_pfta_tables() {
+    let dir = std::env::temp_dir().join(format!("ftar_cli_time_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let tree = format!("{DATA}/text/pumps.ftt");
+    let (ok, out) = ftar(&["time", &tree, "--out", dir.to_str().unwrap()]);
+    assert!(ok, "{out}");
+    assert!(
+        out.contains("Gate NO_FLOW (VOTE(2)) - Too little flow"),
+        "{out}"
+    );
+    assert!(out.contains("200 samples"), "{out}");
+    for f in [
+        "models.tsv",
+        "events.tsv",
+        "gates.tsv",
+        "cut-sets/NO_FLOW.tsv",
+    ] {
+        assert!(dir.join(f).is_file(), "{f}");
+    }
+    let gates = std::fs::read_to_string(dir.join("gates.tsv")).unwrap();
+    assert_eq!(gates.lines().count(), 1 + 4 * 200);
+    // An OpenFTA tree at its unit time gives OpenFTA's probability.
+    let (ok, out) = ftar(&["time", &format!("{DATA}/theatre.fta"), "--times", "1"]);
+    assert!(ok);
+    assert!(out.contains("2.064338E-3"), "{out}");
+    let (ok, _) = ftar(&["time", &tree, "--samples"]);
+    assert!(!ok);
+    let _ = std::fs::remove_dir_all(dir);
+}
