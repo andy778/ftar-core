@@ -207,6 +207,28 @@ fn build_a_tree_by_edits_then_undo_and_save() {
 }
 
 #[test]
+fn text_format_opens_and_saves_in_one_file() {
+    let dir = std::env::temp_dir().join(format!("ftar_auto_ftt_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(format!("{DATA}/text/theatre.ftt"), dir.join("theatre.ftt")).unwrap();
+    let mut s = Session::with_root(&dir).unwrap();
+    let o = s
+        .call("tree_open", &json!({ "path": "theatre.ftt" }))
+        .unwrap();
+    assert_eq!(o["database_events"], 3, "{o}");
+    let top = s.call("analysis_probability", &json!({})).unwrap()["top"].clone();
+    let w = s.call("tree_save", &json!({ "path": "v.ftt" })).unwrap();
+    assert_eq!(w["written"].as_array().unwrap().len(), 1, "{w}");
+    assert!(!dir.join("v.ped").exists());
+    s.call("tree_open", &json!({ "path": "v.ftt" })).unwrap();
+    assert_eq!(
+        s.call("analysis_probability", &json!({})).unwrap()["top"],
+        top
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn closing_unsaved_work_needs_discard() {
     let mut s = session();
     s.call("tree_new", &json!({})).unwrap();

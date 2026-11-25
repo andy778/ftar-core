@@ -686,6 +686,7 @@ impl App {
     pub(crate) fn open_dialog(&mut self) {
         if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("OpenFTA tree", &["fta"])
+            .add_filter("ftar text tree", &["ftt"])
             .pick_file()
         {
             self.request_open(p);
@@ -711,6 +712,7 @@ impl App {
             .unwrap_or_else(|| "untitled.fta".into());
         match crate::desktop::FileDialog::new()
             .add_filter("OpenFTA tree", &["fta"])
+            .add_filter("ftar text tree", &["ftt"])
             .set_file_name(name)
             .save_file()
         {

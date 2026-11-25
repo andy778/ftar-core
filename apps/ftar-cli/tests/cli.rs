@@ -286,3 +286,41 @@ fn draw_heads_the_drawing_with_the_tree_name() {
     assert!(svg.contains("Tree: theatre"), "header with the tree name");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn convert_to_text_and_back_keeps_the_numbers() {
+    let dir = std::env::temp_dir().join(format!("ftar_cli_convert_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let ftt = dir.join("t.ftt");
+    let fta = dir.join("back.fta");
+    let (ok, _) = ftar(&[
+        "convert",
+        &format!("{DATA}/theatre.fta"),
+        ftt.to_str().unwrap(),
+    ]);
+    assert!(ok);
+    let (ok, out) = ftar(&["prob", ftt.to_str().unwrap()]);
+    assert!(ok);
+    assert!(out.contains("Exact value : 2.0643378107574753E-3"), "{out}");
+    // Never overwrites.
+    let (ok, _) = ftar(&[
+        "convert",
+        &format!("{DATA}/theatre.fta"),
+        ftt.to_str().unwrap(),
+    ]);
+    assert!(!ok);
+    let (ok, _) = ftar(&["convert", ftt.to_str().unwrap(), fta.to_str().unwrap()]);
+    assert!(ok);
+    assert!(dir.join("back.ped").is_file());
+    let (ok, out) = ftar(&["prob", fta.to_str().unwrap()]);
+    assert!(ok);
+    assert!(out.contains("Exact value : 2.0643378107574753E-3"), "{out}");
+    let (ok, _) = ftar(&[
+        "convert",
+        ftt.to_str().unwrap(),
+        dir.join("x.txt").to_str().unwrap(),
+    ]);
+    assert!(!ok);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -5,6 +5,7 @@
 //! * [`project`]  – load a tree with its database and transfer-in trees
 //! * [`analysis`] – minimal cut sets, exact top-event probability, importance
 //! * [`montecarlo`] – Monte Carlo simulation
+//! * [`text`]     – the plain-text tree format (`.ftt`), tree and database in one file
 
 pub mod analysis;
 pub mod database;
@@ -16,6 +17,7 @@ pub mod parse;
 pub mod project;
 pub mod report;
 pub mod report_files;
+pub mod text;
 pub mod write;
 
 pub use error::{Error, Result};

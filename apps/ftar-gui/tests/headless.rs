@@ -144,6 +144,17 @@ fn build_a_tree_save_reopen_and_analyse() {
         again.doc.as_ref().unwrap().db.events[&a].description,
         "first"
     );
+
+    // Save As .ftt: the text format, tree and events in one file.
+    let text = dir.join("t.ftt");
+    again.save_as(text.clone()).unwrap();
+    assert!(std::fs::read_to_string(&text)
+        .unwrap()
+        .contains("- label: first"));
+    let mut third = App::default();
+    third.open(text);
+    assert_eq!(third.doc.as_ref().unwrap().db.events.len(), 2);
+    assert!((exact_top(&third) - 0.28).abs() < 1e-12);
     let _ = std::fs::remove_dir_all(dir);
 }
 

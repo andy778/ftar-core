@@ -1,0 +1,13 @@
+# A text tree that pulls in an OpenFTA tree through a transfer-in.
+Gate: Top
+- type: OR
+- inputs: Theatre, EXTRA
+
+Gate: Theatre
+- inputs: ../theatre.fta
+
+Event: ../theatre.fta
+- type: transfer_in
+
+Event: EXTRA
+- probability: 0.001

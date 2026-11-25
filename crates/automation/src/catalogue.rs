@@ -32,7 +32,7 @@ pub fn tools() -> Vec<ToolInfo> {
         input_schema,
     };
     vec![
-        t("tree_open", "Open a .fta tree with its .ped database. Transfer-in trees are inlined unless raw=true (use raw for editing).",
+        t("tree_open", "Open a .fta tree with its .ped database, or a .ftt text-format tree (tree and events in one file). Transfer-in trees are inlined unless raw=true (use raw for editing).",
           obj(json!({ "path": {"type":"string"}, "raw": {"type":"boolean"} }), &["path"])),
         t("tree_new", "Create an empty tree (an intermediate top event with one OR gate).",
           obj(json!({ "name": {"type":"string"} }), &[])),
@@ -53,7 +53,7 @@ pub fn tools() -> Vec<ToolInfo> {
           }), &["op"])),
         t("tree_undo", "Undo the last edit.", obj(json!({ "doc": doc }), &[])),
         t("tree_redo", "Redo the last undone edit.", obj(json!({ "doc": doc }), &[])),
-        t("tree_save", "Write the tree as .fta and its event database as .ped next to it (named <stem>.ped if the tree has no database name yet). `ped` defaults to true whenever there are events; ped=false writes the tree only.",
+        t("tree_save", "Write the tree as .fta and its event database as .ped next to it (named <stem>.ped if the tree has no database name yet). `ped` defaults to true whenever there are events; ped=false writes the tree only. A path ending in .ftt writes the text format: tree and events in that one file (`ped` is ignored).",
           obj(json!({ "doc": doc, "path": {"type":"string"}, "ped": {"type":"boolean"} }), &[])),
         t("tree_export", "Draw the tree to an image file: png (default scale 2), svg or a printable html page. The format comes from `format` or the file extension. Page setup (`page_size`, `orientation`, `fit` = fit to one sheet or split across sheets, `scale_percent` for split, `margin_mm`) shapes the html page; with `sheet` (1-based) a png or svg shows that one printed sheet (print preview). Reports the sheet count for html.",
           obj(json!({ "doc": doc, "path": {"type":"string"}, "format": {"type":"string","enum":["png","svg","html"]},

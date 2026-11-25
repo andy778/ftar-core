@@ -575,6 +575,16 @@ fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     let path = target
         .or_else(|| d.path.clone())
         .ok_or_else(|| ToolError::args("document has no path; pass `path`"))?;
+    if ftar_core::text::is_text_path(&path) {
+        // The text format holds the tree and its events in one file.
+        let text = ftar_core::text::write_text(&d.tree, &d.db)?;
+        std::fs::write(&path, text)
+            .map_err(|e| ToolError::new("io", format!("{}: {e}", display_path(&path))))?;
+        let written = vec![display_path(&path)];
+        d.path = Some(path);
+        d.dirty = false;
+        return Ok(json!({ "written": written }));
+    }
     // By default the database is written whenever there is one to write, so
     // event probabilities are never silently left unsaved.
     let has_events = !d.db.events.is_empty();
