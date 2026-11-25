@@ -355,11 +355,13 @@ fn time_prints_the_top_gate_and_writes_pfta_tables() {
         "{out}"
     );
     assert!(out.contains("200 samples"), "{out}");
+    assert!(out.contains("Importance at time 5000"), "{out}");
     for f in [
         "models.tsv",
         "events.tsv",
         "gates.tsv",
         "cut-sets/NO_FLOW.tsv",
+        "importances/NO_FLOW.tsv",
     ] {
         assert!(dir.join(f).is_file(), "{f}");
     }

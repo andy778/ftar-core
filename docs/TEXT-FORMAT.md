@@ -157,8 +157,34 @@ What ftar computes:
   `computational_order`; it does not run for hours.
 
 `--out DIR` writes PFTA's tables, with PFTA's columns and number style: `models.tsv`, `events.tsv`,
-`gates.tsv` and `cut-sets/<gate>.tsv`. The importance tables and drawings per time are not written
-yet.
+`gates.tsv`, `cut-sets/<gate>.tsv` and `importances/<gate>.tsv`. PFTA's drawings per time are not
+written; `ftar draw` draws the tree.
+
+### Importance
+
+For every gate `T` and every event `e` in its cut sets, at each time and sample, ftar computes PFTA's
+measures. `T[e=1]` is the gate with `e` always failed, `T[e=0]` the gate with it never failed:
+
+| Measure | Definition |
+|---|---|
+| marginal (Birnbaum) | `Q(T[e=1]) − Q(T[e=0])` |
+| criticality | marginal · `Q(e) / Q(T)` |
+| diagnostic (Fussell–Vesely) | `Q(cut sets that contain e) / Q(T)` |
+| prognostic | `(Q(T) − Q(T[e=0])) / Q(T)`, which is `1 − 1/RRW` |
+| risk achievement worth (RAW) | `Q(T[e=1]) / Q(T)` |
+| risk reduction worth (RRW) | `Q(T) / Q(T[e=0])` |
+
+Each `Q` uses the same expansion and truncation as the gate. A division by zero gives `x · ∞` (`inf`,
+or `nan` for 0/0), as in PFTA.
+
+`ftar time` prints the measures of each top gate's events at the last time, ordered by criticality,
+as means over the samples. `--out` writes them all. The cut-set tables carry PFTA's approximate
+importance of each cut set: its share of the summed probabilities and of the summed intensities.
+`analysis_time` adds the measures with `"importance": true`.
+
+OpenFTA's own importance (`ftar prob`, the probability report) is unchanged. It is a cut set's
+probability summed over the cut sets that contain the event, as a percentage of the top
+probability.
 
 Sampling follows PFTA:
 

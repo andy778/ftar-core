@@ -319,6 +319,127 @@ fn random_trees_match_the_exact_values() {
     }
 }
 
+/// Exact probability that at least one of `sets` (event indices) has
+/// failed entirely.
+fn exact_union(sets: &[Vec<usize>], qw: &[(f64, f64)]) -> f64 {
+    let mut total = 0.0;
+    for state in 0..(1u32 << qw.len()) {
+        if !sets.iter().any(|s| s.iter().all(|e| state & (1 << e) != 0)) {
+            continue;
+        }
+        total += qw
+            .iter()
+            .enumerate()
+            .map(|(e, (q, _))| if state & (1 << e) != 0 { *q } else { 1.0 - q })
+            .product::<f64>();
+    }
+    total
+}
+
+#[test]
+fn random_trees_have_the_exact_importances() {
+    let mut rng = Lcg(11);
+    for case in 0..40 {
+        let n = 2 + rng.below(5) as usize;
+        let src = random_tree(&mut rng, n);
+        let ast = parse_text_ast(src.as_bytes()).unwrap();
+        let r = analyse(&ast, &QuantOptions::default()).unwrap();
+        let qw = fixed(&ast);
+        let index = |id: &str| ast.events.iter().position(|e| e.id == id).unwrap();
+        for g in &r.gates {
+            let q = exact_q(&ast, &g.id, &qw, None);
+            let mut seen: Vec<&str> = g
+                .cut_sets
+                .iter()
+                .flat_map(|c| c.events.iter().map(String::as_str))
+                .collect();
+            seen.sort_unstable();
+            seen.dedup();
+            let listed: Vec<&str> = g.importances.iter().map(|m| m.event.as_str()).collect();
+            let mut sorted = listed.clone();
+            sorted.sort_unstable();
+            assert_eq!(
+                sorted, seen,
+                "case {case} gate {}: the events of its cut sets",
+                g.id
+            );
+            for m in &g.importances {
+                let e = index(&m.event);
+                let on = exact_q(&ast, &g.id, &qw, Some((e, true)));
+                let off = exact_q(&ast, &g.id, &qw, Some((e, false)));
+                let with: Vec<Vec<usize>> = g
+                    .cut_sets
+                    .iter()
+                    .filter(|c| c.events.contains(&m.event))
+                    .map(|c| c.events.iter().map(|x| index(x)).collect())
+                    .collect();
+                let want = [
+                    ("marginal", m.marginal[0], on - off),
+                    ("criticality", m.criticality[0], (on - off) * qw[e].0 / q),
+                    ("diagnostic", m.diagnostic[0], exact_union(&with, &qw) / q),
+                    ("prognostic", m.prognostic[0], (q - off) / q),
+                    ("raw", m.risk_achievement_worth[0], on / q),
+                    ("rrw", m.risk_reduction_worth[0], q / off),
+                ];
+                for (name, got, exact) in want {
+                    let ok = if exact.is_finite() {
+                        (got - exact).abs() <= 1e-9 * exact.abs().max(1e-9)
+                    } else {
+                        got == exact || (got.is_nan() && exact.is_nan()) || got.abs() > 1e12
+                    };
+                    assert!(
+                        ok,
+                        "case {case} gate {} event {}: {name} {got} vs {exact}\n{src}",
+                        g.id, m.event
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn importance_tables_and_the_option_to_skip_them() {
+    let src = "- times: 1, 2\n- sample_size: 2\n\nGate: T\n- type: OR\n- inputs: A, B\n\n\
+Event: A\n- label: First\n- model_type: Fixed\n- probability: 0.1\n- intensity: 0\n\n\
+Event: B\n- model_type: Fixed\n- probability: 0.2\n- intensity: 0\n";
+    let r = report(src);
+    let t = tsv::importances(&r, 0).unwrap();
+    let mut lines = t.lines();
+    assert_eq!(
+        lines.next().unwrap(),
+        "event\tlabel\ttime\tsample\tmarginal_importance\tcriticality_importance\tdiagnostic_importance\tprognostic_importance\trisk_achievement_worth\trisk_reduction_worth"
+    );
+    // A: marginal 1 - 0.2, RAW 1/0.28, RRW 0.28/0.2.
+    let a = lines.next().unwrap();
+    assert!(a.starts_with("A\tFirst\t1.0\t0\t0.8\t"), "{a}");
+    assert_eq!(t.lines().count(), 1 + 2 * 2 * 2);
+    // Rows run time-major: each time, then each sample.
+    let a_rows: Vec<(&str, &str)> = t
+        .lines()
+        .filter(|l| l.starts_with("A\t"))
+        .map(|l| {
+            let c: Vec<&str> = l.split('\t').collect();
+            (c[2], c[3])
+        })
+        .collect();
+    assert_eq!(
+        a_rows,
+        [("1.0", "0"), ("1.0", "1"), ("2.0", "0"), ("2.0", "1")]
+    );
+    assert!(tsv::importances(&r, 5).is_none());
+    let skip = analyse(
+        &parse_text_ast(src.as_bytes()).unwrap(),
+        &QuantOptions {
+            importance: false,
+            ..QuantOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(skip.gates[0].importances.is_empty());
+    assert_eq!(tsv::importances(&skip, 0).unwrap().lines().count(), 1);
+}
+
 #[test]
 fn truncation_order_one_is_the_rare_event_approximation() {
     let src = "- times: 1\n- computational_order: 1\n\nGate: T\n- type: OR\n- inputs: A, B\n\n\

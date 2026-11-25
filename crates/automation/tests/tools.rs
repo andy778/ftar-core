@@ -251,6 +251,27 @@ fn time_analysis_of_a_text_tree() {
         .unwrap();
     assert_eq!(r["gates"][0]["q"].as_array().unwrap().len(), 1);
     assert!(r["gates"][0].get("q_p05").is_none());
+    assert!(r["gates"][0].get("importance").is_none());
+    let r = s
+        .call(
+            "analysis_time",
+            &json!({ "times": [5000], "samples": 1, "importance": true }),
+        )
+        .unwrap();
+    let imp = r["gates"][0]["importance"].as_array().unwrap();
+    assert_eq!(imp.len(), 3);
+    for m in imp {
+        for k in [
+            "marginal",
+            "criticality",
+            "diagnostic",
+            "prognostic",
+            "raw",
+            "rrw",
+        ] {
+            assert!(m[k][0].as_f64().unwrap() > 0.0, "{k} {m}");
+        }
+    }
     let e = s
         .call("analysis_time", &json!({ "samples": 1_000_000 }))
         .unwrap_err();
