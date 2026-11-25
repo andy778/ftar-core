@@ -112,6 +112,7 @@ pub fn simulate(
     db: &PrimaryEventDb,
     opts: &MonteCarloOptions,
 ) -> Result<MonteCarloReport> {
+    crate::model::check_unit_time(opts.unit_time)?;
     let sets = minimal_cut_sets(tree)?;
     let ids = tree.primary_event_ids();
     let probs: Vec<f64> = ids
