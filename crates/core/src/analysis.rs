@@ -275,6 +275,7 @@ pub struct TopProbability {
 }
 
 pub fn cut_set_probability(cs: &CutSet, db: &PrimaryEventDb, unit_time: f64) -> Result<f64> {
+    crate::model::check_unit_time(unit_time)?;
     cs.iter().try_fold(1.0, |p, id| {
         db.effective_probability(id, unit_time)
             .map(|q| p * q)
@@ -348,6 +349,7 @@ pub fn probability_report(
     db: &PrimaryEventDb,
     opts: &ProbabilityOptions,
 ) -> Result<ProbabilityReport> {
+    crate::model::check_unit_time(opts.unit_time)?;
     let sets = minimal_cut_sets_limited(tree, opts.max_order)?;
 
     // Primary events in OpenFTA list order, then index them.

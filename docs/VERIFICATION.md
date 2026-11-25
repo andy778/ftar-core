@@ -160,6 +160,14 @@ Result: the cut sets, exact probabilities and importances agree with the oracle 
     `monte_carlo_on_degenerate_models_stays_finite` (single event at p = 0, 1e-12, 0.5 and 1, two-event AND at 1e-9 and 1,
     both methods, 0, 1 and 1000 trials: no NaN or inf in the numbers or the report).
 
+22. **Numbers OpenFTA never checks** (found by the edge-value test `edge_probability_trees_stay_finite`): the C reads `.ped`
+    probabilities with `atof` and takes the unit time as typed, so a probability of 2, -1, `nan` or `1e999`, or a negative
+    unit time, gives top probabilities above 1, below 0 or NaN. ftar now rejects them: a `.ped` probability must be within
+    0..1 (a failure rate `>= 0`), finite either way (`parse_ped`, a parse error naming the line), and the unit time must be
+    finite and `>= 0` (`check_unit_time`, `Error::InvalidInput`, in `probability_report`, `cut_set_probability` and
+    `simulate`; the GUI field is clamped). Tests: `ped_probabilities_out_of_range_are_parse_errors`,
+    `unit_time_must_be_finite_and_not_negative`.
+
 ### Notes on the C snapshot
 
 * `generate_processing_pointers` (`item.c:190-233`) only links `process_sibling` for gates through the intermediate-event branch

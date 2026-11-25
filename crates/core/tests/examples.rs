@@ -235,3 +235,74 @@ mod document {
         assert_eq!(d.tree.root.children.len(), 1);
     }
 }
+
+/// Values OpenFTA takes from `atof` without a check, which give probabilities
+/// above 1, below 0 or NaN in every analysis (found by the edge-value tests).
+mod invalid_numbers {
+    use ftar_core::analysis::{probability_report, ProbabilityOptions};
+    use ftar_core::montecarlo::{simulate, MonteCarloOptions};
+    use ftar_core::parse::parse_ped;
+    use ftar_core::project::Project;
+    use ftar_core::Error;
+
+    #[test]
+    fn ped_probabilities_out_of_range_are_parse_errors() {
+        for (value, rate) in [
+            ("2.0", " "),
+            ("1.0000001", " "),
+            ("-1", " "),
+            ("-1", "L"),
+            ("nan", " "),
+            ("nan", "L"),
+            ("inf", " "),
+            ("inf", "L"),
+            ("1e999", "L"),
+        ] {
+            let line = format!("A;;B ;d;{value};{rate};\n");
+            match parse_ped(line.as_bytes()) {
+                Err(Error::Parse(m)) => assert!(m.contains("within 0..1"), "{m}"),
+                other => panic!("{line:?}: {other:?}"),
+            }
+        }
+        for (value, rate) in [("0", " "), ("1", " "), ("1e-300", " "), ("5e3", "L")] {
+            let line = format!("A;;B ;d;{value};{rate};\n");
+            assert!(parse_ped(line.as_bytes()).is_ok(), "{line:?}");
+        }
+    }
+
+    #[test]
+    fn unit_time_must_be_finite_and_not_negative() {
+        let p = Project::load(format!(
+            "{}/tests/data/theatre.fta",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        for t in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let opts = ProbabilityOptions {
+                unit_time: t,
+                ..Default::default()
+            };
+            assert!(
+                matches!(
+                    probability_report(&p.tree, &p.db, &opts),
+                    Err(Error::InvalidInput(_))
+                ),
+                "{t}"
+            );
+            let mc = MonteCarloOptions {
+                unit_time: t,
+                trials: 10,
+                ..Default::default()
+            };
+            assert!(
+                matches!(simulate(&p.tree, &p.db, &mc), Err(Error::InvalidInput(_))),
+                "{t}"
+            );
+        }
+        let zero = ProbabilityOptions {
+            unit_time: 0.0,
+            ..Default::default()
+        };
+        assert!(probability_report(&p.tree, &p.db, &zero).is_ok());
+    }
+}

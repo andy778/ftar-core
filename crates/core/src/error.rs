@@ -10,6 +10,8 @@ pub enum Error {
     MissingEvent(String),
     /// File could not be read.
     Io(String),
+    /// An analysis option out of range (e.g. a negative or non-finite unit time).
+    InvalidInput(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -21,6 +23,7 @@ impl fmt::Display for Error {
             Error::Unsupported(m) => write!(f, "unsupported: {m}"),
             Error::Io(m) => write!(f, "i/o error: {m}"),
             Error::MissingEvent(id) => write!(f, "no probability for primary event `{id}`"),
+            Error::InvalidInput(m) => write!(f, "invalid input: {m}"),
         }
     }
 }
