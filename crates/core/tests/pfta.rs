@@ -414,6 +414,19 @@ Event: B\n- model_type: Fixed\n- probability: 0.2\n- intensity: 0\n";
     let a = lines.next().unwrap();
     assert!(a.starts_with("A\tFirst\t1.0\t0\t0.8\t"), "{a}");
     assert_eq!(t.lines().count(), 1 + 2 * 2 * 2);
+    // Rows run time-major: each time, then each sample.
+    let a_rows: Vec<(&str, &str)> = t
+        .lines()
+        .filter(|l| l.starts_with("A\t"))
+        .map(|l| {
+            let c: Vec<&str> = l.split('\t').collect();
+            (c[2], c[3])
+        })
+        .collect();
+    assert_eq!(
+        a_rows,
+        [("1.0", "0"), ("1.0", "1"), ("2.0", "0"), ("2.0", "1")]
+    );
     assert!(tsv::importances(&r, 5).is_none());
     let skip = analyse(
         &parse_text_ast(src.as_bytes()).unwrap(),
