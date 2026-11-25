@@ -380,7 +380,7 @@ fn a_vote_expansion_counts_in_the_node_limit() {
     };
     let d = parse_text(vote(4).as_bytes()).unwrap();
     assert_eq!(d.tree.nodes().len(), 26);
-    assert!(2 * 224 * 224 - 2 * 224 + 2 <= MAX_NODES);
+    const { assert!(2 * 224 * 224 - 2 * 224 + 2 <= MAX_NODES) };
     assert!(parse_text(vote(224).as_bytes()).is_ok());
     assert!(parse_text(vote(225).as_bytes()).is_err());
 }
