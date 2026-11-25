@@ -21,8 +21,12 @@ exclude_re = [
     # icon_button, the control itself, is still mutated.
     'toolbar\.rs:.*(paint_\w*icon|Pen<)',
     # Functions that only show a native file dialog: the GUI's tests build with test-no-launch,
-    # where every dialog answers "cancelled", so emptying one changes nothing a test can see.
-    'apps/ftar-gui/.*replace App::\w+_dialog with \(\)',
+    # where every dialog answers "cancelled", so emptying one, or making it report "cancelled",
+    # changes nothing a test can see.
+    'apps/ftar-gui/.*replace App::\w+_dialog( with \(\)| -> bool with false)',
+    # open_with_default_app starts the browser. Under test-no-launch it returns at once, so its
+    # mutants cannot be told apart, and `delete !` would make the test run open browser tabs.
+    'apps/ftar-gui/.*open_with_default_app',
     # canvas_scrollbars mirrors the pan to the scroll offset and back. The two agree on every
     # frame except while a scrollbar is dragged (covered by the scrollbar tests), so these
     # comparisons cannot change the result.

@@ -187,6 +187,18 @@ impl PrimaryEventDb {
     }
 }
 
+/// A unit time must be finite and not negative: a negative one gives negative
+/// probabilities, an infinite one NaN for a zero rate (`0 * inf`).
+pub fn check_unit_time(unit_time: f64) -> crate::Result<()> {
+    if unit_time.is_finite() && unit_time >= 0.0 {
+        Ok(())
+    } else {
+        Err(crate::Error::InvalidInput(format!(
+            "unit time {unit_time} must be a finite number >= 0"
+        )))
+    }
+}
+
 /// Probability of at least one failure within `unit_time` for a constant
 /// failure `rate`: `1 - e^(-rate * t)` (as OpenFTA does).
 pub fn rate_probability(rate: f64, unit_time: f64) -> f64 {

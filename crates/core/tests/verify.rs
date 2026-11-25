@@ -343,6 +343,11 @@ fn check(
             } else {
                 0.0
             };
+            // A subnormal top (products like 1e-300 * 1e-12 * ...) is 0 or a few
+            // ulps depending on summation order, so a ratio of it means nothing.
+            if exact < f64::MIN_POSITIVE {
+                continue;
+            }
             close(
                 e.importance_pct,
                 pct,
@@ -474,8 +479,22 @@ struct Case {
 }
 
 fn random_case(seed: u64, name: &str) -> Case {
+    random_case_with(seed, name, false)
+}
+
+/// Probabilities (or rates, for `L` events) at the edges, where divisions by a
+/// probability, a failure count or `1 - p` go wrong.
+const EDGE_PROBS: [f64; 6] = [0.0, 1.0, 1e-300, 1e-12, 1.0 - 1e-15, 0.5];
+const EDGE_RATES: [f64; 4] = [0.0, 1e-300, 1e-12, 1e3];
+
+/// `edge`: one to four events, many with an edge probability from `EDGE_PROBS`.
+fn random_case_with(seed: u64, name: &str, edge: bool) -> Case {
     let mut rng = Prng(seed);
-    let nev = 4 + rng.below(6);
+    let nev = if edge {
+        1 + rng.below(4)
+    } else {
+        4 + rng.below(6)
+    };
     let kinds = [
         EventType::Basic,
         EventType::Basic,
@@ -491,7 +510,13 @@ fn random_case(seed: u64, name: &str) -> Case {
     let mut ped = String::new();
     let mut add = |id: &str, tc: char, rng: &mut Prng| {
         let l = rng.chance(25);
-        let v = if l {
+        let v = if edge && rng.chance(60) {
+            if l {
+                EDGE_RATES[rng.below(EDGE_RATES.len())]
+            } else {
+                EDGE_PROBS[rng.below(EDGE_PROBS.len())]
+            }
+        } else if l {
             0.01 + 0.4 * rng.unit()
         } else {
             0.02 + 0.5 * rng.unit()
@@ -643,6 +668,67 @@ fn random_trees_monte_carlo_agrees_with_truth_table() {
         let _ = std::fs::remove_dir_all(&c.dir);
     }
     assert!(compared >= 5, "only {compared} trees compared");
+}
+
+/// Small trees with probabilities at the edges (0, 1, 1e-300, ...): every
+/// analysis agrees with the truth table where the top event can occur, and every
+/// report is produced without a panic, NaN or inf (`fmt_e` asserts finiteness in
+/// debug builds). OpenFTA's Monte Carlo divides by zero on such trees
+/// (docs/VERIFICATION.md item 21).
+#[test]
+fn edge_probability_trees_stay_finite() {
+    use ftar_core::report::{generate, ReportKind, ReportParams};
+    let mut checked = 0;
+    for seed in 0..300u64 {
+        let c = random_case_with(0xED6E_0000 + seed, &format!("edge_{seed}"), true);
+        let proj = Project::load(c.dir.join("main.fta")).unwrap();
+        let res = |n: &str| -> Node {
+            let k: usize = n
+                .trim_start_matches("sub")
+                .trim_end_matches(".fta")
+                .parse()
+                .unwrap();
+            c.subs[k].clone()
+        };
+        let label = format!("edge seed {seed} ({})", c.dir.display());
+        let o = Oracle::new(&c.main, &res);
+        if o.truth.iter().any(|&b| b) {
+            check(&label, &proj, &c.main, &res, &c.probs, c.unit_time);
+            checked += 1;
+        }
+        for method in [Method::FirstFailure, Method::Direct] {
+            for trials in [0, 1, 100] {
+                let mc = MonteCarloOptions {
+                    trials,
+                    unit_time: c.unit_time,
+                    seed,
+                    method,
+                };
+                let r = simulate(&proj.tree, &proj.db, &mc).unwrap();
+                let what = format!("{label} {method:?} trials={trials}");
+                assert!(
+                    r.probability.is_finite() && r.std_error.is_finite(),
+                    "{what}: {r:?}"
+                );
+                assert!((0.0..=1.0).contains(&r.probability), "{what}: {r:?}");
+                let params = ReportParams {
+                    monte_carlo: mc,
+                    ..ReportParams::default()
+                };
+                for kind in ReportKind::ALL {
+                    let text = generate(kind, &proj.tree, &proj.db, "t", "", &params).unwrap();
+                    let lower = text.to_lowercase();
+                    assert!(
+                        !lower.contains("nan") && !lower.contains("inf"),
+                        "{what} {kind:?}:
+{text}"
+                    );
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&c.dir);
+    }
+    assert!(checked > 100, "only {checked} edge trees could fail");
 }
 
 // ------------------------------------------------------------ file trees
