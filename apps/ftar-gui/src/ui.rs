@@ -1460,8 +1460,12 @@ impl App {
                     ui.add(egui::DragValue::new(&mut self.terms).range(1..=16))
                         .labelled_by(l.id);
                     let l = ui.label("unit time");
-                    ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
-                        .labelled_by(l.id);
+                    ui.add(
+                        egui::DragValue::new(&mut self.unit_time)
+                            .speed(0.1)
+                            .range(0.0..=1e9),
+                    )
+                    .labelled_by(l.id);
                 });
             }
             Tab::MonteCarlo => {
@@ -1470,8 +1474,12 @@ impl App {
                     ui.add(egui::DragValue::new(&mut self.trials).range(1..=100_000_000))
                         .labelled_by(l.id);
                     let l = ui.label("unit time");
-                    ui.add(egui::DragValue::new(&mut self.unit_time).speed(0.1))
-                        .labelled_by(l.id);
+                    ui.add(
+                        egui::DragValue::new(&mut self.unit_time)
+                            .speed(0.1)
+                            .range(0.0..=1e9),
+                    )
+                    .labelled_by(l.id);
                 });
                 ui.horizontal(|ui| {
                     egui::ComboBox::from_label("method")
