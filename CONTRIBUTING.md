@@ -67,7 +67,8 @@ the PR's changes) and over the whole workspace weekly (a report in the job summa
 `master` also publishes the **mutation score** (caught / (caught + missed + timed out)) for the README
 badge, as `mutants.json` on the `badges` branch.
 Coverage runs on every pull request and push to `master` (`.github/workflows/coverage.yml`); the
-per-file table is in the job summary, and the total is on Codecov (README badge). It has no threshold: use it to find untested code, and
+per-file table is in the job summary. A push to `master` publishes the total for the README badge, as
+`coverage.json` on the `badges` branch. It has no threshold: use it to find untested code, and
 mutation testing to check the tested code is really checked.
 
 ### Golden files
