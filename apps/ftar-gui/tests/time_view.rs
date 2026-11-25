@@ -200,3 +200,150 @@ fn switching_tabs_keeps_the_report_kind_of_the_openfta_tabs() {
     h.run();
     assert_eq!(h.state().report_kind, ReportKind::MonteCarlo);
 }
+
+// ------------------------------------------------------------- details
+
+use eframe::egui::{pos2, Rect};
+use ftar_gui::{chart_shape, fmt_time, gate_title, TimeView};
+
+#[test]
+fn settings_map_to_options() {
+    let mut v = TimeView::default();
+    let o = v.options().unwrap();
+    assert_eq!(
+        (o.times, o.sample_size, o.seed, o.computational_order),
+        (None, None, None, None),
+        "empty and 0 leave the tree's own"
+    );
+    v.samples = 1;
+    v.order = 1;
+    v.seed = " s ".into();
+    let o = v.options().unwrap();
+    assert_eq!((o.sample_size, o.computational_order), (Some(1), Some(1)));
+    assert_eq!(o.seed.as_deref(), Some("s"));
+    v.order = 3;
+    assert_eq!(v.options().unwrap().computational_order, Some(3));
+}
+
+#[test]
+fn names_in_the_lists() {
+    let labels: Vec<&str> = Curve::ALL.iter().map(|c| c.label()).collect();
+    assert_eq!(labels, ["probability q", "intensity ω", "rate λ"]);
+    let mut app = pumps();
+    app.run_time_analysis();
+    assert_eq!(gate_title(app.time.shown_gate()), "NO_FLOW (top)");
+    assert_eq!(gate_title(None), "");
+    assert_eq!(fmt_time(Some(5000.0)), "5000");
+    assert_eq!(fmt_time(Some(0.5)), "0.5");
+    assert_eq!(fmt_time(None), "");
+}
+
+#[test]
+fn the_shown_gate_stays_across_runs() {
+    let dir = scratch("gates");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("two.ftt");
+    std::fs::write(
+        &path,
+        "- times: 1, 2\n\nGate: TOP\n- type: OR\n- inputs: SUB, C\n\n\
+Gate: SUB\n- type: AND\n- inputs: A, B\n\n\
+Event: A\n- probability: 0.1\n\nEvent: B\n- probability: 0.2\n\nEvent: C\n- probability: 0.3\n",
+    )
+    .unwrap();
+    let mut app = App::default();
+    app.open(path);
+    app.tab = Tab::Time;
+    app.run_time_analysis();
+    assert_eq!(
+        app.time.shown_gate().unwrap().id,
+        "TOP",
+        "the top gate first"
+    );
+    app.time.gate = 1;
+    app.time.at = 0;
+    app.run_time_analysis();
+    assert_eq!(
+        app.time.shown_gate().unwrap().id,
+        "SUB",
+        "the chosen gate stays"
+    );
+    assert_eq!(app.time.at, 1, "importance goes back to the last time");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_values_table_shows_quantiles_only_when_sampling() {
+    let mut app = pumps();
+    app.time.samples = 1;
+    let mut h = harness_for(app);
+    h.state_mut().run_time_analysis();
+    h.run();
+    h.get_by_label_contains("Gate NO_FLOW");
+    assert!(h.query_by_label_contains("q 5%").is_none());
+    assert!(h.query_by_label_contains("means of").is_none());
+    h.state_mut().time.samples = 2;
+    h.state_mut().run_time_analysis();
+    h.run();
+    assert!(h.query_by_label_contains("q 5%").is_some());
+    // The chart names what it shows.
+    h.get_by_label_contains("chart of probability q from time 0 to 5000");
+    // One finite time: no chart.
+    h.state_mut().time.times = "7".into();
+    h.state_mut().run_time_analysis();
+    h.run();
+    h.get_by_label_contains("needs two or more finite times");
+    assert!(h.query_by_label_contains("chart of").is_none());
+}
+
+fn square() -> Rect {
+    Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 100.0))
+}
+
+#[test]
+fn chart_shape_maps_time_and_value_into_the_area() {
+    assert!(chart_shape(&[(1.0, 0.5, 0.5, 0.5)], square(), false).is_none());
+    let pts = [
+        (0.0, 0.0, 0.0, 0.0),
+        (5.0, 0.25, 0.2, 0.5),
+        (10.0, 0.5, 0.4, 1.0),
+    ];
+    let c = chart_shape(&pts, square(), false).unwrap();
+    assert_eq!(
+        (c.t0, c.t1, c.ymax),
+        (0.0, 10.0, 0.5),
+        "the top is the largest mean"
+    );
+    assert_eq!(
+        c.line,
+        [pos2(0.0, 100.0), pos2(50.0, 50.0), pos2(100.0, 0.0)]
+    );
+    assert!(c.band.is_empty());
+    // Sampled: the top also covers the 95% values, and the band goes up the
+    // 95% values and back down the 5% ones.
+    let c = chart_shape(&pts, square(), true).unwrap();
+    assert_eq!(c.ymax, 1.0);
+    assert_eq!(c.line[1], pos2(50.0, 75.0));
+    assert_eq!(
+        c.band,
+        [
+            pos2(0.0, 100.0),
+            pos2(50.0, 50.0),
+            pos2(100.0, 0.0),
+            pos2(100.0, 60.0),
+            pos2(50.0, 80.0),
+            pos2(0.0, 100.0)
+        ]
+    );
+    // An offset area, all-zero values (top 1), and the same time twice.
+    let area = Rect::from_min_max(pos2(10.0, 20.0), pos2(30.0, 60.0));
+    let c = chart_shape(
+        &[(2.0, 0.0, 0.0, 0.0), (2.0, f64::NAN, 0.0, 0.0)],
+        area,
+        false,
+    )
+    .unwrap();
+    assert_eq!(c.ymax, 1.0);
+    assert_eq!(c.line, [pos2(10.0, 60.0), pos2(10.0, 60.0)]);
+    let c = chart_shape(&[(1.0, 2.0, 0.0, 0.0), (3.0, 1.0, 0.0, 0.0)], area, false).unwrap();
+    assert_eq!(c.line, [pos2(10.0, 20.0), pos2(30.0, 40.0)]);
+}

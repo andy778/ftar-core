@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use eframe::egui::{self, Pos2, Sense, Stroke, Vec2};
+use eframe::egui::{self, Pos2, Rect, Sense, Stroke, Vec2};
 use ftar_core::quant::{analyse_document, tsv, GateResult, QuantOptions, QuantReport, Series};
 
 use crate::App;
@@ -254,13 +254,15 @@ impl App {
     }
 }
 
-fn gate_title(g: Option<&GateResult>) -> String {
+/// How a gate is named in the gate list: its id, `(top)` for a top gate.
+pub fn gate_title(g: Option<&GateResult>) -> String {
     let Some(g) = g else { return String::new() };
     let top = if g.is_top_gate { " (top)" } else { "" };
     format!("{}{top}", g.id)
 }
 
-fn fmt_time(t: Option<f64>) -> String {
+/// A time as the importance list shows it.
+pub fn fmt_time(t: Option<f64>) -> String {
     t.map_or_else(String::new, |t| t.to_string())
 }
 
@@ -334,29 +336,41 @@ pub fn chart_points(r: &QuantReport, s: &Series, curve: Curve) -> Vec<(f64, f64,
         .collect()
 }
 
-/// A line chart of the curve over time, with the 5–95% band when sampled.
-fn chart(ui: &mut egui::Ui, r: &QuantReport, s: &Series, curve: Curve) {
-    let pts = chart_points(r, s, curve);
-    if pts.len() < 2 {
-        ui.small("The chart needs two or more finite times.");
-        return;
+/// Where the chart's lines go in `area`: the mean curve, and the 5–95%
+/// band (up along the 95% values, back along the 5%) when `sampled`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChartShape {
+    pub line: Vec<Pos2>,
+    pub band: Vec<Pos2>,
+    /// The value at the top of the chart: the largest mean, or 95% value
+    /// when sampled.
+    pub ymax: f64,
+    /// The first and last time.
+    pub t0: f64,
+    pub t1: f64,
+}
+
+/// Lay out `points` (from [`chart_points`]) in `area`. `None` with fewer
+/// than two points.
+pub fn chart_shape(
+    points: &[(f64, f64, f64, f64)],
+    area: Rect,
+    sampled: bool,
+) -> Option<ChartShape> {
+    if points.len() < 2 {
+        return None;
     }
-    let (resp, painter) = ui.allocate_painter(
-        Vec2::new(ui.available_width().min(420.0), 170.0),
-        Sense::hover(),
-    );
-    let area = resp.rect.shrink2(Vec2::new(8.0, 14.0));
-    let (t0, t1) = pts
+    let (t0, t1) = points
         .iter()
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
             (a.min(p.0), b.max(p.0))
         });
-    let ymax = pts
+    let top = points
         .iter()
-        .flat_map(|p| [p.1, p.3])
+        .flat_map(|p| [p.1, if sampled { p.3 } else { p.1 }])
         .filter(|y| y.is_finite())
         .fold(0.0f64, f64::max);
-    let ymax = if ymax > 0.0 { ymax } else { 1.0 };
+    let ymax = if top > 0.0 { top } else { 1.0 };
     let to = |t: f64, y: f64| -> Pos2 {
         let x = if t1 > t0 { (t - t0) / (t1 - t0) } else { 0.0 };
         let y = if y.is_finite() {
@@ -369,6 +383,41 @@ fn chart(ui: &mut egui::Ui, r: &QuantReport, s: &Series, curve: Curve) {
             area.bottom() - (y as f32) * area.height(),
         )
     };
+    let band = if sampled {
+        points
+            .iter()
+            .map(|p| to(p.0, p.3))
+            .chain(points.iter().rev().map(|p| to(p.0, p.2)))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Some(ChartShape {
+        line: points.iter().map(|p| to(p.0, p.1)).collect(),
+        band,
+        ymax,
+        t0,
+        t1,
+    })
+}
+
+/// A line chart of the curve over time, with the 5–95% band when sampled.
+fn chart(ui: &mut egui::Ui, r: &QuantReport, s: &Series, curve: Curve) {
+    let size = Vec2::new(ui.available_width().min(420.0), 170.0);
+    let (resp, painter) = ui.allocate_painter(size, Sense::hover());
+    let area = resp.rect.shrink2(Vec2::new(8.0, 14.0));
+    let Some(c) = chart_shape(&chart_points(r, s, curve), area, r.sample_size > 1) else {
+        ui.small("The chart needs two or more finite times.");
+        return;
+    };
+    let name = format!(
+        "chart of {} from time {} to {}, up to {:.2E}",
+        curve.label(),
+        c.t0,
+        c.t1,
+        c.ymax
+    );
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &name));
     let visuals = ui.visuals();
     let ink = visuals.text_color();
     let line = visuals.selection.bg_fill;
@@ -378,20 +427,12 @@ fn chart(ui: &mut egui::Ui, r: &QuantReport, s: &Series, curve: Curve) {
         Stroke::new(1.0, visuals.weak_text_color()),
         egui::StrokeKind::Inside,
     );
-    if r.sample_size > 1 {
-        let band: Vec<Pos2> = pts
-            .iter()
-            .map(|p| to(p.0, p.3))
-            .chain(pts.iter().rev().map(|p| to(p.0, p.2)))
-            .collect();
-        for pair in band.windows(2) {
-            if let [a, b] = pair {
-                painter.line_segment([*a, *b], Stroke::new(1.0, line.gamma_multiply(0.5)));
-            }
+    for pair in c.band.windows(2) {
+        if let [a, b] = pair {
+            painter.line_segment([*a, *b], Stroke::new(1.0, line.gamma_multiply(0.5)));
         }
     }
-    let path: Vec<Pos2> = pts.iter().map(|p| to(p.0, p.1)).collect();
-    painter.add(egui::Shape::line(path, Stroke::new(2.0, line)));
+    painter.add(egui::Shape::line(c.line, Stroke::new(2.0, line)));
     let font = egui::FontId::monospace(10.0);
     let text = |pos: Pos2, align, s: String| {
         painter.text(pos, align, s, font.clone(), ink);
@@ -399,12 +440,16 @@ fn chart(ui: &mut egui::Ui, r: &QuantReport, s: &Series, curve: Curve) {
     text(
         area.left_top(),
         egui::Align2::LEFT_BOTTOM,
-        format!("{ymax:.2E}"),
+        format!("{:.2E}", c.ymax),
     );
-    text(area.left_bottom(), egui::Align2::LEFT_TOP, format!("{t0}"));
+    text(
+        area.left_bottom(),
+        egui::Align2::LEFT_TOP,
+        format!("{}", c.t0),
+    );
     text(
         area.right_bottom(),
         egui::Align2::RIGHT_TOP,
-        format!("{t1}"),
+        format!("{}", c.t1),
     );
 }
