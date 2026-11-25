@@ -1,0 +1,4 @@
+# A te
+Event: ../theatre.fta
+- type: transfer_in
+- probability: 0.001

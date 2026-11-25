@@ -57,6 +57,10 @@ use crate::montecarlo::{MonteCarloOptions, MonteCarloReport};
 
 /// C `printf("%E")`: six decimals and an exponent with sign and at least two digits.
 pub fn fmt_e(x: f64) -> String {
+    // Every number in a report passes through here; a NaN or inf is a 0/0 or x/0
+    // somewhere upstream (as OpenFTA's Monte Carlo has). Tests and the fuzzer run
+    // with debug assertions, so they catch it; release builds still print it.
+    debug_assert!(x.is_finite(), "non-finite number in a report: {x}");
     if x.is_nan() {
         return "NAN".into();
     }

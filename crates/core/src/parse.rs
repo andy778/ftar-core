@@ -186,6 +186,16 @@ pub fn parse_ped(input: &[u8]) -> Result<PrimaryEventDb> {
             .get(5)
             .and_then(|s| s.chars().next())
             .filter(|m| *m != '\0');
+        // OpenFTA takes any `atof` value; outside 0..1 (or a negative or
+        // non-finite rate) the analyses give probabilities above 1, below 0 or NaN.
+        let rate = lambda == Some('L');
+        if !probability.is_finite() || probability < 0.0 || (!rate && probability > 1.0) {
+            return Err(Error::Parse(format!(
+                "ped line {}: probability `{}` must be within 0..1 (a failure rate must be >= 0)",
+                ln + 1,
+                f[4].trim()
+            )));
+        }
         let ev = PrimaryEvent {
             id: f[0].to_string(),
             group: f[1].to_string(),

@@ -792,6 +792,12 @@ fn event_def(mut p: Paragraph) -> Result<EventDef> {
         }
         (None, own) => own.map(EventModel::Own),
     };
+    if kind == EventType::TransferIn && model.is_some() {
+        return Err(err(
+            p.line,
+            "a transfer-in has no model: its tree's events have them",
+        ));
+    }
     let (id, line) = (p.id.clone(), p.line);
     p.finish()?;
     Ok(EventDef {
