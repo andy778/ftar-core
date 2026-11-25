@@ -153,7 +153,9 @@ pub fn simulate(
     let mut modes: HashMap<Vec<usize>, u64> = HashMap::new();
     let mut system_failures = 0u64;
 
-    // All primary event probabilities zero: nothing can fail (OpenFTA abandons the analysis).
+    // All primary event probabilities zero: nothing can fail, so run no trials. OpenFTA still
+    // runs them (failing the last event) and only then reports the analysis abandoned
+    // (docs/VERIFICATION.md item 21).
     let runnable = any > 0.0;
     for _ in 0..if runnable { opts.trials } else { 0 } {
         failed.fill(false);
