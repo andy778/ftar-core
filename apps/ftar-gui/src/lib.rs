@@ -21,7 +21,9 @@ pub use app::{ctime_text, App, Clip, Pending, Tab};
 use eframe::egui;
 pub use ped::PedWindow;
 pub use preview::PrintPreview;
-pub use time_view::{chart_points, chart_shape, fmt_time, gate_title, ChartShape, Curve, TimeView};
+pub use time_view::{
+    chart_for, chart_points, chart_shape, fmt_time, gate_title, ChartShape, Curve, TimeView,
+};
 pub use ui::browser_command;
 
 /// Start the desktop app, optionally opening `path`.

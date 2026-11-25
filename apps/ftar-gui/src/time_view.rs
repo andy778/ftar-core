@@ -401,12 +401,18 @@ pub fn chart_shape(
     })
 }
 
+/// The chart of `curve` of `s` in `area`: with the 5–95% band when the
+/// report sampled more than once.
+pub fn chart_for(r: &QuantReport, s: &Series, curve: Curve, area: Rect) -> Option<ChartShape> {
+    chart_shape(&chart_points(r, s, curve), area, r.sample_size > 1)
+}
+
 /// A line chart of the curve over time, with the 5–95% band when sampled.
 fn chart(ui: &mut egui::Ui, r: &QuantReport, s: &Series, curve: Curve) {
     let size = Vec2::new(ui.available_width().min(420.0), 170.0);
     let (resp, painter) = ui.allocate_painter(size, Sense::hover());
     let area = resp.rect.shrink2(Vec2::new(8.0, 14.0));
-    let Some(c) = chart_shape(&chart_points(r, s, curve), area, r.sample_size > 1) else {
+    let Some(c) = chart_for(r, s, curve, area) else {
         ui.small("The chart needs two or more finite times.");
         return;
     };

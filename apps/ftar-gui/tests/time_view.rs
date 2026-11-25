@@ -347,3 +347,17 @@ fn chart_shape_maps_time_and_value_into_the_area() {
     let c = chart_shape(&[(1.0, 2.0, 0.0, 0.0), (3.0, 1.0, 0.0, 0.0)], area, false).unwrap();
     assert_eq!(c.line, [pos2(10.0, 20.0), pos2(30.0, 40.0)]);
 }
+
+#[test]
+fn the_band_is_drawn_only_when_sampling() {
+    let area = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 100.0));
+    for (samples, band) in [(1, false), (2, true)] {
+        let mut app = pumps();
+        app.time.samples = samples;
+        app.run_time_analysis();
+        let r = app.time.report.clone().unwrap();
+        let c = ftar_gui::chart_for(&r, &r.gates[0].series, Curve::Probability, area).unwrap();
+        assert_eq!(!c.band.is_empty(), band, "{samples} samples");
+        assert_eq!(c.line.len(), 4);
+    }
+}
