@@ -353,6 +353,8 @@ mod tests {
             triangular(0.5, 1.0, 3.0, 3.0),
             1.0 + (0.5f64 * 2.0 * 2.0).sqrt()
         );
+        // A lower bound above 0: F(mode) = (2 - 1) / 4, so 0.5 is right of the mode.
+        assert_eq!(triangular(0.5, 1.0, 5.0, 2.0), 5.0 - 6f64.sqrt());
     }
 
     #[test]

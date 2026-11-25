@@ -936,6 +936,8 @@ mod tests {
         assert_eq!(binomial_upto(10, 7, 1000), Some(120));
         assert_eq!(binomial_upto(60, 30, MAX_NODES), None);
         assert_eq!(binomial_upto(5, 0, 1), Some(1));
+        // C(30, 28) = C(30, 2) = 435: under the cap only by symmetry.
+        assert_eq!(binomial_upto(30, 28, 1000), Some(435));
     }
 
     /// The nodes a gate adds, checked against the tree it builds.

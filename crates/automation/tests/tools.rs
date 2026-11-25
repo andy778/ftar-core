@@ -276,7 +276,7 @@ fn time_analysis_of_a_text_tree() {
     assert!(rare > exact, "order 1 is the rare-event upper bound");
     // A tolerance near 1 stops after the second term (the first is the
     // whole sum so far): Bonferroni's lower bound.
-    assert!(tol < rare && tol <= exact, "{tol} {exact} {rare}");
+    assert!(tol < rare && tol < exact, "{tol} {exact} {rare}");
     // Exactly the limit of points is allowed, one more is not.
     s.call(
         "analysis_time",

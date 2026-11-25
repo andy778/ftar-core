@@ -268,7 +268,9 @@ fn constant_rate_q(t: f64, l: f64, m: f64) -> f64 {
         let undefined = m.is_infinite() || m.is_nan() || t == 0.0 || t.is_nan();
         return if undefined { f64::NAN } else { 1.0 };
     }
-    if l.is_nan() || m.is_nan() {
+    // A `nan` repair rate gives `nan` through the formula; a `nan` failure
+    // rate must not reach the infinite-repair answer below.
+    if l.is_nan() {
         return f64::NAN;
     }
     if m.is_infinite() {
@@ -286,9 +288,7 @@ fn constant_rate_w(t: f64, l: f64, m: f64) -> f64 {
         let undefined = m.is_infinite() || m.is_nan() || t == 0.0 || t.is_nan();
         return if undefined { f64::NAN } else { m };
     }
-    if l.is_nan() || m.is_nan() {
-        return f64::NAN;
-    }
+    // `nan` rates give `nan` through `l` or the formula.
     if m.is_infinite() {
         return l;
     }
@@ -560,6 +560,8 @@ mod tests {
             (5.0, nan, 1.0, nan, nan),
             (5.0, 1.0, nan, nan, nan),
             (5.0, 1.0, inf, 0.0, 1.0),
+            (5.0, nan, inf, nan, nan),
+            (5.0, nan, 0.0, nan, nan),
         ];
         for (t, l, m, q, w) in rows {
             assert!(same(constant_rate_q(t, l, m), q), "q({t}, {l}, {m})");

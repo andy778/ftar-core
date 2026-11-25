@@ -357,8 +357,22 @@ fn parses_deep(src: String) -> bool {
         .unwrap()
 }
 
+/// `n` untyped gates down to a VOTE(2) over three events.
+fn vote_over_events_at_depth(n: usize) -> String {
+    let mut src = String::new();
+    for i in 0..n {
+        src += &format!("Gate: G{i}\n- inputs: G{}\n\n", i + 1);
+    }
+    src + &format!(
+        "Gate: G{n}\n- type: VOTE(2)\n- inputs: E1, E2, E3\n\nEvent: E1\n\nEvent: E2\n\nEvent: E3\n"
+    )
+}
+
 #[test]
 fn a_vote_expansion_counts_in_the_depth_limit() {
+    // Its own check: OR, intermediate event, AND and the events below it.
+    assert!(parses_deep(vote_over_events_at_depth(995)));
+    assert!(!parses_deep(vote_over_events_at_depth(996)));
     // The VOTE adds an OR, an intermediate event and an AND above its inputs.
     assert!(parses_deep(vote_at_depth(993)));
     assert!(!parses_deep(vote_at_depth(994)));
