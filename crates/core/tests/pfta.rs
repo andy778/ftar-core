@@ -585,3 +585,48 @@ fn documents_are_quantified_with_their_models() {
     let e = tsv::events(&r);
     assert!(e.contains("UNUSED\t\tFalse\t0.0\t0\t1.0\t0.0\t"), "{e}");
 }
+
+// ------------------------------------------------------------- regressions
+
+/// Written text reads back to text that writes the same.
+fn stable(src: &str) -> String {
+    let d = parse_text(src.as_bytes()).unwrap();
+    let text = write_text(&d.tree, &d.db, &d.extras).unwrap();
+    let again = parse_text(text.as_bytes()).unwrap();
+    assert_eq!((&again.tree, &again.db), (&d.tree, &d.db), "{text}");
+    assert_eq!(
+        write_text(&again.tree, &again.db, &again.extras).unwrap(),
+        text
+    );
+    text
+}
+
+#[test]
+fn a_transfer_in_cannot_have_a_model() {
+    // ClusterFuzzLite on #141: the probability was dropped on the first
+    // write, and the event itself on the second.
+    let e =
+        parse_text(b"# Ate\nEvent: ../theatre.fta\n- type: transfer_in\n- probability: 0.001\n")
+            .unwrap_err();
+    assert!(e.to_string().contains("transfer-in has no model"), "{e}");
+}
+
+#[test]
+fn models_the_database_cannot_hold_are_kept() {
+    // A dormant event has no database entry; its model stays in the file.
+    let text = stable(
+        "- times: 1\n\nGate: T\n- type: OR\n- inputs: D\n\n\
+Event: D\n- type: dormant\n- model_type: Fixed\n- probability: 0.2\n- intensity: 0\n",
+    );
+    assert!(
+        text.contains("- type: dormant\n- model_type: Fixed\n- probability: 0.2\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn bare_unused_events_are_kept() {
+    let text =
+        stable("- times: 1\n\nGate: T\n- type: OR\n- inputs: A\n\nEvent: A\n\nEvent: LONELY\n");
+    assert!(text.contains("Event: LONELY\n"), "{text}");
+}

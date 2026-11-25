@@ -98,6 +98,18 @@ pub(crate) fn database_value(m: &Model) -> Option<(f64, Option<char>)> {
     }
 }
 
+/// What the event database holds for an event of `kind` with model `m`:
+/// [`database_value`] for the kinds a database has entries for, else
+/// nothing (the model then lives only in the extras).
+pub(crate) fn database_value_for(kind: EventType, m: &Model) -> Option<(f64, Option<char>)> {
+    use EventType::*;
+    let held = matches!(
+        kind,
+        Basic | External | Undeveloped | ConditionAnalysed | ConditionNotAnalysed
+    );
+    database_value(m).filter(|_| held)
+}
+
 fn entry_value(e: &PrimaryEvent) -> (f64, Option<char>) {
     (e.probability, e.lambda.filter(|l| *l == 'L'))
 }
@@ -299,7 +311,7 @@ fn event_parts(
         .model
         .as_ref()
         .and_then(|m| resolve(m, models))
-        .and_then(database_value);
+        .and_then(|m| database_value_for(e.kind, m));
     let mut entry = value.map(|(probability, lambda)| PrimaryEvent {
         id: e.id.clone(),
         group: e.group.clone().unwrap_or_default(),
@@ -329,13 +341,14 @@ fn event_parts(
         }
         label_extra.clone_from(&e.label);
     }
-    let extra =
-        (e.model.is_some() || e.comment.is_some() || label_extra.is_some()).then(|| EventExtra {
-            kind: e.kind,
-            label: label_extra,
-            comment: e.comment.clone(),
-            model: e.model.clone(),
-        });
+    // Every event is kept, so one that no gate uses and the database does
+    // not hold is still written back.
+    let extra = Some(EventExtra {
+        kind: e.kind,
+        label: label_extra,
+        comment: e.comment.clone(),
+        model: e.model.clone(),
+    });
     Ok((entry, extra))
 }
 
@@ -664,7 +677,8 @@ impl<'a> Writer<'a> {
         let entry = self.db.events.get(id);
         let extra = self.extras.events.get(id);
         let stored = extra.and_then(|x| x.model.as_ref()).filter(|m| {
-            resolve(m, &self.extras.models).and_then(database_value) == entry.map(entry_value)
+            resolve(m, &self.extras.models).and_then(|m| database_value_for(kind, m))
+                == entry.map(entry_value)
         });
         let model = match (stored, entry) {
             (Some(m), _) => Some(m.clone()),
