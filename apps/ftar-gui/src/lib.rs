@@ -11,6 +11,7 @@ pub use help::HelpState;
 mod ped;
 mod prefs_ui;
 mod preview;
+mod time_view;
 mod toolbar;
 mod ui;
 
@@ -20,6 +21,7 @@ pub use app::{ctime_text, App, Clip, Pending, Tab};
 use eframe::egui;
 pub use ped::PedWindow;
 pub use preview::PrintPreview;
+pub use time_view::{chart_points, Curve, TimeView};
 pub use ui::browser_command;
 
 /// Start the desktop app, optionally opening `path`.

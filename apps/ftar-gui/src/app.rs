@@ -22,6 +22,8 @@ pub enum Tab {
     CutSets,
     Probability,
     MonteCarlo,
+    /// PFTA's time-dependent analysis (`crate::TimeView`).
+    Time,
 }
 
 /// What the user asked for while there were unsaved changes.
@@ -143,6 +145,8 @@ pub struct App {
     pub cut_sets: Option<Vec<CutSet>>,
     pub prob: Option<ProbabilityReport>,
     pub mc: Option<MonteCarloReport>,
+    /// The Time tab: settings and last result.
+    pub time: crate::TimeView,
     /// Last answer of [`App::other_trees_using`]: (tree file, database, event id) and the text.
     usage_cache: Option<(UsageKey, String)>,
     /// The branch last cut or copied (Edit > Cut/Copy); kept when another tree is opened.
@@ -208,6 +212,7 @@ impl Default for App {
             cut_sets: None,
             prob: None,
             mc: None,
+            time: crate::TimeView::default(),
             usage_cache: None,
             clipboard: None,
         }
@@ -1291,15 +1296,19 @@ impl App {
     /// Simulation: show that analysis and its report.
     pub fn show_analysis(&mut self, tab: Tab) {
         self.tab = tab;
-        self.report_kind = Self::kind_for_tab(tab);
+        if let Some(k) = Self::kind_for_tab(tab) {
+            self.report_kind = k;
+        }
     }
 
-    /// The report kind that matches an analysis tab.
-    pub fn kind_for_tab(tab: Tab) -> ReportKind {
+    /// The report kind that matches an analysis tab (the Time tab has
+    /// tables instead of an OpenFTA report).
+    pub fn kind_for_tab(tab: Tab) -> Option<ReportKind> {
         match tab {
-            Tab::CutSets => ReportKind::CutSets,
-            Tab::Probability => ReportKind::Probability,
-            Tab::MonteCarlo => ReportKind::MonteCarlo,
+            Tab::CutSets => Some(ReportKind::CutSets),
+            Tab::Probability => Some(ReportKind::Probability),
+            Tab::MonteCarlo => Some(ReportKind::MonteCarlo),
+            Tab::Time => None,
         }
     }
 
@@ -1466,6 +1475,10 @@ impl App {
     }
 
     pub fn run_analysis(&mut self) {
+        if self.tab == Tab::Time {
+            self.run_time_analysis();
+            return;
+        }
         let Some(doc) = &self.doc else { return };
         self.error = None;
         let res = (|| -> ftar_core::Result<_> {
@@ -1489,7 +1502,8 @@ impl App {
                     )?),
                     None,
                 ),
-                Tab::MonteCarlo => (
+                // Tab::Time returned above.
+                Tab::MonteCarlo | Tab::Time => (
                     None,
                     None,
                     Some(simulate(&p.tree, &p.db, &self.mc_options())?),
@@ -1501,7 +1515,9 @@ impl App {
                 self.cut_sets = c.or(self.cut_sets.take());
                 self.prob = p.or(self.prob.take());
                 self.mc = m.or(self.mc.take());
-                self.save_last_report(Self::kind_for_tab(self.tab));
+                if let Some(k) = Self::kind_for_tab(self.tab) {
+                    self.save_last_report(k);
+                }
             }
             Err(e) => self.error = Some(e.to_string()),
         }

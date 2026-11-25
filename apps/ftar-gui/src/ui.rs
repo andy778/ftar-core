@@ -524,6 +524,7 @@ impl App {
             (Tab::CutSets, "Minimal Cut Sets..."),
             (Tab::Probability, "Numerical Probability..."),
             (Tab::MonteCarlo, "Monte Carlo Simulation..."),
+            (Tab::Time, "Time Analysis..."),
         ] {
             if ui.add_enabled(has_doc, egui::Button::new(label)).clicked() {
                 ui.close();
@@ -1427,9 +1428,12 @@ impl App {
             ui.selectable_value(&mut self.tab, Tab::CutSets, "Cut sets");
             ui.selectable_value(&mut self.tab, Tab::Probability, "Probability");
             ui.selectable_value(&mut self.tab, Tab::MonteCarlo, "Monte Carlo");
+            ui.selectable_value(&mut self.tab, Tab::Time, "Time");
             if self.tab != before {
                 // the report to export follows the tab you are looking at
-                self.report_kind = App::kind_for_tab(self.tab);
+                if let Some(k) = App::kind_for_tab(self.tab) {
+                    self.report_kind = k;
+                }
             }
         });
         ui.separator();
@@ -1444,11 +1448,13 @@ impl App {
                 self.show_help(Some("Analysis"));
             }
         });
-        ui.horizontal(|ui| {
-            let l = ui.label("max order (0 = all)");
-            ui.add(egui::DragValue::new(&mut self.order).range(0..=50))
-                .labelled_by(l.id);
-        });
+        if self.tab != Tab::Time {
+            ui.horizontal(|ui| {
+                let l = ui.label("max order (0 = all)");
+                ui.add(egui::DragValue::new(&mut self.order).range(0..=50))
+                    .labelled_by(l.id);
+            });
+        }
     }
 
     /// The current tab's own parameters.
@@ -1492,6 +1498,7 @@ impl App {
                         .labelled_by(l.id);
                 });
             }
+            Tab::Time => self.time_parameters(ui),
             Tab::CutSets => {}
         }
     }
@@ -1614,6 +1621,7 @@ impl App {
                     }
                 }
             }
+            Tab::Time => self.time_results(ui),
         });
     }
 
