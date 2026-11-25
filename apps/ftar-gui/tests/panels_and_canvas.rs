@@ -412,3 +412,57 @@ fn exactly_forty_failure_modes_are_all_listed() {
     h.run();
     h.get_by_label("... 1 more (export to see all)");
 }
+
+// ------------------------------------------------------------------ tabs and selection
+
+#[test]
+fn a_tab_click_picks_its_report_and_a_chosen_report_stays() {
+    use ftar_core::report::ReportKind;
+    let mut h = harness("theatre.fta");
+    h.get_by_label("Probability").click();
+    h.run();
+    assert_eq!(h.state().tab, Tab::Probability);
+    assert_eq!(
+        h.state().report_kind,
+        ReportKind::Probability,
+        "the report follows the tab"
+    );
+
+    // a report picked by hand is kept while the tab stays the same
+    h.state_mut().report_kind = ReportKind::MonteCarlo;
+    h.run();
+    h.run();
+    assert_eq!(h.state().report_kind, ReportKind::MonteCarlo);
+}
+
+#[test]
+fn clicking_a_symbol_selects_it_when_zoomed_in() {
+    let mut h = harness("theatre.fta");
+    h.state_mut().set_zoom(2.5);
+    h.run();
+    let scene = h.state().scene().expect("scene");
+    let b = scene.items.iter().find(|i| i.path == [0, 1]).unwrap().bbox;
+    let (z, origin) = (h.state().zoom, h.state().canvas.min + h.state().pan);
+    assert!((z - 2.5).abs() < 1e-4, "zoomed in: {z}");
+    let pos = pos2(
+        origin.x + (b[0] + b[2]) / 2.0 * z,
+        origin.y + (b[1] + b[3]) / 2.0 * z,
+    );
+    assert!(
+        h.state().canvas.contains(pos),
+        "the symbol is on screen at {pos:?}"
+    );
+    let version = h.state().version;
+    h.event(egui::Event::PointerMoved(pos));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert_eq!(h.state().selected.as_deref(), Some(&[0usize, 1][..]));
+    assert!(h.state().version > version, "a new selection redraws");
+}

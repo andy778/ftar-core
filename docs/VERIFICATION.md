@@ -176,6 +176,26 @@ Known differences from PFTA:
 20. **`.ped` with CRLF line ends**: OpenFTA built for Linux fails to open them ("error opening file") and then crashes
     in the analysis; on Windows the C runtime strips the `\r`. Two example databases in `tests/data/transtest` have
     CRLF. ftar reads both.
+21. **Monte Carlo on very simple models** (found by hand testing, 2026-11): OpenFTA and the other FTA tools tried crash
+    on small trees (a single event, an AND of two rare events) where no simulated run fails, and ftar was the only one
+    that gave a report. In OpenFTA's C, `fault_num = 0` gives `monte_carlo_prob = 0`, and the report then divides by both:
+    the top event's error `monte_carlo_prob / sqrt(fault_num)` (`MonteCarloSimulation.c:344`) and every importance
+    `100 * imp[i] / monte_carlo_prob` (`…c:261`) are 0/0. When every probability is 0 the C still runs all trials:
+    `rel[]` is all zero, so `rand_disc` returns the last event and fails it with probability 0. Only afterwards does the
+    report say "analysis abandoned" (`…c:322-327`). It asserts `monte_carlo_n > 0` (`…c:441`) and returns without a report
+    for a tree with no primary events (`…c:470-473`). ftar runs no trials when every probability is 0 and prints the same
+    "analysis abandoned" line. With no system failures it prints a 95% upper bound instead of `+/-`, explains why no
+    failure modes are listed, and shows 0 % importance. Trials = 0 count as 1 in the divisions. Test:
+    `monte_carlo_on_degenerate_models_stays_finite` (single event at p = 0, 1e-12, 0.5 and 1, two-event AND at 1e-9 and 1,
+    both methods, 0, 1 and 1000 trials: no NaN or inf in the numbers or the report).
+
+22. **Numbers OpenFTA never checks** (found by the edge-value test `edge_probability_trees_stay_finite`): the C reads `.ped`
+    probabilities with `atof` and takes the unit time as typed, so a probability of 2, -1, `nan` or `1e999`, or a negative
+    unit time, gives top probabilities above 1, below 0 or NaN. ftar now rejects them: a `.ped` probability must be within
+    0..1 (a failure rate `>= 0`), finite either way (`parse_ped`, a parse error naming the line), and the unit time must be
+    finite and `>= 0` (`check_unit_time`, `Error::InvalidInput`, in `probability_report`, `cut_set_probability` and
+    `simulate`; the GUI field is clamped). Tests: `ped_probabilities_out_of_range_are_parse_errors`,
+    `unit_time_must_be_finite_and_not_negative`.
 
 ### Notes on the C snapshot
 

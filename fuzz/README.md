@@ -8,7 +8,7 @@ Every `.fta`, `.ped`, script and request is untrusted input and must never panic
 | `parse_fta` | `.fta` bytes; also round-trips through `write_fta` |
 | `parse_ped` | `.ped` bytes; also round-trips through `write_ped` |
 | `parse_text` | `.ftt` text-format bytes; what parses must write back and read back the same |
-| `analysis` | `<.fta> NUL <.ped>`; minimal cut sets (order ≤ 4) and top probability |
+| `analysis` | `<.fta> NUL <.ped>`; minimal cut sets (order ≤ 4), top probability, Monte Carlo (0–63 trials, picked by the last byte) and every text report; no number may be NaN or inf |
 | `mcp` | one JSON-RPC line to the MCP server, file access confined to a scratch dir |
 
 Run locally (needs a nightly toolchain):
