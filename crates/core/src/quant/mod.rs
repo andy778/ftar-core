@@ -16,8 +16,11 @@
 //! one by one; point values give the same numbers.
 
 mod compute;
+pub mod importance;
 mod sample;
 pub mod tsv;
+
+pub use importance::Importance;
 
 use std::collections::{HashMap, HashSet};
 
@@ -46,6 +49,9 @@ pub struct QuantOptions {
     pub seed: Option<String>,
     pub computational_order: Option<usize>,
     pub computational_tolerance: Option<f64>,
+    /// Compute the importance of each gate's events (three more expansions
+    /// per event and point).
+    pub importance: bool,
     pub budget: u64,
 }
 
@@ -57,6 +63,7 @@ impl Default for QuantOptions {
             seed: None,
             computational_order: None,
             computational_tolerance: None,
+            importance: true,
             budget: DEFAULT_BUDGET,
         }
     }
@@ -113,6 +120,9 @@ pub struct GateResult {
     pub inputs: Vec<String>,
     pub series: Series,
     pub cut_sets: Vec<CutSetResult>,
+    /// The importance of each event in the gate's cut sets (empty unless
+    /// [`QuantOptions::importance`]).
+    pub importances: Vec<Importance>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -359,14 +369,7 @@ fn gate_series(
     let mut w = Vec::with_capacity(n);
     let mut cuts: Vec<(Vec<f64>, Vec<f64>)> = vec![(Vec::new(), Vec::new()); terms.len()];
     for i in 0..n {
-        let eq: Vec<f64> = events
-            .iter()
-            .map(|e| e.series.q.get(i).copied().unwrap_or(f64::NAN))
-            .collect();
-        let ew: Vec<f64> = events
-            .iter()
-            .map(|e| e.series.w.get(i).copied().unwrap_or(f64::NAN))
-            .collect();
+        let (eq, ew) = importance::point_values(events, i);
         let p = Point { q: &eq, w: &ew };
         q.push(compute::probability(terms, &p, trunc, budget)?);
         w.push(compute::intensity(terms, &p, trunc, budget)?);
@@ -431,6 +434,11 @@ pub fn analyse(ast: &Ast, opts: &QuantOptions) -> Result<QuantReport> {
         let terms = gate_terms(root, &index, &constant)?;
         check_models(&terms, ast)?;
         let (series, cut_sets) = gate_series(&terms, &events, n, s.trunc, &mut budget)?;
+        let importances = if opts.importance {
+            importance::importances(&terms, &events, &series.q, s.trunc, &mut budget)?
+        } else {
+            Vec::new()
+        };
         gates.push(GateResult {
             id: g.id.clone(),
             label: g.label.clone(),
@@ -440,6 +448,7 @@ pub fn analyse(ast: &Ast, opts: &QuantOptions) -> Result<QuantReport> {
             inputs: g.inputs.clone(),
             series,
             cut_sets,
+            importances,
         });
     }
     let used: HashSet<&str> = ast

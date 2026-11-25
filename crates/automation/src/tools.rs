@@ -199,6 +199,7 @@ fn analysis_time(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         seed: a.opt_str("seed")?.map(str::to_string),
         computational_order: a.opt_usize("order")?,
         computational_tolerance: a.opt_f64("tolerance")?,
+        importance: a.opt_bool("importance")?.unwrap_or(false),
         ..ftar_core::quant::QuantOptions::default()
     };
     let ast = ftar_core::text::convert::from_document(&d.tree, &d.db, &d.extras)?;
@@ -238,6 +239,23 @@ fn time_json(r: &ftar_core::quant::QuantReport) -> Value {
             v["top"] = json!(g.is_top_gate);
             v["type"] = json!(g.gate_type.name());
             v["cut_sets"] = json!(g.cut_sets.len());
+            if !g.importances.is_empty() {
+                v["importance"] = g
+                    .importances
+                    .iter()
+                    .map(|m| {
+                        json!({
+                            "event": m.event,
+                            "marginal": r.expected(&m.marginal),
+                            "criticality": r.expected(&m.criticality),
+                            "diagnostic": r.expected(&m.diagnostic),
+                            "prognostic": r.expected(&m.prognostic),
+                            "raw": r.expected(&m.risk_achievement_worth),
+                            "rrw": r.expected(&m.risk_reduction_worth),
+                        })
+                    })
+                    .collect();
+            }
             v
         })
         .collect();

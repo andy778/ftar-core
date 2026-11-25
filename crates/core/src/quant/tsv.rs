@@ -1,6 +1,6 @@
 //! The tables of a [`QuantReport`] as tab-separated text, with PFTA's
-//! columns: `models.tsv`, `events.tsv`, `gates.tsv` and one cut-set table
-//! per gate. Numbers are written as Python writes them (`0.1`, `1e-05`,
+//! columns: `models.tsv`, `events.tsv`, `gates.tsv`, and one cut-set table
+//! and one importance table per gate. Numbers are written as Python writes them (`0.1`, `1e-05`,
 //! `nan`, `inf`), booleans as `True`/`False`, missing values as empty.
 
 use super::{QuantReport, Series};
@@ -196,6 +196,49 @@ pub fn cut_sets(r: &QuantReport, gate: usize) -> Option<String> {
             cells.push(py_float(super::compute::divide(q, sum_at(i, true))));
             cells.push(py_float(super::compute::divide(w, sum_at(i, false))));
             row(&mut out, &cells);
+        }
+    }
+    Some(out)
+}
+
+/// The importance table of gate number `gate` (in file order), with PFTA's
+/// columns. Empty of rows when importances were not computed.
+pub fn importances(r: &QuantReport, gate: usize) -> Option<String> {
+    let g = r.gates.get(gate)?;
+    let mut out = String::new();
+    let head = [
+        "event",
+        "label",
+        "time",
+        "sample",
+        "marginal_importance",
+        "criticality_importance",
+        "diagnostic_importance",
+        "prognostic_importance",
+        "risk_achievement_worth",
+        "risk_reduction_worth",
+    ];
+    row(&mut out, &head.map(String::from));
+    let n = r.sample_size.max(1);
+    for m in &g.importances {
+        for (i, marginal) in m.marginal.iter().enumerate() {
+            let at = |v: &[f64]| py_float(v.get(i).copied().unwrap_or(f64::NAN));
+            let t = r.times.get(i / n).copied().unwrap_or(f64::NAN);
+            row(
+                &mut out,
+                &[
+                    m.event.clone(),
+                    cell(m.label.as_deref()),
+                    py_float(t),
+                    (i % n).to_string(),
+                    py_float(*marginal),
+                    at(&m.criticality),
+                    at(&m.diagnostic),
+                    at(&m.prognostic),
+                    at(&m.risk_achievement_worth),
+                    at(&m.risk_reduction_worth),
+                ],
+            );
         }
     }
     Some(out)

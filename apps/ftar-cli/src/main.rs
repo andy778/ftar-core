@@ -17,7 +17,8 @@ commands:
   draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
   time       ftar time <tree> [--times 0,10,100] [--samples N] [--seed S] [--order N] [--tolerance X] [--out DIR]
              time-dependent probability, intensity and rate of every gate (PFTA's analysis);
-             --out writes PFTA's tables (models, events, gates, cut sets) as .tsv files
+             with the importance of each top gate's events at the last time;
+             --out writes PFTA's tables (models, events, gates, cut sets, importances) as .tsv files
   convert    ftar convert <in> <out> [--inline]   convert between .fta (+ .ped) and the text format .ftt;
              --inline copies transfer-in trees into the output; never overwrites
   bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)
@@ -538,7 +539,10 @@ fn time(args: &[String]) -> Result<(), String> {
     print_time(&r);
     if let Some(dir) = out_dir {
         let cuts = dir.join("cut-sets");
-        std::fs::create_dir_all(&cuts).map_err(|e| format!("{}: {e}", cuts.display()))?;
+        let imps = dir.join("importances");
+        for d in [&cuts, &imps] {
+            std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+        }
         let mut files = vec![
             (dir.join("models.tsv"), tsv::models(&r)),
             (dir.join("events.tsv"), tsv::events(&r)),
@@ -547,6 +551,9 @@ fn time(args: &[String]) -> Result<(), String> {
         for (i, g) in r.gates.iter().enumerate() {
             if let Some(t) = tsv::cut_sets(&r, i) {
                 files.push((cuts.join(format!("{}.tsv", g.id)), t));
+            }
+            if let Some(t) = tsv::importances(&r, i) {
+                files.push((imps.join(format!("{}.tsv", g.id)), t));
             }
         }
         for (p, content) in &files {
@@ -611,5 +618,37 @@ Gate {} ({}){label}",
             }
             println!("  {:>14.6E}  {:>14.6E}", at(&w), at(&l));
         }
+        print_importance(r, g);
+    }
+}
+
+/// The importance of a gate's events at the last time (means over the samples).
+fn print_importance(r: &ftar_core::quant::QuantReport, g: &ftar_core::quant::GateResult) {
+    let Some(last) = r.times.len().checked_sub(1) else {
+        return;
+    };
+    if g.importances.is_empty() {
+        return;
+    }
+    let t = r.times.get(last).copied().unwrap_or(f64::NAN);
+    println!(
+        "
+  Importance at time {t}:
+  {:<16} {:>11} {:>11} {:>11} {:>11} {:>11}",
+        "event", "Birnbaum", "criticality", "F-V", "RAW", "RRW"
+    );
+    let mean = |v: &[f64]| r.expected(v).get(last).copied().unwrap_or(f64::NAN);
+    let mut rows: Vec<_> = g.importances.iter().collect();
+    rows.sort_by(|a, b| mean(&b.criticality).total_cmp(&mean(&a.criticality)));
+    for m in rows {
+        println!(
+            "  {:<16} {:>11.4E} {:>11.4E} {:>11.4E} {:>11.4E} {:>11.4E}",
+            m.event,
+            mean(&m.marginal),
+            mean(&m.criticality),
+            mean(&m.diagnostic),
+            mean(&m.risk_achievement_worth),
+            mean(&m.risk_reduction_worth)
+        );
     }
 }

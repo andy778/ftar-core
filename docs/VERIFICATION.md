@@ -62,6 +62,9 @@ PFTA. The checks are:
 - **Edge cases.** PFTA's answers for zero, infinite and `nan` rates and times in the constant-rate
   model, and `True`/`False` events simplifying cut sets, are copied as unit tests.
 - **OpenFTA trees.** `ftar time theatre.fta --times 1` gives OpenFTA's exact top probability.
+- **Importance.** In 40 random trees, every gate's importance measures agree with brute force to 1e-9:
+  marginal, criticality, diagnostic (the exact probability of the union of the cut sets that contain
+  the event), prognostic, RAW and RRW.
 
 Known differences from PFTA:
 
@@ -72,7 +75,7 @@ Known differences from PFTA:
   can differ in the last digits.
 - **Large trees.** A gate whose expansion needs more than 50 million combinations stops with an
   error asking for `computational_order`. PFTA keeps computing.
-- **Not written yet.** The importance tables and the SVG drawings per time.
+- **Not written yet.** PFTA's SVG drawings per time (ftar draws the tree with `ftar draw`).
 
 ## Confirmed equal
 
