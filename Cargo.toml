@@ -19,6 +19,8 @@ expect_used = "warn"
 panic = "warn"
 # A function too tangled to follow (nesting, branches, early exits). Threshold in clippy.toml.
 cognitive_complexity = "warn"
+# Functions over the line limit in clippy.toml: split them into named steps.
+too_many_lines = "warn"
 
 [profile.dev]
 debug = "line-tables-only"

@@ -1,0 +1,31 @@
+exit 1
+--- stdout
+--- stderr
+ftar: unknown command `nonsense`
+
+ftar - fault tree analysis (OpenFTA-compatible)
+
+usage: ftar <command> <tree.fta> [options]
+
+commands:
+  info       tree summary
+  cutsets    minimal cut sets
+  prob       cut-set probabilities, top-event probability, event importance
+  mc         Monte Carlo simulation
+  draw       ftar draw <tree.fta> <out.png|out.svg|out.html> [--scale S] [page options]   draw the tree
+  bundle     ftar bundle <tree.fta> [out.zip]      zip a tree with its database, transfer-in trees and reports (for bug reports)
+  unbundle   ftar unbundle <bundle.zip> [dir]      unpack a bundle (default dir: the zip's name); never overwrites
+  tools      list the JSON automation tools (name, description, schema)
+  call       ftar call <tool> [json-args]    run one tool, print the JSON result
+  run        ftar run <script.json>          run a JSON script (steps of {tool, args})
+  mcp        ftar mcp --root DIR             MCP server on stdio (opt-in); --unrestricted allows any path
+
+options:
+  --order N    use cut sets up to order N (default: all)
+  --terms N    inclusion-exclusion terms for `prob` (default: 16)
+  --time T     unit time for failure-rate events (default: 1)
+  --trials N   Monte Carlo trials (default: 100000)
+  --seed N     Monte Carlo seed
+  --method M   Monte Carlo: first (default, OpenFTA fast method) or direct
+  --root DIR   (call/run) confine all file access to DIR
+

@@ -27,27 +27,57 @@ pub(crate) enum Icon {
     Fit,
 }
 
-/// Paint `icon` in `r` (a square), thin strokes in `col`.
-fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
-    let st = Stroke::new(1.5, col);
-    let at = |x: f32, y: f32| r.min + Vec2::new(x * r.width(), y * r.height());
-    let line = |pts: &[(f32, f32)], closed: bool| {
-        let mut v: Vec<Pos2> = pts.iter().map(|&(x, y)| at(x, y)).collect();
+/// Strokes on an icon's square, in coordinates from 0 to 1 across it.
+struct Pen<'a> {
+    p: &'a egui::Painter,
+    r: Rect,
+    st: Stroke,
+}
+
+impl Pen<'_> {
+    fn at(&self, x: f32, y: f32) -> Pos2 {
+        self.r.min + Vec2::new(x * self.r.width(), y * self.r.height())
+    }
+
+    fn line(&self, pts: &[(f32, f32)], closed: bool) {
+        let mut v: Vec<Pos2> = pts.iter().map(|&(x, y)| self.at(x, y)).collect();
         if closed {
             v.push(v[0]);
         }
-        p.add(Shape::line(v, st));
-    };
-    let rect = |x0: f32, y0: f32, x1: f32, y1: f32| {
-        line(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)], true);
-    };
-    let circle = |x: f32, y: f32, rad: f32| {
-        p.circle_stroke(at(x, y), rad * r.width(), st);
+        self.p.add(Shape::line(v, self.st));
+    }
+
+    fn rect(&self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        self.line(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)], true);
+    }
+
+    fn circle(&self, x: f32, y: f32, rad: f32) {
+        self.p
+            .circle_stroke(self.at(x, y), rad * self.r.width(), self.st);
+    }
+}
+
+/// Paint `icon` in `r` (a square), thin strokes in `col`.
+fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
+    let pen = Pen {
+        p,
+        r,
+        st: Stroke::new(1.5, col),
     };
     use Icon::*;
     match icon {
+        New | Open | Save | Print => paint_file_icon(&pen, icon),
+        Cut | Copy | Paste | Delete | Link | Database => paint_edit_icon(&pen, icon),
+        Undo | Redo | ZoomIn | ZoomOut | Fit => paint_view_icon(&pen, icon),
+    }
+}
+
+/// New, Open, Save, Print.
+fn paint_file_icon(pen: &Pen, icon: Icon) {
+    use Icon::*;
+    match icon {
         New => {
-            line(
+            pen.line(
                 &[
                     (0.25, 0.1),
                     (0.62, 0.1),
@@ -57,9 +87,9 @@ fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
                 ],
                 true,
             );
-            line(&[(0.62, 0.1), (0.62, 0.28), (0.8, 0.28)], false);
+            pen.line(&[(0.62, 0.1), (0.62, 0.28), (0.8, 0.28)], false);
         }
-        Open => line(
+        Open => pen.line(
             &[
                 (0.1, 0.25),
                 (0.4, 0.25),
@@ -71,48 +101,57 @@ fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
             true,
         ),
         Save => {
-            rect(0.15, 0.15, 0.85, 0.85);
-            rect(0.3, 0.15, 0.7, 0.4);
-            rect(0.3, 0.55, 0.7, 0.85);
+            pen.rect(0.15, 0.15, 0.85, 0.85);
+            pen.rect(0.3, 0.15, 0.7, 0.4);
+            pen.rect(0.3, 0.55, 0.7, 0.85);
         }
         Print => {
-            rect(0.1, 0.4, 0.9, 0.75);
-            rect(0.28, 0.12, 0.72, 0.4);
-            rect(0.28, 0.6, 0.72, 0.9);
+            pen.rect(0.1, 0.4, 0.9, 0.75);
+            pen.rect(0.28, 0.12, 0.72, 0.4);
+            pen.rect(0.28, 0.6, 0.72, 0.9);
         }
+        // the other icons are drawn by the other groups (see paint_icon)
+        _ => {}
+    }
+}
+
+/// Clipboard, delete, link and the database.
+fn paint_edit_icon(pen: &Pen, icon: Icon) {
+    use Icon::*;
+    match icon {
         Cut => {
-            line(&[(0.3, 0.12), (0.7, 0.68)], false);
-            line(&[(0.7, 0.12), (0.3, 0.68)], false);
-            circle(0.3, 0.8, 0.12);
-            circle(0.7, 0.8, 0.12);
+            pen.line(&[(0.3, 0.12), (0.7, 0.68)], false);
+            pen.line(&[(0.7, 0.12), (0.3, 0.68)], false);
+            pen.circle(0.3, 0.8, 0.12);
+            pen.circle(0.7, 0.8, 0.12);
         }
         Copy => {
-            rect(0.15, 0.1, 0.6, 0.7);
-            rect(0.4, 0.3, 0.85, 0.9);
+            pen.rect(0.15, 0.1, 0.6, 0.7);
+            pen.rect(0.4, 0.3, 0.85, 0.9);
         }
         Paste => {
-            rect(0.2, 0.2, 0.8, 0.9);
-            rect(0.38, 0.08, 0.62, 0.28);
-            line(&[(0.32, 0.5), (0.68, 0.5)], false);
-            line(&[(0.32, 0.68), (0.68, 0.68)], false);
+            pen.rect(0.2, 0.2, 0.8, 0.9);
+            pen.rect(0.38, 0.08, 0.62, 0.28);
+            pen.line(&[(0.32, 0.5), (0.68, 0.5)], false);
+            pen.line(&[(0.32, 0.68), (0.68, 0.68)], false);
         }
         Delete => {
             // a bin: lid, handle and body
-            line(&[(0.15, 0.25), (0.85, 0.25)], false);
-            line(&[(0.4, 0.25), (0.4, 0.12), (0.6, 0.12), (0.6, 0.25)], false);
-            line(&[(0.25, 0.25), (0.3, 0.9), (0.7, 0.9), (0.75, 0.25)], false);
-            line(&[(0.45, 0.4), (0.45, 0.75)], false);
-            line(&[(0.55, 0.4), (0.55, 0.75)], false);
+            pen.line(&[(0.15, 0.25), (0.85, 0.25)], false);
+            pen.line(&[(0.4, 0.25), (0.4, 0.12), (0.6, 0.12), (0.6, 0.25)], false);
+            pen.line(&[(0.25, 0.25), (0.3, 0.9), (0.7, 0.9), (0.75, 0.25)], false);
+            pen.line(&[(0.45, 0.4), (0.45, 0.75)], false);
+            pen.line(&[(0.55, 0.4), (0.55, 0.75)], false);
         }
         Link => {
-            circle(0.36, 0.5, 0.22);
-            circle(0.64, 0.5, 0.22);
+            pen.circle(0.36, 0.5, 0.22);
+            pen.circle(0.64, 0.5, 0.22);
         }
         Database => {
             // a cylinder: the primary event database
-            line(&[(0.25, 0.22), (0.25, 0.78)], false);
-            line(&[(0.75, 0.22), (0.75, 0.78)], false);
-            line(
+            pen.line(&[(0.25, 0.22), (0.25, 0.78)], false);
+            pen.line(&[(0.75, 0.22), (0.75, 0.78)], false);
+            pen.line(
                 &[
                     (0.25, 0.22),
                     (0.4, 0.12),
@@ -123,36 +162,47 @@ fn paint_icon(p: &egui::Painter, r: Rect, icon: Icon, col: Color32) {
                 ],
                 true,
             );
-            line(
+            pen.line(
                 &[(0.25, 0.78), (0.4, 0.88), (0.6, 0.88), (0.75, 0.78)],
                 false,
             );
         }
+        // the other icons are drawn by the other groups (see paint_icon)
+        _ => {}
+    }
+}
+
+/// Undo, redo, zoom and fit.
+fn paint_view_icon(pen: &Pen, icon: Icon) {
+    use Icon::*;
+    match icon {
         Undo | Redo => {
             let m = if icon == Undo { 1.0 } else { -1.0 };
             let x = |v: f32| if m > 0.0 { v } else { 1.0 - v };
-            line(&[(x(0.8), 0.75), (x(0.8), 0.42), (x(0.3), 0.42)], false);
-            line(&[(x(0.45), 0.25), (x(0.28), 0.42), (x(0.45), 0.59)], false);
+            pen.line(&[(x(0.8), 0.75), (x(0.8), 0.42), (x(0.3), 0.42)], false);
+            pen.line(&[(x(0.45), 0.25), (x(0.28), 0.42), (x(0.45), 0.59)], false);
         }
         ZoomIn | ZoomOut => {
-            circle(0.42, 0.42, 0.27);
-            line(&[(0.62, 0.62), (0.88, 0.88)], false);
-            line(&[(0.3, 0.42), (0.54, 0.42)], false);
+            pen.circle(0.42, 0.42, 0.27);
+            pen.line(&[(0.62, 0.62), (0.88, 0.88)], false);
+            pen.line(&[(0.3, 0.42), (0.54, 0.42)], false);
             if icon == ZoomIn {
-                line(&[(0.42, 0.3), (0.42, 0.54)], false);
+                pen.line(&[(0.42, 0.3), (0.42, 0.54)], false);
             }
         }
         Fit => {
             for (sx, sy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
                 let x = |v: f32| if sx == 0.0 { v } else { 1.0 - v };
                 let y = |v: f32| if sy == 0.0 { v } else { 1.0 - v };
-                line(
+                pen.line(
                     &[(x(0.12), y(0.4)), (x(0.12), y(0.12)), (x(0.4), y(0.12))],
                     false,
                 );
             }
-            rect(0.32, 0.32, 0.68, 0.68);
+            pen.rect(0.32, 0.32, 0.68, 0.68);
         }
+        // the other icons are drawn by the other groups (see paint_icon)
+        _ => {}
     }
 }
 

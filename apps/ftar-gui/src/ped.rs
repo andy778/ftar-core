@@ -189,7 +189,7 @@ impl App {
     }
 
     fn ped_open_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Primary event database", &["ped"])
             .pick_file()
         {
@@ -206,7 +206,7 @@ impl App {
     }
 
     fn ped_export_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Text files", &["txt"])
             .set_file_name("primary_events.txt")
             .save_file()
@@ -445,6 +445,27 @@ impl App {
 
     fn ped_contents(&mut self, ui: &mut egui::Ui) {
         let has_doc = self.doc.is_some();
+        self.ped_menu_bar(ui, has_doc);
+        self.ped_toolbar(ui, has_doc);
+        let name = self.ped.name();
+        ui.label(format!(
+            "Database: {}{}",
+            if name.is_empty() { "(unnamed)" } else { &name },
+            if self.ped.dirty { " *" } else { "" }
+        ));
+        ui.horizontal_top(|ui| {
+            self.ped_event_list(ui);
+            ui.vertical(|ui| self.ped_form(ui));
+        });
+        if let Some(e) = &self.ped.error {
+            ui.colored_label(Color32::LIGHT_RED, e);
+        }
+        if let Some(s) = &self.ped.status {
+            ui.label(s);
+        }
+    }
+
+    fn ped_menu_bar(&mut self, ui: &mut egui::Ui, has_doc: bool) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("New").clicked() {
@@ -519,6 +540,9 @@ impl App {
                 }
             });
         });
+    }
+
+    fn ped_toolbar(&mut self, ui: &mut egui::Ui, has_doc: bool) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             if icon_button(ui, Icon::New, "New", true) {
@@ -547,103 +571,91 @@ impl App {
                 self.ped_link();
             }
         });
-        let name = self.ped.name();
-        ui.label(format!(
-            "Database: {}{}",
-            if name.is_empty() { "(unnamed)" } else { &name },
-            if self.ped.dirty { " *" } else { "" }
-        ));
+    }
+
+    /// The database's events; clicking one loads it into the form.
+    fn ped_event_list(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.set_min_width(150.0);
+            ui.strong("Primary Events");
+            egui::ScrollArea::vertical()
+                .id_salt("ped_list")
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    for id in self.ped.event_ids() {
+                        let sel = self.ped.selected.as_deref() == Some(&id);
+                        if ui.selectable_label(sel, &id).clicked() {
+                            self.ped_select(&id);
+                        }
+                    }
+                });
+        });
+    }
+
+    /// The event form: id, probability, type, dormant, description and its buttons.
+    fn ped_form(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_top(|ui| {
             ui.group(|ui| {
-                ui.set_min_width(150.0);
-                ui.strong("Primary Events");
-                egui::ScrollArea::vertical()
-                    .id_salt("ped_list")
-                    .max_height(300.0)
-                    .show(ui, |ui| {
-                        for id in self.ped.event_ids() {
-                            let sel = self.ped.selected.as_deref() == Some(&id);
-                            if ui.selectable_label(sel, &id).clicked() {
-                                self.ped_select(&id);
-                            }
-                        }
-                    });
+                let l = ui.strong("Id");
+                ui.add(egui::TextEdit::singleline(&mut self.ped.form.id).desired_width(160.0))
+                    .labelled_by(l.id);
             });
-            ui.vertical(|ui| {
-                ui.horizontal_top(|ui| {
-                    ui.group(|ui| {
-                        let l = ui.strong("Id");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.ped.form.id).desired_width(160.0),
-                        )
-                        .labelled_by(l.id);
-                    });
-                    ui.group(|ui| {
-                        ui.vertical(|ui| {
-                            let l = ui.strong("Probability");
-                            ui.add(
-                                egui::TextEdit::singleline(&mut self.ped.form.prob)
-                                    .desired_width(120.0),
-                            )
-                            .labelled_by(l.id);
-                            ui.checkbox(&mut self.ped.form.rate, "Constant Failure Rate/Unit Time");
-                            if let Some(h) = self.rate_hint(&self.ped.form.prob, self.ped.form.rate)
-                            {
-                                ui.weak(h);
-                            }
-                        });
-                    });
-                });
-                ui.group(|ui| {
-                    ui.strong("Type");
-                    ui.horizontal_wrapped(|ui| {
-                        for k in [
-                            EventType::Basic,
-                            EventType::External,
-                            EventType::Undeveloped,
-                            EventType::ConditionNotAnalysed,
-                            EventType::ConditionAnalysed,
-                        ] {
-                            ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
-                        }
-                    });
-                });
-                ui.checkbox(&mut self.ped.form.dormant, "Dormant");
-                ui.group(|ui| {
-                    let l = ui.strong("Description");
+            ui.group(|ui| {
+                ui.vertical(|ui| {
+                    let l = ui.strong("Probability");
                     ui.add(
-                        egui::TextEdit::multiline(&mut self.ped.form.desc)
-                            .desired_rows(3)
-                            .desired_width(300.0),
+                        egui::TextEdit::singleline(&mut self.ped.form.prob).desired_width(120.0),
                     )
                     .labelled_by(l.id);
-                });
-                ui.horizontal(|ui| {
-                    if ui.button("Apply event").clicked() {
-                        self.ped_apply();
-                    }
-                    if ui.button("Clear").clicked() {
-                        self.ped_clear();
-                    }
-                    if ui.button("Delete event").clicked() {
-                        self.ped_delete();
-                    }
-                    if ui.button("Help").clicked() {
-                        self.show_help(Some("Primary events"));
+                    ui.checkbox(&mut self.ped.form.rate, "Constant Failure Rate/Unit Time");
+                    if let Some(h) = self.rate_hint(&self.ped.form.prob, self.ped.form.rate) {
+                        ui.weak(h);
                     }
                 });
             });
         });
-        if let Some(e) = &self.ped.error {
-            ui.colored_label(Color32::LIGHT_RED, e);
-        }
-        if let Some(s) = &self.ped.status {
-            ui.label(s);
-        }
+        ui.group(|ui| {
+            ui.strong("Type");
+            ui.horizontal_wrapped(|ui| {
+                for k in [
+                    EventType::Basic,
+                    EventType::External,
+                    EventType::Undeveloped,
+                    EventType::ConditionNotAnalysed,
+                    EventType::ConditionAnalysed,
+                ] {
+                    ui.radio_value(&mut self.ped.form.kind, k, kind_label(k));
+                }
+            });
+        });
+        ui.checkbox(&mut self.ped.form.dormant, "Dormant");
+        ui.group(|ui| {
+            let l = ui.strong("Description");
+            ui.add(
+                egui::TextEdit::multiline(&mut self.ped.form.desc)
+                    .desired_rows(3)
+                    .desired_width(300.0),
+            )
+            .labelled_by(l.id);
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Apply event").clicked() {
+                self.ped_apply();
+            }
+            if ui.button("Clear").clicked() {
+                self.ped_clear();
+            }
+            if ui.button("Delete event").clicked() {
+                self.ped_delete();
+            }
+            if ui.button("Help").clicked() {
+                self.show_help(Some("Primary events"));
+            }
+        });
     }
 
     fn ped_save_as_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new()
+        if let Some(p) = crate::desktop::FileDialog::new()
             .add_filter("Primary event database", &["ped"])
             .set_file_name("events.ped")
             .save_file()

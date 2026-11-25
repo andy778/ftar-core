@@ -233,6 +233,20 @@ fn close(a: f64, b: f64, what: &str, label: &str) {
     );
 }
 
+/// Minimal cut sets, of every order and limited to orders 1 to 4, against the oracle's.
+fn check_cut_sets(label: &str, proj: &Project, want: &BTreeSet<CutSet>) {
+    let got: BTreeSet<CutSet> = minimal_cut_sets(&proj.tree).unwrap().into_iter().collect();
+    assert_eq!(&got, want, "{label}: minimal cut sets");
+    for lim in 1..=4 {
+        let w: BTreeSet<CutSet> = want.iter().filter(|c| c.len() <= lim).cloned().collect();
+        let g: BTreeSet<CutSet> = minimal_cut_sets_limited(&proj.tree, lim)
+            .unwrap()
+            .into_iter()
+            .collect();
+        assert_eq!(g, w, "{label}: cut sets limited to order {lim}");
+    }
+}
+
 /// Compare every analysis result of `proj` against the oracle.
 /// Returns the number of minimal cut sets.
 fn check(
@@ -248,16 +262,7 @@ fn check(
     let want = o.min_cut_sets();
 
     // (a) minimal cut sets == minimal true points
-    let got: BTreeSet<CutSet> = minimal_cut_sets(&proj.tree).unwrap().into_iter().collect();
-    assert_eq!(got, want, "{label}: minimal cut sets");
-    for lim in 1..=4 {
-        let w: BTreeSet<CutSet> = want.iter().filter(|c| c.len() <= lim).cloned().collect();
-        let g: BTreeSet<CutSet> = minimal_cut_sets_limited(&proj.tree, lim)
-            .unwrap()
-            .into_iter()
-            .collect();
-        assert_eq!(g, w, "{label}: cut sets limited to order {lim}");
-    }
+    check_cut_sets(label, proj, &want);
 
     // (b) exact probability, with and without an order limit
     let p: Vec<f64> = o.ids.iter().map(|id| eff(probs, id, t)).collect();

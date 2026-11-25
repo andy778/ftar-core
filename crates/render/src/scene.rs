@@ -501,6 +501,50 @@ pub fn tree_scene(tree: &Tree, db: &PrimaryEventDb, opts: &SceneOptions) -> Scen
     };
 
     // connectors first, so symbols sit on top of them
+    draw_connectors(&mut b, &placed);
+
+    let mut items: Vec<Item> = placed
+        .iter()
+        .map(|p| draw_node(&mut b, p, db, opts))
+        .collect();
+
+    let header = header_lines(tree, opts);
+    let header_h = if header.is_empty() {
+        0.0
+    } else {
+        header.len() as f32 * HEADER_LINE_H + HEADER_LINE_H
+    };
+
+    if b.prims.is_empty() {
+        b.grow(0.0, 0.0);
+    }
+    // move everything so the drawing starts at the margin, under the header
+    let dx = MARGIN - b.min[0];
+    let dy = MARGIN + header_h - b.min[1];
+    shift(&mut b, &mut items, dx, dy);
+    let mut width = b.max[0] - b.min[0] + 2.0 * MARGIN;
+    let height = b.max[1] - b.min[1] + 2.0 * MARGIN + header_h;
+    for (i, l) in header.iter().enumerate() {
+        let pos = [MARGIN, MARGIN + (i as f32 + 0.5) * HEADER_LINE_H];
+        width = width.max(MARGIN * 2.0 + l.chars().count() as f32 * HEADER_FONT * CHAR_W);
+        b.prims.push(Prim::Text {
+            pos,
+            size: HEADER_FONT,
+            anchor: Anchor::Start,
+            bold: i == 0,
+            text: l.clone(),
+        });
+    }
+    Scene {
+        width,
+        height,
+        prims: b.prims,
+        items,
+    }
+}
+
+/// The lines joining each event to its parent and children (side events: across).
+fn draw_connectors(b: &mut Builder, placed: &[Placed]) {
     for (i, p) in placed.iter().enumerate() {
         let sym = symbol(p.node.kind);
         let dormant_lift = if is_dormant(p.node) {
@@ -536,73 +580,73 @@ pub fn tree_scene(tree: &Tree, db: &PrimaryEventDb, opts: &SceneOptions) -> Scen
             }
         }
     }
+}
 
-    let mut items = Vec::new();
-    for p in &placed {
-        let n = p.node;
-        let sym = symbol(n.kind);
-        let start = b.prims.len();
-        let at = |q: [f32; 2]| [p.x + q[0] * UNIT, p.top + q[1] * UNIT];
-        let f = {
-            let c = opts.prefs.fill(n.kind);
-            Rgb(c[0], c[1], c[2])
-        };
-        if is_dormant(n) {
-            // a ring 1.1 times the size behind the circle
-            let r = 0.55 * UNIT;
-            let c = [p.x, p.top + 0.5 * UNIT];
-            let mut ring = arc(c[0], c[1], r, r, 0.0, 360.0);
-            ring.pop();
-            b.path(ring, true, Some(f), false);
-        }
-        let dashed = n.kind == EventType::ConditionNotAnalysed;
-        for (pts, closed, filled) in outlines(n.kind) {
-            let pts = pts.into_iter().map(at).collect();
-            b.path(pts, closed, filled.then_some(f), dashed);
-        }
-
-        // id above the symbol, right of the connector (`draw_id`)
-        let id_y = p.top - 1.35 * FONT;
-        b.text([p.x + FONT / 2.0, id_y], FONT, Anchor::Start, false, &n.id);
-        if opts.probabilities && n.kind.is_primary() {
-            if let Some(e) = db.events.get(&n.id) {
-                b.text(
-                    [p.x + 1.5 * FONT, p.top - 0.3 * FONT],
-                    FONT,
-                    Anchor::Start,
-                    false,
-                    &format_g(e.probability),
-                );
-            }
-        }
-        // description inside the symbol, centred (`draw_symbol_text`)
-        let desc = description(n, db);
-        if sym.text_lines > 0 && !desc.is_empty() {
-            // a little wider than the average glyph, so lines stay inside the symbol
-            let chars = (sym.text_w * UNIT / (FONT * 0.58)).floor() as usize;
-            let lines = wrap(desc, chars, sym.text_lines);
-            let h = lines.len() as f32 * LINE_H;
-            let mut y = p.top + (sym.depth * UNIT - h) / 2.0 + LINE_H / 2.0;
-            for l in &lines {
-                b.text([p.x, y], FONT, Anchor::Middle, false, l);
-                y += LINE_H;
-            }
-        }
-        let half = sym.width * UNIT / 2.0;
-        let lift = if is_dormant(n) { 0.05 * UNIT } else { 0.0 };
-        items.push(Item {
-            path: p.path.clone(),
-            bbox: [
-                p.x - half - lift,
-                p.top - lift,
-                p.x + half + lift,
-                p.top + sym.depth * UNIT + lift,
-            ],
-            prims: start..b.prims.len(),
-        });
+/// One event: its symbol, id, probability and description; returns its hit box.
+fn draw_node(b: &mut Builder, p: &Placed, db: &PrimaryEventDb, opts: &SceneOptions) -> Item {
+    let n = p.node;
+    let sym = symbol(n.kind);
+    let start = b.prims.len();
+    let at = |q: [f32; 2]| [p.x + q[0] * UNIT, p.top + q[1] * UNIT];
+    let f = {
+        let c = opts.prefs.fill(n.kind);
+        Rgb(c[0], c[1], c[2])
+    };
+    if is_dormant(n) {
+        // a ring 1.1 times the size behind the circle
+        let r = 0.55 * UNIT;
+        let c = [p.x, p.top + 0.5 * UNIT];
+        let mut ring = arc(c[0], c[1], r, r, 0.0, 360.0);
+        ring.pop();
+        b.path(ring, true, Some(f), false);
+    }
+    let dashed = n.kind == EventType::ConditionNotAnalysed;
+    for (pts, closed, filled) in outlines(n.kind) {
+        let pts = pts.into_iter().map(at).collect();
+        b.path(pts, closed, filled.then_some(f), dashed);
     }
 
-    // header (OpenFTA writes it in the top left corner of the drawing)
+    // id above the symbol, right of the connector (`draw_id`)
+    let id_y = p.top - 1.35 * FONT;
+    b.text([p.x + FONT / 2.0, id_y], FONT, Anchor::Start, false, &n.id);
+    if opts.probabilities && n.kind.is_primary() {
+        if let Some(e) = db.events.get(&n.id) {
+            b.text(
+                [p.x + 1.5 * FONT, p.top - 0.3 * FONT],
+                FONT,
+                Anchor::Start,
+                false,
+                &format_g(e.probability),
+            );
+        }
+    }
+    // description inside the symbol, centred (`draw_symbol_text`)
+    // (no lines for an empty description or a symbol without a text area)
+    // a little wider than the average glyph, so lines stay inside the symbol
+    let chars = (sym.text_w * UNIT / (FONT * 0.58)).floor() as usize;
+    let lines = wrap(description(n, db), chars, sym.text_lines);
+    let h = lines.len() as f32 * LINE_H;
+    let mut y = p.top + (sym.depth * UNIT - h) / 2.0 + LINE_H / 2.0;
+    for l in &lines {
+        b.text([p.x, y], FONT, Anchor::Middle, false, l);
+        y += LINE_H;
+    }
+    let half = sym.width * UNIT / 2.0;
+    let lift = if is_dormant(n) { 0.05 * UNIT } else { 0.0 };
+    Item {
+        path: p.path.clone(),
+        bbox: [
+            p.x - half - lift,
+            p.top - lift,
+            p.x + half + lift,
+            p.top + sym.depth * UNIT + lift,
+        ],
+        prims: start..b.prims.len(),
+    }
+}
+
+/// OpenFTA's header in the top left corner: tree, database and note; none without a title.
+fn header_lines(tree: &Tree, opts: &SceneOptions) -> Vec<String> {
     let mut header: Vec<String> = Vec::new();
     if !opts.title.is_empty() {
         header.push(format!("Tree: {}", opts.title));
@@ -611,18 +655,11 @@ pub fn tree_scene(tree: &Tree, db: &PrimaryEventDb, opts: &SceneOptions) -> Scen
         }
         header.extend(wrap(&tree.note, 48, 4));
     }
-    let header_h = if header.is_empty() {
-        0.0
-    } else {
-        header.len() as f32 * HEADER_LINE_H + HEADER_LINE_H
-    };
+    header
+}
 
-    if b.prims.is_empty() {
-        b.grow(0.0, 0.0);
-    }
-    // move everything so the drawing starts at the margin, under the header
-    let dx = MARGIN - b.min[0];
-    let dy = MARGIN + header_h - b.min[1];
+/// Move every primitive and hit box by (dx, dy).
+fn shift(b: &mut Builder, items: &mut [Item], dx: f32, dy: f32) {
     for prim in &mut b.prims {
         match prim {
             Prim::Path { pts, .. } => {
@@ -637,32 +674,13 @@ pub fn tree_scene(tree: &Tree, db: &PrimaryEventDb, opts: &SceneOptions) -> Scen
             }
         }
     }
-    for it in &mut items {
+    for it in items.iter_mut() {
         it.bbox = [
             it.bbox[0] + dx,
             it.bbox[1] + dy,
             it.bbox[2] + dx,
             it.bbox[3] + dy,
         ];
-    }
-    let mut width = b.max[0] - b.min[0] + 2.0 * MARGIN;
-    let height = b.max[1] - b.min[1] + 2.0 * MARGIN + header_h;
-    for (i, l) in header.iter().enumerate() {
-        let pos = [MARGIN, MARGIN + (i as f32 + 0.5) * HEADER_LINE_H];
-        width = width.max(MARGIN * 2.0 + l.chars().count() as f32 * HEADER_FONT * CHAR_W);
-        b.prims.push(Prim::Text {
-            pos,
-            size: HEADER_FONT,
-            anchor: Anchor::Start,
-            bold: i == 0,
-            text: l.clone(),
-        });
-    }
-    Scene {
-        width,
-        height,
-        prims: b.prims,
-        items,
     }
 }
 

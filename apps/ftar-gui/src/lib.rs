@@ -5,6 +5,7 @@
 
 mod app;
 mod crash;
+mod desktop;
 mod help;
 pub use help::HelpState;
 mod ped;

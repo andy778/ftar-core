@@ -1,0 +1,4 @@
+exit 1
+--- stdout
+--- stderr
+ftar: bad value `x` for --terms

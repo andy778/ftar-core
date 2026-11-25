@@ -4,3 +4,5 @@ allow-panic-in-tests = true
 # cognitive_complexity (enabled in Cargo.toml): clippy's default, stated so it is a decision.
 # Every function was under it when the lint was turned on.
 cognitive-complexity-threshold = 25
+# too_many_lines (enabled in Cargo.toml): clippy's default, stated so it is a decision.
+too-many-lines-threshold = 100

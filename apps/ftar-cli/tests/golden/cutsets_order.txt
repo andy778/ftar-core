@@ -1,0 +1,16 @@
+exit 0
+--- stdout
+12 minimal cut sets
+   1  CP_1
+   2  DMS_1
+   3  DMS_2
+   4  DM_1
+   5  DOD_1
+   6  DOD_2
+   7  DPD_1
+   8  D_1
+   9  LMD_1
+  10  LMD_2
+  11  LPD_1
+  12  PS_1
+--- stderr
