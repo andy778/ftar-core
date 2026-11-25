@@ -306,3 +306,29 @@ mod invalid_numbers {
         assert!(probability_report(&p.tree, &p.db, &zero).is_ok());
     }
 }
+
+/// Product of the events' probabilities; a rate event gives `1 - e^(-rate * t)`.
+#[test]
+fn cut_set_probability_multiplies_effective_probabilities() {
+    use ftar_core::analysis::cut_set_probability;
+    let db = parse_ped(b"A;;B ;d;0.5; ;\nB;;B ;d;0.2; ;\nR;;B ;d;0.1;L;\n").unwrap();
+    let cs = |ids: &[&str]| ids.iter().map(|s| s.to_string()).collect();
+    let close = |a: f64, b: f64| assert!((a - b).abs() < 1e-15, "{a} vs {b}");
+    close(
+        cut_set_probability(&cs(&["A", "B"]), &db, 1.0).unwrap(),
+        0.1,
+    );
+    let r = 1.0 - (-0.1f64 * 2.0).exp();
+    close(
+        cut_set_probability(&cs(&["A", "R"]), &db, 2.0).unwrap(),
+        0.5 * r,
+    );
+    assert!(matches!(
+        cut_set_probability(&cs(&["A", "X"]), &db, 1.0),
+        Err(ftar_core::Error::MissingEvent(id)) if id == "X"
+    ));
+    assert!(matches!(
+        cut_set_probability(&cs(&["A"]), &db, -1.0),
+        Err(ftar_core::Error::InvalidInput(_))
+    ));
+}
