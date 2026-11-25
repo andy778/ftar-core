@@ -438,3 +438,56 @@ fn non_ascii_ids_are_padded_in_bytes() {
         "{r:?}"
     );
 }
+
+/// Monte Carlo on the smallest models never prints NaN or inf. OpenFTA divides
+/// by the number of system failures and the top event probability, both 0 when
+/// no simulated run fails (`MonteFileWrite`, `MonteFileWriteImportance`), and
+/// its GUI crashes on such models; ftar reports 0 or a 95% upper bound instead.
+#[test]
+fn monte_carlo_on_degenerate_models_stays_finite() {
+    use ftar_core::montecarlo::Method;
+    let models: [(&[&str], f64); 6] = [
+        (&["A"], 0.0),
+        (&["A"], 1e-12),
+        (&["A"], 0.5),
+        (&["A"], 1.0),
+        (&["A", "B"], 1e-9),
+        (&["A", "B"], 1.0),
+    ];
+    for (ids, prob) in models {
+        for method in [Method::FirstFailure, Method::Direct] {
+            for trials in [0, 1, 1_000] {
+                let (tree, db) = and_tree(ids, prob);
+                let what = format!("{ids:?} p={prob} {method:?} trials={trials}");
+                let mc = simulate(
+                    &tree,
+                    &db,
+                    &MonteCarloOptions {
+                        trials,
+                        method,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                assert!(mc.probability.is_finite(), "{what}: {mc:?}");
+                assert!(mc.std_error.is_finite(), "{what}: {mc:?}");
+                if let Some(b) = mc.upper_bound_95() {
+                    assert!(b.is_finite(), "{what}: {b}");
+                }
+                if prob == 1.0 && trials > 0 {
+                    assert_eq!(mc.probability, 1.0, "{what}");
+                }
+                let fs = failure_statistics_from_hits(&mc, 0);
+                let r = monte_carlo_report_text("t", TIME, 1.0, &mc, &fs);
+                let lower = r.to_lowercase();
+                assert!(
+                    !lower.contains("nan") && !lower.contains("inf"),
+                    "{what}:\n{r}"
+                );
+                if prob == 0.0 {
+                    assert!(r.contains("analysis abandoned"), "{what}:\n{r}");
+                }
+            }
+        }
+    }
+}
