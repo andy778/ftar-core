@@ -625,6 +625,17 @@ Event: D\n- type: dormant\n- model_type: Fixed\n- probability: 0.2\n- intensity:
 }
 
 #[test]
+fn carriage_returns_at_the_end_of_values_go() {
+    // ClusterFuzzLite on #140: a value ending in CRs at the end of the file
+    // lost one CR per write.
+    let text = stable("Event: GEN_FAIL\n- label: Backup \r\r\r\r");
+    assert!(text.contains("- label: Backup \n"), "{text:?}");
+    let text = stable("- note: a\r\r\n\nEvent: E\n- comment: c\r\r\r\n");
+    assert!(text.contains("- note: a\n"), "{text:?}");
+    assert!(text.contains("- comment: c\n"), "{text:?}");
+}
+
+#[test]
 fn bare_unused_events_are_kept() {
     let text =
         stable("- times: 1\n\nGate: T\n- type: OR\n- inputs: A\n\nEvent: A\n\nEvent: LONELY\n");
