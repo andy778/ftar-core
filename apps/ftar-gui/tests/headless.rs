@@ -371,6 +371,24 @@ fn unsaved_prompt_buttons_work() {
     assert!(h.state().title().starts_with("untitled"));
 }
 
+#[test]
+fn save_in_the_prompt_keeps_the_tree_when_the_dialog_is_cancelled() {
+    // A new tree has no file name, so Save asks for one; the dialog is
+    // cancelled (as every dialog is under test), so nothing may be lost.
+    let mut app = App::default();
+    app.new_doc();
+    app.select(Some(vec![0]));
+    app.add_child(EventType::Basic);
+    app.request_new();
+    let mut h = harness_for(app);
+    h.run();
+    h.get_all_by_label("Save").last().unwrap().click(); // the prompt's, after the toolbar one
+    h.run();
+    assert!(h.state().pending.is_some(), "the prompt stays");
+    assert!(h.state().dirty);
+    assert_eq!(h.state().doc.as_ref().unwrap().tree.nodes().len(), 3);
+}
+
 // ---------------------------------------------------------------- reports
 
 use ftar_core::report::ReportKind;

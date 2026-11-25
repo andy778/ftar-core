@@ -406,7 +406,7 @@ struct Builder<'a> {
 
 impl Builder<'_> {
     fn count(&mut self, line: usize) -> Result<()> {
-        self.nodes += 1;
+        self.nodes = self.nodes.saturating_add(1);
         if self.nodes > MAX_NODES {
             return Err(err(
                 line,
@@ -630,14 +630,11 @@ impl<'a> Writer<'a> {
 
     /// A paragraph name `<base>_<k>` that is no id and no other paragraph's name.
     fn fresh_name(&mut self, base: &str) -> String {
-        let mut k = 1usize;
-        loop {
-            let name = format!("{base}_{k}");
-            if self.taken.insert(name.clone()) {
-                return name;
-            }
-            k += 1;
-        }
+        // An iterator rather than a counter, so no mutation can make it spin.
+        (1usize..)
+            .map(|k| format!("{base}_{k}"))
+            .find(|name| self.taken.insert(name.clone()))
+            .unwrap_or_else(|| base.to_string())
     }
 
     /// The paragraph name of intermediate event `n`, and whether its

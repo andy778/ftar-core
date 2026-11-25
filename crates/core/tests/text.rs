@@ -222,15 +222,16 @@ fn pfta_only_keys_are_reported_as_not_supported_yet() {
 
 #[test]
 fn shared_gates_cannot_blow_up() {
-    // Each level uses the next twice: 2^40 nodes when expanded.
+    // Each level uses the next twice: 2^18 nodes when expanded, more than allowed but few
+    // enough to build quickly if the limit were broken.
     let mut src = String::new();
-    for i in 0..40 {
+    for i in 0..18 {
         src += &format!(
             "Gate: G{i}\n- type: AND\n- inputs: G{n}, G{n}\n\n",
             n = i + 1
         );
     }
-    src += "Event: G40\n";
+    src += "Event: G18\n";
     let e = parse_err(&src);
     assert!(e.contains(&MAX_NODES.to_string()), "{e}");
 }

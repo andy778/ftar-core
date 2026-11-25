@@ -16,6 +16,24 @@ fn ftar(args: &[&str]) -> (bool, String) {
     )
 }
 
+fn ftar_err(args: &[&str]) -> (bool, String) {
+    let o = Command::new(env!("CARGO_BIN_EXE_ftar"))
+        .args(args)
+        .output()
+        .expect("run ftar");
+    (
+        o.status.success(),
+        String::from_utf8_lossy(&o.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn convert_names_an_unknown_option() {
+    let (ok, err) = ftar_err(&["convert", "a.fta", "b.ftt", "--bogus"]);
+    assert!(!ok);
+    assert!(err.contains("unknown option `--bogus`"), "{err}");
+}
+
 #[test]
 fn prob_prints_exact_value() {
     let (ok, out) = ftar(&["prob", &format!("{DATA}/theatre.fta")]);
