@@ -132,7 +132,8 @@ fn paragraphs(text: &str) -> Result<Vec<Paragraph>> {
     let mut open = false;
     for (i, raw) in text.split('\n').enumerate() {
         let ln = i + 1;
-        let line = raw.strip_suffix('\r').unwrap_or(raw).trim_start();
+        // All of them: a CR left at a value's end would be lost when written and read again.
+        let line = raw.trim_end_matches('\r').trim_start();
         if line.trim_end().is_empty() {
             open = false;
             continue;

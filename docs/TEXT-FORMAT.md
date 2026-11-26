@@ -39,7 +39,7 @@ Event: GEN_FAIL
 
 - A paragraph starts with a header, `Gate: ID` or `Event: ID`, and goes on with `- key: value` lines.
   A blank line ends it. Each key appears at most once in a paragraph (except `note`).
-- Lines starting with `#` are comments. Leading spaces are ignored, and so is a CR before the line end.
+- Lines starting with `#` are comments. Leading spaces are ignored, and so are CRs before the line end.
 - Values start after the first `:`. Leading spaces are dropped; the rest of the line is kept.
 - Ids cannot be empty, cannot contain spaces, `,` or `;`, and cannot be `NULL`. Each id names one
   paragraph.
