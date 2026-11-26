@@ -9,7 +9,7 @@ the automation tools are described in the repository README and docs/mcp.md.
 
 - Start the app with a file to open it directly: `ftar-gui path/to/tree.fta`.
 - Or use File > Open... (Ctrl+O) to open a `.fta` file, or File > New (Ctrl+N) for an empty tree.
-- ftar also opens `.ftt` files, its plain-text format: the tree and its events in one file that you can write in a text editor (docs/TEXT-FORMAT.md).
+- ftar also opens `.ftt` files, its plain-text format: the tree and its events in one file that you can write in a text editor (docs/TEXT-FORMAT.md). It is PFTA's format, so files written for PFTA open too. The GUI shows the first top gate. Time-dependent models and distributions are kept in the file and analysed on the Time tab (or with `ftar time` on the command line).
 - The window title shows the file name. An asterisk marks unsaved changes.
 - The top event is the root of the tree. Everything else hangs below it.
 
@@ -82,6 +82,20 @@ enough that an estimate is not needed. The panel is always open, so it has no Ca
 - The report menu selects the text report. Export report... saves it as a `.txt` file,
   Copy report copies it to the clipboard, and Export failure modes (CSV)... saves the Monte
   Carlo failure modes as a spreadsheet-friendly file.
+- Time (also Analysis > Time Analysis...): PFTA's time-dependent analysis
+  (docs/TEXT-FORMAT.md). It computes the probability q, failure intensity ω and rate of every
+  gate at each time, from the events' models: a fixed probability, a constant failure rate
+  with or without repair, and distributions sampled for uncertainty.
+  - Settings: times (comma-separated), samples, seed and truncation order. Left empty or at
+    0, they are the tree's own: a `.ftt` file's properties, or time 1 for a `.fta` tree,
+    which gives the Probability tab's exact value.
+  - Results: the gate list shows the top gate first and can show any other gate. A chart
+    plots the chosen curve over time, with the 5–95% band when sampling. A table gives the
+    values at each time.
+  - Importance at time lists the events by criticality, with Birnbaum, criticality,
+    Fussell–Vesely (F-V), RAW and RRW.
+  - Export tables... writes PFTA's `.tsv` tables into a folder. The text report menu
+    belongs to the other tabs.
 
 ## Pictures and printing
 

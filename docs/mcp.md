@@ -48,7 +48,7 @@ During development use `cargo run -q -p ftar-cli -- mcp --root DIR` as the comma
 2. `tree_validate`, `tree_get`
 3. `tree_edit` / `event_set` / `event_delete`, undo with `tree_undo`; `event_usage {"id":"PUMP"}` lists the other
    trees in the folder that use the event from the same `.ped` before you change it
-4. `analysis_cutsets`, `analysis_probability`, `analysis_montecarlo` (seeded), or `report {"kind":"probability"}`.
+4. `analysis_cutsets`, `analysis_probability`, `analysis_montecarlo` (seeded), `analysis_time` (q, intensity and rate over time with sampled uncertainty, as PFTA; `"importance": true` adds Birnbaum, criticality, Fussell–Vesely, RAW and RRW; docs/TEXT-FORMAT.md), or `report {"kind":"probability"}`.
    When a Monte Carlo run sees no failures, `std_error` is `null` and `upper_bound_95` gives the 95% upper bound.
 5. `tree_save` writes the `.fta` and, when there are events, the `.ped` (a new tree gets `<name>.ped`). A path ending in `.ftt` writes the text format instead, with the tree and events in one file (docs/TEXT-FORMAT.md)
 6. `tree_close` refuses a document with unsaved changes unless you pass `"discard": true`

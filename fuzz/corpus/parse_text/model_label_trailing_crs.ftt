@@ -1,0 +1,13 @@
+# The tmat'. Two pumps s
+- time_unit: h
+- seed: pumps
+- sample_size: 200
+
+Model:  Fails.
+- probability: 0.03
+
+Event: RELAY_FAIL
+- label: Backup GePeratoility is 1 - exp(-rate * time).
+Event: GEN_FAIL
+- label: Backup Generator Fails.
+- failure_rate: 0e-2

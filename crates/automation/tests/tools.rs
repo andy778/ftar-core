@@ -229,6 +229,104 @@ fn text_format_opens_and_saves_in_one_file() {
 }
 
 #[test]
+fn time_analysis_of_a_text_tree() {
+    let mut s = session();
+    s.call("tree_open", &json!({ "path": "text/pumps.ftt" }))
+        .unwrap();
+    let r = s.call("analysis_time", &json!({})).unwrap();
+    assert_eq!(r["times"], json!([0.0, 1000.0, 2000.0, 5000.0]));
+    assert_eq!(r["sample_size"], 200);
+    let top = &r["gates"][0];
+    assert_eq!(top["id"], "NO_FLOW");
+    assert_eq!(top["type"], "VOTE(2)");
+    assert_eq!(top["q"][0], 0.0);
+    assert!(top["q"][3].as_f64().unwrap() > 0.0);
+    assert!(top["q_p95"][3].as_f64().unwrap() >= top["q_p05"][3].as_f64().unwrap());
+    // Overrides, and the limit on the work of one call.
+    let r = s
+        .call(
+            "analysis_time",
+            &json!({ "times": [10], "samples": 1, "order": 1 }),
+        )
+        .unwrap();
+    assert_eq!(r["gates"][0]["q"].as_array().unwrap().len(), 1);
+    assert!(r["gates"][0].get("q_p05").is_none());
+    assert!(r["gates"][0].get("importance").is_none());
+    // Seed, order and tolerance reach the analysis.
+    let q = |s: &mut ftar_automation::Session, args: Value| {
+        let r = s.call("analysis_time", &args).unwrap();
+        (r["seed"].clone(), r["gates"][0]["q"][0].as_f64().unwrap())
+    };
+    let (seed_a, a) = q(
+        &mut s,
+        json!({ "times": [5000], "samples": 50, "seed": "a" }),
+    );
+    let (seed_b, b) = q(
+        &mut s,
+        json!({ "times": [5000], "samples": 50, "seed": "b" }),
+    );
+    assert_eq!((seed_a, seed_b), (json!("a"), json!("b")));
+    assert_ne!(a, b, "another seed, other samples");
+    let (_, exact) = q(&mut s, json!({ "times": [5000], "samples": 1 }));
+    let (_, rare) = q(&mut s, json!({ "times": [5000], "samples": 1, "order": 1 }));
+    let (_, tol) = q(
+        &mut s,
+        json!({ "times": [5000], "samples": 1, "tolerance": 0.99 }),
+    );
+    assert!(rare > exact, "order 1 is the rare-event upper bound");
+    // A tolerance near 1 stops after the second term (the first is the
+    // whole sum so far): Bonferroni's lower bound.
+    assert!(tol < rare && tol < exact, "{tol} {exact} {rare}");
+    // Exactly the limit of points is allowed, one more is not.
+    s.call(
+        "analysis_time",
+        &json!({ "times": [5000], "samples": 100_000 }),
+    )
+    .unwrap();
+    let e = s
+        .call(
+            "analysis_time",
+            &json!({ "times": [5000], "samples": 100_001 }),
+        )
+        .unwrap_err();
+    assert!(e.message.contains("100001"), "{}", e.message);
+    let r = s
+        .call(
+            "analysis_time",
+            &json!({ "times": [5000], "samples": 1, "importance": true }),
+        )
+        .unwrap();
+    let imp = r["gates"][0]["importance"].as_array().unwrap();
+    assert_eq!(imp.len(), 3);
+    for m in imp {
+        for k in [
+            "marginal",
+            "criticality",
+            "diagnostic",
+            "prognostic",
+            "raw",
+            "rrw",
+        ] {
+            assert!(m[k][0].as_f64().unwrap() > 0.0, "{k} {m}");
+        }
+    }
+    let e = s
+        .call("analysis_time", &json!({ "samples": 1_000_000 }))
+        .unwrap_err();
+    assert!(e.message.contains("at most"), "{}", e.message);
+    let e = s
+        .call("analysis_time", &json!({ "times": [-1] }))
+        .unwrap_err();
+    assert_eq!(e.code, "invalid_args");
+    // An OpenFTA tree is quantified at time 1 by default.
+    s.call("tree_open", &json!({ "path": "theatre.fta" }))
+        .unwrap();
+    let r = s.call("analysis_time", &json!({})).unwrap();
+    let q = r["gates"][0]["q"][0].as_f64().unwrap();
+    assert!((q - 2.064_337_810_757_475_3e-3).abs() < 1e-15, "{q}");
+}
+
+#[test]
 fn closing_unsaved_work_needs_discard() {
     let mut s = session();
     s.call("tree_new", &json!({})).unwrap();

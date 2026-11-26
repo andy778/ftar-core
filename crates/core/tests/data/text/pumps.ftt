@@ -1,0 +1,33 @@
+# Three pumps, two of which must run (written for ftar's tests, in PFTA's
+# format). Two pumps share a model whose failure rate is uncertain; the
+# third is never repaired.
+- times: 0, 1000, 2000, 5000
+- time_unit: h
+- seed: pumps
+- sample_size: 200
+
+Model: PUMP
+- label: Running pump
+- model_type: ConstantRate
+- failure_rate: lognormal(mu=-9, sigma=0.5)
+- mean_repair_time: 24
+
+Gate: NO_FLOW
+- label: Too little flow
+- type: VOTE(2)
+- inputs: P1, P2, P3
+
+Event: P1
+- label: Pump 1 fails
+- model: PUMP
+
+Event: P2
+- label: Pump 2 fails
+- model: PUMP
+
+Event: P3
+- label: Spare pump fails
+- appearance: Undeveloped
+- model_type: ConstantRate
+- failure_rate: 1e-4
+- repair_rate: 0

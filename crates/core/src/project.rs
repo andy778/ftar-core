@@ -177,11 +177,14 @@ fn check_depth(tree: &Tree) -> Result<()> {
 
 /// Read one tree file with its own event database: an `.fta` and the `.ped`
 /// it names, or a text-format file ([`crate::text`]), which holds both.
-fn read_tree_file(path: &Path, opts: &LoadOptions) -> Result<(Tree, Option<PrimaryEventDb>)> {
+fn read_tree_file(
+    path: &Path,
+    opts: &LoadOptions,
+) -> Result<(Tree, Option<PrimaryEventDb>, crate::text::Extras)> {
     let bytes = opts.read(path)?;
     if crate::text::is_text_path(path) {
-        let (tree, db) = crate::text::parse_text(&bytes)?;
-        return Ok((tree, Some(db)));
+        let t = crate::text::parse_text(&bytes)?;
+        return Ok((t.tree, Some(t.db), t.extras));
     }
     let tree = parse_fta(&bytes)?;
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
@@ -189,7 +192,7 @@ fn read_tree_file(path: &Path, opts: &LoadOptions) -> Result<(Tree, Option<Prima
         Some(p) => Some(parse_ped(&opts.read(&p)?)?),
         None => None,
     };
-    Ok((tree, ped))
+    Ok((tree, ped, crate::text::Extras::default()))
 }
 
 fn load_tree(
@@ -212,7 +215,7 @@ fn load_tree(
     }
     stack.push(canon);
 
-    let (mut tree, own_ped) = read_tree_file(path, opts)?;
+    let (mut tree, own_ped, _) = read_tree_file(path, opts)?;
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     if let Some(ped) = &own_ped {
         for (k, v) in &ped.events {
@@ -281,6 +284,9 @@ pub struct Document {
     pub path: Option<PathBuf>,
     pub tree: Tree,
     pub db: PrimaryEventDb,
+    /// What a text-format file holds beyond the tree and database (models,
+    /// comments, times, ...); written back when saving as text.
+    pub extras: crate::text::Extras,
 }
 
 impl Default for Tree {
@@ -318,13 +324,14 @@ impl Document {
     /// Like [`Document::load`], under the limits in `opts`.
     pub fn load_with(path: impl AsRef<Path>, opts: &LoadOptions) -> Result<Document> {
         let path = path.as_ref();
-        let (mut tree, db) = read_tree_file(path, opts)?;
+        let (mut tree, db, extras) = read_tree_file(path, opts)?;
         let db = db.unwrap_or_default();
         apply_ped_types(&mut tree.root, &db);
         Ok(Document {
             path: Some(path.to_path_buf()),
             tree,
             db,
+            extras,
         })
     }
 

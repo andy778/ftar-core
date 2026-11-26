@@ -5,7 +5,8 @@
 //! * [`project`]  – load a tree with its database and transfer-in trees
 //! * [`analysis`] – minimal cut sets, exact top-event probability, importance
 //! * [`montecarlo`] – Monte Carlo simulation
-//! * [`text`]     – the plain-text tree format (`.ftt`), tree and database in one file
+//! * [`text`]     – the plain-text tree format (`.ftt`, PFTA-compatible), tree and database in one file
+//! * [`quant`]    – time-dependent quantification with uncertainty (PFTA's analysis)
 
 pub mod analysis;
 pub mod database;
@@ -15,6 +16,7 @@ pub mod model;
 pub mod montecarlo;
 pub mod parse;
 pub mod project;
+pub mod quant;
 pub mod report;
 pub mod report_files;
 pub mod text;

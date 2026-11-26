@@ -45,6 +45,7 @@ pub fn dispatch(s: &mut Session, tool: &str, args: &Value) -> Result<Value, Tool
         "analysis_cutsets" => analysis_cutsets(s, &a),
         "analysis_probability" => analysis_probability(s, &a),
         "analysis_montecarlo" => analysis_montecarlo(s, &a),
+        "analysis_time" => analysis_time(s, &a),
         "report" => make_report(s, &a, args),
         other => Err(ToolError::new(
             "unknown_tool",
@@ -173,6 +174,108 @@ fn analysis_montecarlo(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
     Ok(mc_json(&r))
 }
 
+/// Most times × samples `analysis_time` computes for one call.
+const MAX_TIME_POINTS: usize = 100_000;
+
+fn analysis_time(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
+    let (_, d) = s.doc_mut(a.0)?;
+    ensure_analysable(d)?;
+    let times = match a.0.get("times") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(v)) => Some(
+            v.iter()
+                .map(|x| {
+                    x.as_f64()
+                        .filter(|t| *t >= 0.0)
+                        .ok_or_else(|| ToolError::args("`times` must be non-negative numbers"))
+                })
+                .collect::<Result<Vec<f64>, ToolError>>()?,
+        ),
+        Some(_) => return Err(ToolError::args("`times` must be an array of numbers")),
+    };
+    let opts = ftar_core::quant::QuantOptions {
+        times,
+        sample_size: a.opt_usize("samples")?,
+        seed: a.opt_str("seed")?.map(str::to_string),
+        computational_order: a.opt_usize("order")?,
+        computational_tolerance: a.opt_f64("tolerance")?,
+        importance: a.opt_bool("importance")?.unwrap_or(false),
+        ..ftar_core::quant::QuantOptions::default()
+    };
+    let ast = ftar_core::text::convert::from_document(&d.tree, &d.db, &d.extras)?;
+    let points = opts
+        .times
+        .as_ref()
+        .or(ast.props.times.as_ref())
+        .map_or(1, Vec::len)
+        .saturating_mul(opts.sample_size.or(ast.props.sample_size).unwrap_or(1));
+    if points > MAX_TIME_POINTS {
+        return Err(ToolError::args(format!(
+            "times × samples is {points}; at most {MAX_TIME_POINTS} per call"
+        )));
+    }
+    let r = ftar_core::quant::analyse(&ast, &opts)?;
+    Ok(time_json(&r))
+}
+
+fn time_json(r: &ftar_core::quant::QuantReport) -> Value {
+    let series = |s: &ftar_core::quant::Series| {
+        let mut v = json!({
+            "q": r.expected(&s.q), "w": r.expected(&s.w), "rate": r.expected(&s.rate),
+        });
+        if r.sample_size > 1 {
+            v["q_p05"] = json!(r.quantile(&s.q, 0.05));
+            v["q_p95"] = json!(r.quantile(&s.q, 0.95));
+        }
+        v
+    };
+    let gates: Vec<Value> = r
+        .gates
+        .iter()
+        .map(|g| {
+            let mut v = series(&g.series);
+            v["id"] = json!(g.id);
+            v["label"] = json!(g.label);
+            v["top"] = json!(g.is_top_gate);
+            v["type"] = json!(g.gate_type.name());
+            v["cut_sets"] = json!(g.cut_sets.len());
+            if !g.importances.is_empty() {
+                v["importance"] = g
+                    .importances
+                    .iter()
+                    .map(|m| {
+                        json!({
+                            "event": m.event,
+                            "marginal": r.expected(&m.marginal),
+                            "criticality": r.expected(&m.criticality),
+                            "diagnostic": r.expected(&m.diagnostic),
+                            "prognostic": r.expected(&m.prognostic),
+                            "raw": r.expected(&m.risk_achievement_worth),
+                            "rrw": r.expected(&m.risk_reduction_worth),
+                        })
+                    })
+                    .collect();
+            }
+            v
+        })
+        .collect();
+    let events: Vec<Value> = r
+        .events
+        .iter()
+        .map(|e| {
+            let mut v = series(&e.series);
+            v["id"] = json!(e.id);
+            v["used"] = json!(e.is_used);
+            v
+        })
+        .collect();
+    json!({
+        "times": r.times, "time_unit": r.time_unit, "sample_size": r.sample_size, "seed": r.seed,
+        "note": "q, w (intensity) and rate are means over the samples, one value per time",
+        "gates": gates, "events": events,
+    })
+}
+
 // ------------------------------------------------------------- documents
 
 /// Windows canonical paths carry a `\\?\` prefix that is noise in JSON.
@@ -190,12 +293,17 @@ fn tree_open(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         root: s.root.clone(),
         max_file_size: Some(MAX_FILE),
     };
-    let (tree, db) = if raw {
+    let (tree, db, extras) = if raw {
         let d = Document::load_with(&path, &opts)?;
-        (d.tree, d.db)
+        (d.tree, d.db, d.extras)
     } else {
         let p = Project::load_with(&path, &opts)?;
-        (p.tree, p.db)
+        let extras = if ftar_core::text::is_text_path(&path) {
+            Document::load_with(&path, &opts)?.extras
+        } else {
+            ftar_core::text::Extras::default()
+        };
+        (p.tree, p.db, extras)
     };
     let name = path
         .file_stem()
@@ -211,6 +319,7 @@ fn tree_open(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             db,
             history: History::new(),
             dirty: false,
+            extras,
         },
     );
     s.last = Some(id.clone());
@@ -238,6 +347,7 @@ fn tree_new(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
             history: History::new(),
             // nothing to lose until the first edit
             dirty: false,
+            extras: ftar_core::text::Extras::default(),
         },
     );
     s.last = Some(id.clone());
@@ -577,7 +687,7 @@ fn tree_save(s: &mut Session, a: &Args) -> Result<Value, ToolError> {
         .ok_or_else(|| ToolError::args("document has no path; pass `path`"))?;
     if ftar_core::text::is_text_path(&path) {
         // The text format holds the tree and its events in one file.
-        let text = ftar_core::text::write_text(&d.tree, &d.db)?;
+        let text = ftar_core::text::write_text(&d.tree, &d.db, &d.extras)?;
         std::fs::write(&path, text)
             .map_err(|e| ToolError::new("io", format!("{}: {e}", display_path(&path))))?;
         let written = vec![display_path(&path)];

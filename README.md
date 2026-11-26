@@ -20,9 +20,10 @@ cargo run --release -p ftar-cli -- cutsets crates/core/tests/data/top.fta     # 
 cargo run --release -p ftar-cli -- mc crates/core/tests/data/theatre.fta --trials 1000000
 cargo run --release -p ftar-cli -- prob crates/core/tests/data/text/theatre.ftt   # the text format
 cargo run --release -p ftar-cli -- convert theatre.fta theatre.ftt                # .fta + .ped <-> .ftt
+cargo run --release -p ftar-cli -- time crates/core/tests/data/text/pumps.ftt     # q, ω and rate over time (PFTA)
 ```
 
-Commands: `info`, `cutsets`, `prob`, `mc`, `convert`; options `--order --terms --time --trials --seed`.
+Commands: `info`, `cutsets`, `prob`, `mc`, `convert`, `time`; options `--order --terms --time --trials --seed`.
 
 ## Status
 
@@ -32,13 +33,14 @@ Commands: `info`, `cutsets`, `prob`, `mc`, `convert`; options `--order --terms -
 - [x] Minimal cut sets with OpenFTA semantics (XOR analysed as OR, analysed/not-analysed conditions, order limit)
 - [x] Exact top-event probability by inclusion-exclusion with per-term bounds, failure-rate (`L`) events via unit time, event importance
 - [x] Monte Carlo simulation (reproducible per seed)
+- [x] PFTA compatibility (docs/TEXT-FORMAT.md): `.ftt` reads and writes [PFTA](https://github.com/public-fta/pfta)'s files (time-dependent `Fixed`/`ConstantRate`/`True`/`False` models, shared `Model:`s, parameter distributions, `VOTE(k)` and `NULL` gates, several top gates); `ftar time` quantifies q(t), ω(t) and rate over time with sampled uncertainty as PFTA does, with PFTA's importance measures (Birnbaum, criticality, Fussell–Vesely, prognostic, RAW, RRW), and writes its `.tsv` tables (also MCP/automation `analysis_time`); checked against an exact oracle (docs/VERIFICATION.md)
 - [x] `ftar` CLI, JSON automation tools (`ftar tools|call|run`) and an MCP server (`ftar mcp --root DIR`, see docs/mcp.md)
 - [x] GUI compared with OpenFTA's menus, shortcuts and dialogs item by item (docs/GUI-PARITY.md); the gaps are tickets
 - [x] Compare numbers with reports from the original engine: a native build of OpenFTA's C core (`tools/openfta-native/`) made the fixtures in `crates/core/tests/data/openfta/`; cut sets reports are identical, probability reports agree to float precision (docs/VERIFICATION.md)
 - [x] Failure statistics report, text report files compatible with OpenFTA
 - [x] Writing `.fta`/`.ped`, tree editing (GUI: add/delete/move/retype/rename, cut/copy/paste of whole branches (also between trees, with their event data; MCP/automation `tree_edit` move/copy), event database, OpenPED-style primary event editor (Edit > Primary events) that also lists the other trees in the folder using an event (an ftar addition; MCP/automation `event_usage`), undo/redo, save, unsaved-changes prompt)
 - [x] Primary event database as its own window (OpenPED, File/Edit > Primary event database...): new/open/save/save as a `.ped` without a tree, export text file, copy events between the database and the tree's, link a tree event to a database event (asks when types differ); headless `database::{export_text, copy_events, link_node}`
-- [x] GUI (egui): icon toolbar and symbol palette like OpenFTA's; tree canvas drawn as OpenFTA draws it (standard gate and event symbols, ids, probabilities, descriptions, tree/database header; shared with image export and print), View menu (zoom in/out with Ctrl+Plus/Minus, Set Zoom, a Tree Overview that shows and moves the visible area), editing, File/Edit/Analysis menus (Report > View / Print of the saved reports; Edit: Link, Shift Left/Right with OpenFTA's rules, Selected... / double-click to edit a symbol) (Analysis > Validate lists structural problems and selects their nodes), analyses, report and Monte Carlo failure-mode export
+- [x] GUI (egui): icon toolbar and symbol palette like OpenFTA's; tree canvas drawn as OpenFTA draws it (standard gate and event symbols, ids, probabilities, descriptions, tree/database header; shared with image export and print), View menu (zoom in/out with Ctrl+Plus/Minus, Set Zoom, a Tree Overview that shows and moves the visible area), editing, File/Edit/Analysis menus (Report > View / Print of the saved reports; Edit: Link, Shift Left/Right with OpenFTA's rules, Selected... / double-click to edit a symbol) (Analysis > Validate lists structural problems and selects their nodes), analyses, report and Monte Carlo failure-mode export, and a Time tab for PFTA's time-dependent analysis (chart of q, ω or rate over time with the sampled 5–95% band, values per time, importance measures, export of PFTA's tables)
 - [x] Built-in help: Help menu with the user guide (docs/USER-GUIDE.md) and an About page with the licence
 - [x] GUI Report > View: reopen the last saved Qualitative, Probability and Monte Carlo reports (`.crp`, `.prp`, `.mrp` next to the tree, written by each analysis run; disabled when missing). Report > Print is tracked in #56
 - [x] Preferences (Edit > Preferences): pen, background, highlight and per-symbol fill colours plus monochrome mode, saved between sessions and used by the canvas, image export and print (headless: `ftar_render::Preferences`)

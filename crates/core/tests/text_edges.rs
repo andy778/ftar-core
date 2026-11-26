@@ -3,11 +3,15 @@
 //! messages, and what the writer refuses (each pins down behaviour a
 //! mutation test found unchecked).
 
-use ftar_core::text::{parse_text, write_text, MAX_NODES};
+use ftar_core::text::{parse_text, Extras, MAX_NODES};
 use ftar_core::{Error, EventType, Node, PrimaryEventDb, Tree};
 
 fn parse(s: &str) -> Result<(Tree, PrimaryEventDb), Error> {
-    parse_text(s.as_bytes())
+    parse_text(s.as_bytes()).map(|d| (d.tree, d.db))
+}
+
+fn write_text(t: &Tree, db: &PrimaryEventDb) -> Result<String, Error> {
+    ftar_core::text::write_text(t, db, &Extras::default())
 }
 
 fn parse_err(s: &str) -> String {
@@ -36,7 +40,10 @@ fn ids_are_checked_character_by_character() {
 #[test]
 fn unknown_types_list_the_known_ones() {
     let e = parse_err("Gate: T\n- type: NAND\n");
-    assert!(e.contains("AND, OR, XOR, INHIBIT, PRIORITY_AND"), "{e}");
+    assert!(
+        e.contains("AND, OR, VOTE(k), NULL, XOR, INHIBIT or PRIORITY_AND"),
+        "{e}"
+    );
     let e = parse_err("Gate: T\n- inputs: A\n\nEvent: A\n- type: dog\n");
     assert!(e.contains("basic, undeveloped, house"), "{e}");
 }
@@ -115,7 +122,7 @@ fn group_and_dormant_survive() {
     assert_eq!(t.root.children[0].children[0].modifier, Some('D'));
     let text = write_text(&t, &db).unwrap();
     assert!(text.contains("- group: pumps\n"), "{text}");
-    assert!(text.contains("- dormant: true\n"), "{text}");
+    assert!(text.contains("- dormant: True\n"), "{text}");
     assert_eq!(parse(&text).unwrap(), (t, db));
 }
 
