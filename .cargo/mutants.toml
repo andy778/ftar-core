@@ -31,4 +31,8 @@ exclude_re = [
     # frame except while a scrollbar is dragged (covered by the scrollbar tests), so these
     # comparisons cannot change the result.
     'replace (> with >=|- with [+/]|&& with \|\|) in App::canvas_scrollbars',
+    # Sampling (quant/sample.rs): at `u == c` both branches of the triangular inverse give the
+    # mode, and a uniform number equal to the gamma acceptance bound has probability zero, so
+    # `<` and `<=` cannot be told apart.
+    'quant/sample\.rs:.*replace < with <= in (triangular|accepts)',
 ]

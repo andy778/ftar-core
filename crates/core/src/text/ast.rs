@@ -918,7 +918,7 @@ pub(crate) fn format_number(x: f64) -> String {
         return "nan".into();
     }
     if x.is_infinite() {
-        return if x > 0.0 { "inf" } else { "-inf" }.into();
+        return if x.is_sign_positive() { "inf" } else { "-inf" }.into();
     }
     let a = x.abs();
     if x == 0.0 || (1e-4..1e6).contains(&a) {

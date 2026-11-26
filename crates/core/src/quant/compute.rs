@@ -106,7 +106,9 @@ fn each_combination(
         return Ok(());
     }
     let mut c: Vec<usize> = (0..k).collect();
-    loop {
+    // As many rounds as there are combinations, so the loop ends whatever
+    // the steps below do.
+    for _ in 0..binomial(n, k) {
         budget.spend()?;
         f(&c);
         let Some(i) = (0..k)
@@ -125,6 +127,14 @@ fn each_combination(
             }
         }
     }
+    Ok(())
+}
+
+/// `n` choose `k` (for `k <= n`), saturating: the number of rounds of
+/// [`each_combination`].
+fn binomial(n: usize, k: usize) -> usize {
+    let k = k.min(n.saturating_sub(k));
+    (0..k).fold(1usize, |c, i| c.saturating_mul(n - i) / (i + 1))
 }
 
 fn union(terms: &[Term], pick: &[usize]) -> Term {
@@ -344,6 +354,91 @@ mod tests {
         let terms = vec![vec![0], vec![1]];
         assert!((probability(&terms, &p, t, &mut Budget(10)).unwrap() - 0.3).abs() < 1e-15);
         assert!(probability(&terms, &p, ALL, &mut Budget(0)).is_err());
+    }
+
+    /// `n` single-event cut sets.
+    fn singles(n: u32) -> Vec<Term> {
+        (0..n).map(|e| vec![e]).collect()
+    }
+
+    #[test]
+    fn expansions_stop_early_when_nothing_is_left() {
+        // 20 cut sets: order 1 visits 20 combinations, order 2 another 190.
+        let t = singles(20);
+        for (q, what) in [(0.0, "zero"), (f64::NAN, "nan")] {
+            let qs = vec![q; 20];
+            let ws = vec![q; 20];
+            let p = Point { q: &qs, w: &ws };
+            // A zero or `nan` first term ends the expansion: 20 is enough.
+            assert!(probability(&t, &p, ALL, &mut Budget(20)).is_ok(), "{what}");
+            assert!(intensity(&t, &p, ALL, &mut Budget(20)).is_ok(), "{what}");
+        }
+    }
+
+    #[test]
+    fn the_tolerance_stops_only_below_its_share() {
+        // Three cut sets A, B, C with q 1, 0.5, 0: order 1 gives 1.5, order 2
+        // -0.5, so the sum is 1 and the second term exactly half of it.
+        let q = [1.0, 0.5, 0.0];
+        let w = [0.0; 3];
+        let p = Point { q: &q, w: &w };
+        let half = Truncation {
+            order: None,
+            tolerance: 0.5,
+        };
+        // Not below half: the third order is computed too (3 + 3 + 1).
+        assert!(probability(&singles(3), &p, half, &mut Budget(6)).is_err());
+        assert_eq!(
+            probability(&singles(3), &p, half, &mut Budget(7)).unwrap(),
+            1.0
+        );
+        // Above half it stops after the second order.
+        let more = Truncation {
+            order: None,
+            tolerance: 0.6,
+        };
+        assert_eq!(
+            probability(&singles(3), &p, more, &mut Budget(6)).unwrap(),
+            1.0
+        );
+    }
+
+    #[test]
+    fn the_budget_is_counted_and_enforced() {
+        // 12 cut sets: 4095 combinations in all, quick even without a budget.
+        let q = vec![0.1; 12];
+        let w = vec![0.1; 12];
+        let p = Point { q: &q, w: &w };
+        let t = singles(12);
+        assert!(probability(&t, &p, ALL, &mut Budget(4095)).is_ok());
+        assert!(probability(&t, &p, ALL, &mut Budget(4094)).is_err());
+        let mut b = Budget(5000);
+        probability(&t, &p, ALL, &mut b).unwrap();
+        assert_eq!(b.0, 5000 - 4095);
+        assert!(
+            intensity(&t, &p, ALL, &mut Budget(4095)).is_err(),
+            "ω needs more"
+        );
+        // Combinations of 3 of 5, in order.
+        let mut seen = Vec::new();
+        each_combination(5, 3, &mut Budget(100), &mut |c| seen.push(c.to_vec())).unwrap();
+        assert_eq!(seen.len(), 10);
+        assert_eq!(seen.first().unwrap(), &[0, 1, 2]);
+        assert_eq!(seen[1], [0, 1, 3]);
+        assert_eq!(seen.last().unwrap(), &[2, 3, 4]);
+        assert_eq!(binomial(5, 3), 10);
+        assert_eq!(binomial(40, 20), 137_846_528_820);
+    }
+
+    #[test]
+    fn cut_set_quantities() {
+        let q = [0.5, 0.2, 0.1];
+        let w = [1.0, 2.0, 3.0];
+        let p = Point { q: &q, w: &w };
+        assert!((p.term_q(&[0, 1, 2]) - 0.01).abs() < 1e-15);
+        // ω = 1·0.2·0.1 + 2·0.5·0.1 + 3·0.5·0.2
+        assert!((p.term_w(&[0, 1, 2]) - 0.42).abs() < 1e-15);
+        assert_eq!(p.term_w(&[]), 0.0);
     }
 
     #[test]

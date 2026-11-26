@@ -11,7 +11,7 @@ pub fn py_float(x: f64) -> String {
         return "nan".into();
     }
     if x.is_infinite() {
-        return if x > 0.0 { "inf" } else { "-inf" }.into();
+        return if x.is_sign_positive() { "inf" } else { "-inf" }.into();
     }
     let a = x.abs();
     if a != 0.0 && !(1e-4..1e16).contains(&a) {
@@ -284,5 +284,7 @@ mod tests {
         assert_eq!(py_float(1e16), "1e+16");
         assert_eq!(py_float(f64::NAN), "nan");
         assert_eq!(py_float(-f64::INFINITY), "-inf");
+        assert_eq!(py_float(f64::INFINITY), "inf");
+        assert_eq!(py_float(-2.5e-7), "-2.5e-07");
     }
 }
