@@ -244,6 +244,31 @@ pub fn importances(r: &QuantReport, gate: usize) -> Option<String> {
     Some(out)
 }
 
+/// Write every table into `dir` as PFTA lays them out: `models.tsv`,
+/// `events.tsv`, `gates.tsv`, `cut-sets/<gate>.tsv` and
+/// `importances/<gate>.tsv`. Creates the folders; replaces those files.
+/// Returns how many files were written.
+pub fn write_dir(r: &QuantReport, dir: &std::path::Path) -> std::io::Result<usize> {
+    let cuts = dir.join("cut-sets");
+    let imps = dir.join("importances");
+    std::fs::create_dir_all(&cuts)?;
+    std::fs::create_dir_all(&imps)?;
+    let mut files = vec![
+        (dir.join("models.tsv"), models(r)),
+        (dir.join("events.tsv"), events(r)),
+        (dir.join("gates.tsv"), gates(r)),
+    ];
+    for (i, g) in r.gates.iter().enumerate() {
+        let name = format!("{}.tsv", g.id);
+        files.extend(cut_sets(r, i).map(|t| (cuts.join(&name), t)));
+        files.extend(importances(r, i).map(|t| (imps.join(&name), t)));
+    }
+    for (p, content) in &files {
+        std::fs::write(p, content)?;
+    }
+    Ok(files.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::py_float;

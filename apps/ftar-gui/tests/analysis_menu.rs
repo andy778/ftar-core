@@ -94,7 +94,7 @@ fn analysis_menu_shows_each_analysis_and_is_disabled_without_a_tree() {
         h.get_by_label(item).click();
         h.run();
         assert_eq!(h.state().tab, tab, "{item}");
-        assert_eq!(h.state().report_kind, App::kind_for_tab(tab));
+        assert_eq!(Some(h.state().report_kind), App::kind_for_tab(tab));
     }
     let mut empty = harness_for(App::default());
     empty.run();

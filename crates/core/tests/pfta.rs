@@ -455,6 +455,14 @@ Event: B\n- model_type: Fixed\n- probability: 0.2\n- intensity: 0\n";
     )
     .unwrap();
     assert!(skip.gates[0].importances.is_empty());
+    let dir = std::env::temp_dir().join(format!("ftar_pfta_tables_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(tsv::write_dir(&r, &dir).unwrap(), 5);
+    assert_eq!(
+        std::fs::read_to_string(dir.join("importances/T.tsv")).unwrap(),
+        t
+    );
+    let _ = std::fs::remove_dir_all(dir);
     assert_eq!(tsv::importances(&skip, 0).unwrap().lines().count(), 1);
 }
 

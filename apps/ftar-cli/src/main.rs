@@ -538,28 +538,8 @@ fn time(args: &[String]) -> Result<(), String> {
     let r = analyse_document(&doc, &o).map_err(|e| e.to_string())?;
     print_time(&r);
     if let Some(dir) = out_dir {
-        let cuts = dir.join("cut-sets");
-        let imps = dir.join("importances");
-        for d in [&cuts, &imps] {
-            std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
-        }
-        let mut files = vec![
-            (dir.join("models.tsv"), tsv::models(&r)),
-            (dir.join("events.tsv"), tsv::events(&r)),
-            (dir.join("gates.tsv"), tsv::gates(&r)),
-        ];
-        for (i, g) in r.gates.iter().enumerate() {
-            if let Some(t) = tsv::cut_sets(&r, i) {
-                files.push((cuts.join(format!("{}.tsv", g.id)), t));
-            }
-            if let Some(t) = tsv::importances(&r, i) {
-                files.push((imps.join(format!("{}.tsv", g.id)), t));
-            }
-        }
-        for (p, content) in &files {
-            std::fs::write(p, content).map_err(|e| format!("{}: {e}", p.display()))?;
-        }
-        eprintln!("wrote {} tables to {}", files.len(), dir.display());
+        let n = tsv::write_dir(&r, &dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        eprintln!("wrote {n} tables to {}", dir.display());
     }
     Ok(())
 }
