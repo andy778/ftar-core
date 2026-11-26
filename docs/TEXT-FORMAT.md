@@ -45,7 +45,7 @@ Event: P3
   `- key: value` lines. A blank line ends it. Each key appears at most once in a paragraph (except
   `note`).
 - An optional first paragraph without a header holds the tree properties.
-- Lines starting with `#` are comments. Leading spaces are ignored, and so is a CR before the line
+- Lines starting with `#` are comments. Leading spaces are ignored, and so are CRs before the line
   end.
 - Values start after the first `:`. Leading spaces are dropped; the rest of the line is kept.
 - Ids cannot be empty, cannot contain spaces, `,` or `;`, and cannot be `NULL`. Each id names one

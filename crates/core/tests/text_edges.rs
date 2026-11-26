@@ -165,3 +165,14 @@ fn unnamed_names_skip_ids_in_use() {
     assert!(text.contains("Gate: unnamed_2\n"), "{text}");
     assert_eq!(parse(&text).unwrap(), (t, db));
 }
+
+#[test]
+fn carriage_returns_at_line_ends_do_not_change_on_rewrite() {
+    // Found by fuzzing: only one of several CRs was dropped on each read.
+    let src = "- note: a\rb\r\r\r\n- note: c\r\r\r\r\n\nGate: T\n- label: x\r\r\r\n";
+    let (t, db) = parse(src).unwrap();
+    assert_eq!(t.note, "a\rb\nc");
+    assert_eq!(t.root.text, "x");
+    let text = write_text(&t, &db).unwrap();
+    assert_eq!(parse(&text).unwrap(), (t, db));
+}
