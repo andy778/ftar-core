@@ -22,6 +22,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Some mutants loop for ever while allocating, and used up the runner's memory: it shut down
+  # and the shard was lost. Each test process (and what it starts) gets 2 GiB of address space,
+  # so such a mutant fails its own test. Cargo applies this to test binaries, not to the build.
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: "prlimit --as=2147483648 --"
 
 jobs:
   in-diff:
