@@ -2,12 +2,12 @@ name: Coverage
 
 # Line coverage of the workspace tests (cargo-llvm-cov, nextest), Linux only. Informational: no
 # threshold. The per-file table is in the job summary; HTML and lcov are uploaded as artifacts,
-# and lcov goes to Codecov (the README badge). Locally: `cargo xtask coverage`.
+# and on master the total is published for the README badge. Locally: `cargo xtask coverage`.
 on:
   push:
     branches: [master]
   pull_request:
-    paths: ["**/*.rs", "**/Cargo.toml", "Cargo.lock", ".github/workflows/coverage.yml"]
+    paths: ["**/*.rs", "**/Cargo.toml", "Cargo.lock", ".github/workflows/coverage.yml", ".github/scripts/publish-badge.sh"]
   workflow_dispatch:
 
 permissions:
@@ -25,9 +25,8 @@ jobs:
     name: cargo llvm-cov
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions:
-      contents: read
-      id-token: write # Codecov upload authenticates with the job's OIDC token, no stored secret
+    outputs:
+      lines: ${{ steps.reports.outputs.lines }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,13 +46,16 @@ jobs:
       - name: Run the tests with coverage
         run: cargo llvm-cov nextest --workspace --exclude xtask --no-report
       - name: Reports
+        id: reports
         run: |
           cargo llvm-cov report --lcov --output-path lcov.info
           cargo llvm-cov report --html
           cargo llvm-cov report --summary-only > summary.txt
+          lines=$(awk '/^TOTAL/ {print $10}' summary.txt)
+          echo "lines=$lines" >> "$GITHUB_OUTPUT"
           {
             echo "### Line coverage"
-            echo "Total: $(awk '/^TOTAL/ {print $10}' summary.txt) of lines"
+            echo "Total: $lines of lines"
             echo
             echo '<details><summary>Per file</summary>'
             echo
@@ -70,11 +72,37 @@ jobs:
             target/llvm-cov/html
           if-no-files-found: error
           retention-days: 14
-      # Not fatal: Codecov being down, or a fork PR without an OIDC token, must not fail the PR.
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+
+  # The total line coverage of master, for the README badge: a shields.io endpoint file on the
+  # `badges` branch. A job of its own, so the job that runs the tests cannot write to the repo.
+  badge:
+    name: Coverage badge
+    needs: coverage
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push badges/coverage.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          files: lcov.info
-          disable_search: true
-          use_oidc: true
-          fail_ci_if_error: false
+          persist-credentials: false
+      - name: Badge file
+        env:
+          LINES: ${{ needs.coverage.outputs.lines }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$LINES" =~ ^[0-9]+(\.[0-9]+)?%$ ]]; then echo "no coverage total: '$LINES'"; exit 1; fi
+          whole=${LINES%%[.%]*}
+          if   [ "$whole" -ge 90 ]; then color=brightgreen
+          elif [ "$whole" -ge 80 ]; then color=green
+          elif [ "$whole" -ge 70 ]; then color=yellowgreen
+          elif [ "$whole" -ge 60 ]; then color=yellow
+          else color=red; fi
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s","color":"%s"}\n' \
+            "$LINES" "$color" > "$RUNNER_TEMP/coverage.json"
+          cat "$RUNNER_TEMP/coverage.json"
+      - name: Publish to the badges branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/publish-badge.sh "$RUNNER_TEMP/coverage.json"
