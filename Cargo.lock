@@ -1225,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-automation"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-core",
  "ftar-render",
@@ -1234,7 +1234,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-bundle"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-core",
  "zip",
@@ -1254,11 +1254,11 @@ dependencies = [
 
 [[package]]
 name = "ftar-core"
-version = "0.1.1"
+version = "0.5.0"
 
 [[package]]
 name = "ftar-gui"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "eframe",
  "egui_kittest",
@@ -1272,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-mcp"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-automation",
  "serde_json",
@@ -1280,7 +1280,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-render"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-core",
  "jpeg-encoder",

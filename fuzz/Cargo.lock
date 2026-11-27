@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-automation"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-core",
  "ftar-render",
@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-core"
-version = "0.1.1"
+version = "0.5.0"
 
 [[package]]
 name = "ftar-fuzz"
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "ftar-mcp"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-automation",
  "serde_json",
@@ -208,9 +208,10 @@ dependencies = [
 
 [[package]]
 name = "ftar-render"
-version = "0.1.1"
+version = "0.5.0"
 dependencies = [
  "ftar-core",
+ "jpeg-encoder",
  "resvg",
 ]
 
@@ -259,6 +260,12 @@ dependencies = [
  "getrandom",
  "libc",
 ]
+
+[[package]]
+name = "jpeg-encoder"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b454d911ac55068f53495488d8ccd0646eaa540c033a28ee15b07838afafb01f"
 
 [[package]]
 name = "kurbo"

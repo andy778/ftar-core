@@ -1,6 +1,6 @@
 [package]
 name = "ftar-bundle"
-version = "0.1.1"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Zip bundles of a tree with its database, transfer-in trees and reports, for bug reports"
