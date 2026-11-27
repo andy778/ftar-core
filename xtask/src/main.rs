@@ -16,6 +16,8 @@ use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
 
 mod layers;
+#[cfg(test)]
+mod versions;
 
 /// The gates `cargo xtask ci` runs, in order: cheap checks first.
 const CI_STEPS: &[&str] = &["fmt", "clippy", "layers", "test", "deny"];

@@ -1,6 +1,6 @@
 [package]
 name = "ftar-automation"
-version = "0.1.1"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Headless JSON tool catalogue over ftar-core, for scripts, agents and MCP"
