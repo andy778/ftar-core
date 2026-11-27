@@ -1,6 +1,6 @@
 [package]
 name = "ftar-gui"
-version = "0.1.1"
+version.workspace = true
 edition.workspace = true
 description = "egui front end for ftar-core"
 license.workspace = true

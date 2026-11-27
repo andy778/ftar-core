@@ -1,6 +1,6 @@
 [package]
 name = "ftar-cli"
-version = "0.5.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "ftar command line"

@@ -55,7 +55,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (rules in [AGENTS.md](AGENTS.md)) and the
 
 ## Releases
 
-Pushing a tag `vX.Y.Z` (it must equal the `ftar-cli` version in `Cargo.toml`) runs `.github/workflows/release.yml`:
+Pushing a tag `vX.Y.Z` (it must equal `version` under `[workspace.package]` in `Cargo.toml`, which every crate
+shares) runs `.github/workflows/release.yml`:
 it builds `ftar` and `ftar-gui` with `cargo build --release --locked` for Linux (x86_64), Windows (x86_64) and macOS
 (arm64), smoke-tests the CLI, packages each platform (binaries, LICENSE, NOTICE, README, docs), and publishes a GitHub release with
 the archives, `SHA256SUMS.txt` and `ftar-vX.Y.Z.sigstore.json` (signed SLSA build provenance for every file, see below). The same workflow runs as a build-only dry run on manual dispatch and on pull requests that

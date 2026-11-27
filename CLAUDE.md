@@ -12,7 +12,7 @@ ftar is a Rust port of OpenFTA, an unmaintained fault tree analysis tool (Java G
 - Headless GUI test: `cargo test -p ftar-gui` (egui_kittest, no window or GPU).
 - MCP server: `cargo run -q -p ftar-cli -- mcp --root DIR` (docs/mcp.md); register it in `.mcp.json` to let an agent drive ftar.
 - All gates: `cargo xtask ci`.
-- Releases: bump the version in `apps/ftar-cli/Cargo.toml` (the tag must match), tag `vX.Y.Z`, push the tag; `.github/workflows/release.yml` builds and publishes. Never edit CI in a feature PR (AGENTS.md).
+- Releases: bump `version` under `[workspace.package]` in the root `Cargo.toml` (every app and library crate inherits it; the tag must match), tag `vX.Y.Z`, push the tag; `.github/workflows/release.yml` builds and publishes. Never edit CI in a feature PR (AGENTS.md).
 
 ## Conventions
 - Rust edition 2021, `unsafe_code = "forbid"`, workspace lints, no JS/TS.
