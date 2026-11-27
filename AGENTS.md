@@ -29,3 +29,10 @@ Use one git worktree and one `CARGO_TARGET_DIR` per agent, with `CARGO_INCREMENT
 
 ## 7. Commits
 Small, green, one topic per commit. Branch `<type>/<slug>`; PR into `master`; merge when CI is green.
+
+## 8. Learn from every bug
+Fixing the reported case is not enough; stop the same kind of bug from coming back.
+- Put a **Lessons learned** section in the fix's PR description: the root cause, why no test or gate caught it, and what now prevents the whole class.
+- Search for other places with the same cause, and fix them or file an issue.
+- Add a guard against the class, strongest first: a type or function that makes the mistake impossible, then an automated check (`cargo xtask ci`), then test cases that cover the neighbouring cases too. A written rule is the last resort.
+- If no guard is worth its cost, say so and why in that section.
